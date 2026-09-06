@@ -27,6 +27,7 @@ export function App() {
   if (screen === "priorities") {
     return (
       <PrioritiesScreen
+        visitDate={visitPreferences.date}
         value={priorityPreferences}
         onChange={setPriorityPreferences}
         onBack={() => setScreen("visit")}
