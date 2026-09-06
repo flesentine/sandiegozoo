@@ -292,12 +292,11 @@
   display: flex;
   align-items: center;
   gap: 0.32rem;
-  overflow: hidden;
   color: var(--wr-color-ink-muted);
   font-size: 0.72rem;
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .priority-experience-card__copy span svg {
