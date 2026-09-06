@@ -565,3 +565,14 @@
 .visit-event > div {
   min-width: 0;
 }
+
+.visit-date-card:has(input:focus-visible),
+.visit-option--toggle:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--wr-color-forest-700) 70%, white);
+  outline-offset: 3px;
+}
+
+.visit-detail-panel--reservation .visit-error {
+  color: var(--wr-color-warning);
+  font-weight: 700;
+}
