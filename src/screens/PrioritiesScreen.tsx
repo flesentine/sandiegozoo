@@ -187,9 +187,9 @@ export function PrioritiesScreen({
     });
   };
 
-  const selectedCount =
-    Object.values(value.animals).filter((priority) => priority !== "none").length +
-    Object.values(value.experiences).filter((priority) => priority !== "none").length;
+  const selectedAnimalCount = Object.values(value.animals).filter(
+    (priority) => priority !== "none",
+  ).length;
 
   return (
     <main className="priorities-page">
@@ -227,7 +227,7 @@ export function PrioritiesScreen({
               <h2 id="wildlife-heading">Wildlife</h2>
               <p>Tap the priority control to move from Favorite to Must-See.</p>
             </div>
-            <span>{selectedCount} selected</span>
+            <span>{selectedAnimalCount} selected</span>
           </div>
 
           <div className="priority-animal-grid">
