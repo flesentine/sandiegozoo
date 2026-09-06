@@ -1,0 +1,417 @@
+.welcome-page {
+  min-height: 100svh;
+  display: grid;
+  place-items: stretch center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 86% 8%, rgb(36 90 60 / 0.08), transparent 22rem),
+    var(--wr-color-surface);
+}
+
+.welcome-shell {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 34rem);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding:
+    max(1.1rem, env(safe-area-inset-top))
+    var(--wr-content-inline)
+    max(1.15rem, env(safe-area-inset-bottom));
+}
+
+.welcome-header {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  padding-top: clamp(0.35rem, 2.5svh, 1.35rem);
+  text-align: center;
+}
+
+.welcome-brand {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  color: var(--wr-color-forest-900);
+}
+
+.welcome-brand__mark {
+  width: clamp(2.3rem, 9vw, 3.2rem);
+  height: auto;
+  fill: currentColor;
+}
+
+.welcome-brand h1 {
+  margin: 0;
+  font-family: var(--wr-font-display);
+  font-size: clamp(2.65rem, 12vw, 4.35rem);
+  line-height: 0.92;
+  letter-spacing: -0.045em;
+}
+
+.welcome-tagline {
+  margin: 0.65rem 0 0;
+  color: var(--wr-color-forest-700);
+  font-size: clamp(1rem, 4.4vw, 1.25rem);
+  font-weight: 650;
+  line-height: 1.32;
+}
+
+.welcome-hero {
+  position: relative;
+  z-index: 2;
+  min-height: clamp(15rem, 38svh, 24rem);
+  margin-top: clamp(1rem, 2.6svh, 1.65rem);
+  overflow: hidden;
+  border-radius: 2.2rem 2.2rem 4rem 2.2rem;
+  background:
+    linear-gradient(135deg, #c6d4b8, #6d8e60 55%, #35573c);
+  box-shadow: var(--wr-shadow-card);
+}
+
+.welcome-hero::after {
+  content: "";
+  position: absolute;
+  inset: auto -8% -15% auto;
+  width: 48%;
+  aspect-ratio: 1.1;
+  border-radius: 55% 0 0 0;
+  background: var(--wr-color-surface);
+  transform: rotate(-5deg);
+  pointer-events: none;
+}
+
+.welcome-hero__image {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  display: block;
+  object-fit: cover;
+  object-position: center 38%;
+}
+
+.welcome-hero__shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, rgb(10 32 20 / 0.34), transparent 42%),
+    linear-gradient(to right, rgb(10 32 20 / 0.1), transparent 42%);
+  pointer-events: none;
+}
+
+.welcome-hero__note {
+  position: absolute;
+  right: 1.1rem;
+  bottom: 1.35rem;
+  z-index: 2;
+  max-width: 9rem;
+  margin: 0;
+  color: white;
+  font-family: var(--wr-font-display);
+  font-size: clamp(1.05rem, 4.6vw, 1.35rem);
+  font-style: italic;
+  line-height: 1.15;
+  text-align: left;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.4);
+}
+
+.welcome-hero__note::after {
+  content: "";
+  display: block;
+  width: 2.1rem;
+  height: 2px;
+  margin-top: 0.45rem;
+  border-radius: 99px;
+  background: currentColor;
+  transform: rotate(-4deg);
+}
+
+.welcome-actions {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  gap: 0.75rem;
+  margin-top: clamp(1rem, 2.6svh, 1.45rem);
+}
+
+.welcome-action {
+  min-height: var(--wr-control-primary);
+  width: 100%;
+  display: grid;
+  grid-template-columns: 2rem 1fr 1.6rem;
+  align-items: center;
+  gap: 0.65rem;
+  border-radius: var(--wr-radius-pill);
+  padding: 0.7rem 1.15rem;
+  color: var(--wr-color-forest-900);
+  font-weight: 800;
+  font-size: clamp(1rem, 4.6vw, 1.18rem);
+  cursor: pointer;
+  transition:
+    transform var(--wr-duration-fast) ease,
+    background var(--wr-duration-fast) ease,
+    border-color var(--wr-duration-fast) ease;
+}
+
+.welcome-action:active {
+  transform: translateY(1px);
+}
+
+.welcome-action--primary {
+  min-height: 4rem;
+  border: 1px solid var(--wr-color-forest-900);
+  color: white;
+  background: var(--wr-color-forest-900);
+  box-shadow: var(--wr-shadow-card);
+}
+
+.welcome-action--primary:hover {
+  background: var(--wr-color-forest-800);
+}
+
+.welcome-action--secondary {
+  min-height: 3.8rem;
+  border: 1px solid color-mix(in srgb, var(--wr-color-forest-700) 55%, transparent);
+  background: rgb(255 253 248 / 0.72);
+}
+
+.welcome-action--secondary:hover {
+  background: var(--wr-color-surface-raised);
+}
+
+.welcome-action--tertiary {
+  min-height: 3.1rem;
+  width: fit-content;
+  justify-self: center;
+  grid-template-columns: 1.6rem auto 1.25rem;
+  border: 0;
+  padding-inline: 0.4rem;
+  background: transparent;
+}
+
+.welcome-action__icon,
+.welcome-action__arrow {
+  display: grid;
+  place-items: center;
+}
+
+.welcome-action__icon svg,
+.welcome-action__arrow svg {
+  width: 1.45rem;
+  height: 1.45rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.welcome-action--secondary .welcome-action__icon svg {
+  fill: currentColor;
+  stroke-width: 1.3;
+}
+
+.welcome-disclaimer {
+  position: relative;
+  z-index: 3;
+  margin: auto 0 0;
+  padding-top: 1rem;
+  color: var(--wr-color-ink-muted);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.welcome-intent {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: max(3.5rem, calc(env(safe-area-inset-bottom) + 2.5rem));
+  width: max-content;
+  max-width: calc(100% - 2rem);
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--wr-radius-pill);
+  color: white;
+  background: rgb(21 61 42 / 0.94);
+  font-size: 0.8rem;
+  font-weight: 700;
+  transform: translateX(-50%);
+  box-shadow: var(--wr-shadow-float);
+}
+
+.welcome-topography {
+  position: absolute;
+  z-index: 0;
+  top: -2rem;
+  left: -3.8rem;
+  width: 13rem;
+  height: 14rem;
+  opacity: 0.26;
+  pointer-events: none;
+}
+
+.welcome-topography span {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgb(36 90 60 / 0.42);
+  border-radius: 45% 55% 44% 56% / 48% 44% 56% 52%;
+}
+
+.welcome-topography span:nth-child(2) {
+  inset: 1.2rem;
+}
+
+.welcome-topography span:nth-child(3) {
+  inset: 2.4rem;
+}
+
+.welcome-topography span:nth-child(4) {
+  inset: 3.6rem;
+}
+
+.welcome-landscape {
+  position: absolute;
+  z-index: 0;
+  inset: auto 0 0;
+  height: 8rem;
+  overflow: hidden;
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.welcome-landscape__hill {
+  position: absolute;
+  bottom: -4rem;
+  border-radius: 50% 50% 0 0;
+  background: var(--wr-color-forest-200);
+}
+
+.welcome-landscape__hill--1 {
+  left: -8%;
+  width: 70%;
+  height: 8rem;
+  transform: rotate(5deg);
+}
+
+.welcome-landscape__hill--2 {
+  right: -18%;
+  width: 82%;
+  height: 7rem;
+  background: #cbd6c4;
+  transform: rotate(-4deg);
+}
+
+.welcome-landscape__palm {
+  position: absolute;
+  bottom: 1rem;
+  width: 0.18rem;
+  height: 3.2rem;
+  border-radius: 99px;
+  background: var(--wr-color-forest-700);
+  transform-origin: bottom center;
+}
+
+.welcome-landscape__palm::before,
+.welcome-landscape__palm::after {
+  content: "";
+  position: absolute;
+  top: -0.25rem;
+  left: 50%;
+  width: 2.4rem;
+  height: 0.45rem;
+  border-radius: 100% 0 100% 0;
+  background: var(--wr-color-forest-700);
+  transform-origin: 0 50%;
+}
+
+.welcome-landscape__palm::before {
+  transform: rotate(-24deg);
+}
+
+.welcome-landscape__palm::after {
+  transform: rotate(204deg);
+}
+
+.welcome-landscape__palm--1 {
+  right: 16%;
+  transform: rotate(3deg) scale(0.9);
+}
+
+.welcome-landscape__palm--2 {
+  right: 8%;
+  bottom: 0.6rem;
+  transform: rotate(-3deg) scale(0.62);
+}
+
+@media (max-height: 650px) {
+  .welcome-shell {
+    min-height: auto;
+    padding-top: 0.7rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .welcome-header {
+    padding-top: 0;
+  }
+
+  .welcome-brand__mark {
+    width: 1.8rem;
+  }
+
+  .welcome-brand h1 {
+    font-size: 2.35rem;
+  }
+
+  .welcome-tagline {
+    margin-top: 0.25rem;
+    font-size: 0.88rem;
+    line-height: 1.2;
+  }
+
+  .welcome-hero {
+    min-height: 10.75rem;
+    margin-top: 0.6rem;
+    border-radius: 1.75rem 1.75rem 3rem 1.75rem;
+  }
+
+  .welcome-hero__note {
+    right: 0.9rem;
+    bottom: 1rem;
+    font-size: 0.98rem;
+  }
+
+  .welcome-actions {
+    margin-top: 0.6rem;
+    gap: 0.4rem;
+  }
+
+  .welcome-action--primary,
+  .welcome-action--secondary {
+    min-height: 3rem;
+  }
+
+  .welcome-action--tertiary {
+    min-height: var(--wr-control-min);
+  }
+
+  .welcome-disclaimer {
+    padding-top: 0.35rem;
+    font-size: 0.66rem;
+  }
+}
+
+@media (min-width: 48rem) {
+  .welcome-page {
+    padding-block: 1.5rem;
+  }
+
+  .welcome-shell {
+    min-height: min(56rem, calc(100svh - 3rem));
+    border: 1px solid rgb(21 61 42 / 0.1);
+    border-radius: 2.4rem;
+    background: rgb(247 244 235 / 0.88);
+    box-shadow: var(--wr-shadow-float);
+  }
+}
