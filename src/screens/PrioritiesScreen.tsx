@@ -1,6 +1,6 @@
 import {
   ANIMAL_OPTIONS,
-  EXPERIENCE_OPTIONS,
+  getExperienceSchedule,
   type AnimalOption,
   type ExperienceOption,
 } from "../data/priorityOptions";
@@ -13,6 +13,7 @@ import {
 } from "../planning/priorityPreferences";
 
 type PrioritiesScreenProps = {
+  visitDate: string;
   value: PriorityPreferences;
   onChange: (value: PriorityPreferences) => void;
   onBack: () => void;
@@ -153,11 +154,14 @@ function ExperienceCard({
 }
 
 export function PrioritiesScreen({
+  visitDate,
   value,
   onChange,
   onBack,
   onContinue,
 }: PrioritiesScreenProps) {
+  const experienceSchedule = getExperienceSchedule(visitDate);
+
   const animalPriority = (id: string): AnimalPriority =>
     value.animals[id] ?? "none";
   const experiencePriority = (id: string): ExperiencePriority =>
@@ -254,14 +258,24 @@ export function PrioritiesScreen({
           </div>
 
           <div className="priority-experience-list">
-            {EXPERIENCE_OPTIONS.map((experience) => (
-              <ExperienceCard
-                key={experience.id}
-                experience={experience}
-                priority={experiencePriority(experience.id)}
-                onChange={() => changeExperience(experience.id)}
-              />
-            ))}
+            {experienceSchedule.options.length > 0 ? (
+              experienceSchedule.options.map((experience) => (
+                <ExperienceCard
+                  key={experience.id}
+                  experience={experience}
+                  priority={experiencePriority(experience.id)}
+                  onChange={() => changeExperience(experience.id)}
+                />
+              ))
+            ) : (
+              <div className="priority-schedule-empty" role="status">
+                <strong>Schedule refresh needed</strong>
+                <span>
+                  Today’s presentations will appear after the Zoo schedule is
+                  refreshed for your selected date.
+                </span>
+              </div>
+            )}
           </div>
 
           <aside className="priority-performance-note">
