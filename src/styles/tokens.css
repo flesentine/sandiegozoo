@@ -1,0 +1,64 @@
+:root {
+  color-scheme: light;
+
+  --wr-color-surface: #f7f4eb;
+  --wr-color-surface-raised: #fffdf8;
+  --wr-color-surface-muted: #edf1e8;
+  --wr-color-ink: #15231b;
+  --wr-color-ink-muted: #5e685f;
+  --wr-color-border: #d9d6ca;
+
+  --wr-color-forest-900: #153d2a;
+  --wr-color-forest-800: #1b4a32;
+  --wr-color-forest-700: #245a3c;
+  --wr-color-forest-200: #dfe9dd;
+  --wr-color-forest-100: #eef4ec;
+
+  --wr-color-clay: #c95632;
+  --wr-color-clay-soft: #fae5dc;
+  --wr-color-favorite: #b84f47;
+  --wr-color-favorite-soft: #fae5e2;
+  --wr-color-timed: #665578;
+  --wr-color-timed-soft: #eee8f3;
+  --wr-color-locked: #28563a;
+  --wr-color-locked-soft: #e4ede5;
+  --wr-color-bonus: #c99422;
+  --wr-color-warning: #973b31;
+  --wr-color-warning-soft: #f8dcd8;
+
+  --wr-font-display: Georgia, "Times New Roman", serif;
+  --wr-font-body: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --wr-text-xs: 0.75rem;
+  --wr-text-sm: 0.875rem;
+  --wr-text-md: 1rem;
+  --wr-text-lg: 1.125rem;
+  --wr-text-xl: 1.5rem;
+  --wr-text-2xl: clamp(2rem, 8vw, 3rem);
+
+  --wr-space-1: 0.25rem;
+  --wr-space-2: 0.5rem;
+  --wr-space-3: 0.75rem;
+  --wr-space-4: 1rem;
+  --wr-space-5: 1.25rem;
+  --wr-space-6: 1.5rem;
+  --wr-space-8: 2rem;
+  --wr-space-10: 2.5rem;
+
+  --wr-radius-sm: 0.75rem;
+  --wr-radius-md: 1rem;
+  --wr-radius-lg: 1.5rem;
+  --wr-radius-pill: 999px;
+
+  --wr-control-min: 44px;
+  --wr-control-primary: 56px;
+
+  --wr-shadow-card: 0 10px 28px rgb(21 61 42 / 0.08);
+  --wr-shadow-float: 0 16px 40px rgb(21 61 42 / 0.16);
+
+  --wr-page-max: 32rem;
+  --wr-content-inline: clamp(1rem, 4vw, 1.5rem);
+
+  --wr-duration-fast: 120ms;
+  --wr-duration-normal: 220ms;
+}

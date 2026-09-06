@@ -1,0 +1,203 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--wr-color-surface);
+  font-family: var(--wr-font-body);
+  color: var(--wr-color-ink);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top right, rgb(36 90 60 / 0.06), transparent 28rem),
+    var(--wr-color-surface);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--wr-color-forest-700) 70%, white);
+  outline-offset: 3px;
+}
+
+.foundation-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--wr-space-6) var(--wr-space-4);
+}
+
+.foundation-shell {
+  width: min(100%, var(--wr-page-max));
+  display: grid;
+  gap: var(--wr-space-4);
+}
+
+.foundation-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--wr-space-4);
+  align-items: start;
+}
+
+.brand-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--wr-color-surface-raised);
+  background: var(--wr-color-forest-900);
+  font-size: 1.5rem;
+}
+
+.foundation-header h1 {
+  margin: 0;
+  font-family: var(--wr-font-display);
+  font-size: var(--wr-text-2xl);
+  line-height: 1;
+}
+
+.foundation-copy {
+  margin: var(--wr-space-2) 0 0;
+  color: var(--wr-color-ink-muted);
+  line-height: 1.5;
+}
+
+.eyebrow {
+  margin: 0 0 var(--wr-space-2);
+  color: var(--wr-color-forest-700);
+  font-size: var(--wr-text-xs);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.wr-card {
+  border: 1px solid var(--wr-color-border);
+  border-radius: var(--wr-radius-lg);
+  background: var(--wr-color-surface-raised);
+  padding: var(--wr-space-5);
+  box-shadow: var(--wr-shadow-card);
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--wr-space-2);
+}
+
+.wr-primary-button {
+  min-height: var(--wr-control-primary);
+  width: 100%;
+  border: 0;
+  border-radius: var(--wr-radius-pill);
+  padding-inline: var(--wr-space-6);
+  color: white;
+  background: var(--wr-color-forest-900);
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform var(--wr-duration-fast) ease,
+    background var(--wr-duration-fast) ease;
+}
+
+.wr-primary-button:hover {
+  background: var(--wr-color-forest-800);
+}
+
+.wr-primary-button:active {
+  transform: translateY(1px);
+}
+
+.wr-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.wr-badge {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wr-space-1);
+  border-radius: var(--wr-radius-pill);
+  padding: 0.35rem 0.65rem;
+  font-size: var(--wr-text-sm);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wr-badge--must {
+  color: #7f2f19;
+  background: var(--wr-color-clay-soft);
+}
+
+.wr-badge--favorite {
+  color: #7f332f;
+  background: var(--wr-color-favorite-soft);
+}
+
+.wr-badge--timed {
+  color: #4d3f5b;
+  background: var(--wr-color-timed-soft);
+}
+
+.wr-badge--locked {
+  color: var(--wr-color-locked);
+  background: var(--wr-color-locked-soft);
+}
+
+.wr-bottom-nav {
+  min-height: 4.75rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--wr-space-2);
+  border: 1px solid var(--wr-color-border);
+  border-radius: var(--wr-radius-lg);
+  background: var(--wr-color-surface-raised);
+  padding: var(--wr-space-2);
+}
+
+.wr-bottom-nav__item {
+  min-height: var(--wr-control-min);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.15rem;
+  border: 0;
+  border-radius: var(--wr-radius-md);
+  color: var(--wr-color-ink-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.wr-bottom-nav__item[aria-current="page"] {
+  color: var(--wr-color-forest-900);
+  background: var(--wr-color-forest-100);
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
