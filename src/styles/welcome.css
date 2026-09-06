@@ -348,6 +348,8 @@
 @media (max-height: 650px) {
   .welcome-shell {
     min-height: auto;
+    padding-top: 0.7rem;
+    padding-bottom: 0.55rem;
   }
 
   .welcome-header {
@@ -355,35 +357,48 @@
   }
 
   .welcome-brand__mark {
-    width: 2rem;
+    width: 1.8rem;
   }
 
   .welcome-brand h1 {
-    font-size: 2.55rem;
+    font-size: 2.35rem;
   }
 
   .welcome-tagline {
-    margin-top: 0.35rem;
-    font-size: 0.95rem;
+    margin-top: 0.25rem;
+    font-size: 0.88rem;
+    line-height: 1.2;
   }
 
   .welcome-hero {
-    min-height: 12rem;
-    margin-top: 0.8rem;
+    min-height: 10.75rem;
+    margin-top: 0.6rem;
+    border-radius: 1.75rem 1.75rem 3rem 1.75rem;
+  }
+
+  .welcome-hero__note {
+    right: 0.9rem;
+    bottom: 1rem;
+    font-size: 0.98rem;
   }
 
   .welcome-actions {
-    margin-top: 0.8rem;
-    gap: 0.55rem;
+    margin-top: 0.6rem;
+    gap: 0.4rem;
   }
 
   .welcome-action--primary,
   .welcome-action--secondary {
-    min-height: 3.25rem;
+    min-height: 3rem;
+  }
+
+  .welcome-action--tertiary {
+    min-height: var(--wr-control-min);
   }
 
   .welcome-disclaimer {
-    padding-top: 0.55rem;
+    padding-top: 0.35rem;
+    font-size: 0.66rem;
   }
 }
 
