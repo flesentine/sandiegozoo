@@ -14,6 +14,11 @@ export type ExperienceOption = {
   multiplePerformances?: boolean;
 };
 
+export type ExperienceSchedule = {
+  options: readonly ExperienceOption[];
+  confidence: "fixture" | "unknown";
+};
+
 export const ANIMAL_OPTIONS: readonly AnimalOption[] = [
   {
     id: "panda",
@@ -49,13 +54,7 @@ export const ANIMAL_OPTIONS: readonly AnimalOption[] = [
   },
 ] as const;
 
-/**
- * Temporary UX schedule fixture.
- *
- * The production data layer will replace this with source-dated Zoo event
- * records. The planner consumes IDs and priority state, not these labels.
- */
-export const EXPERIENCE_OPTIONS: readonly ExperienceOption[] = [
+const REFERENCE_EXPERIENCES: readonly ExperienceOption[] = [
   {
     id: "wildlife-wonders",
     title: "Wildlife Wonders",
@@ -71,3 +70,23 @@ export const EXPERIENCE_OPTIONS: readonly ExperienceOption[] = [
     multiplePerformances: true,
   },
 ] as const;
+
+/**
+ * Temporary UX schedule fixture seam.
+ *
+ * Never project a fixture schedule onto another visit date. The production
+ * data layer will replace this with source-dated Zoo event records.
+ */
+export function getExperienceSchedule(date: string): ExperienceSchedule {
+  if (date === "2026-09-19" || date === "2026-09-20") {
+    return {
+      options: REFERENCE_EXPERIENCES,
+      confidence: "fixture",
+    };
+  }
+
+  return {
+    options: [],
+    confidence: "unknown",
+  };
+}
