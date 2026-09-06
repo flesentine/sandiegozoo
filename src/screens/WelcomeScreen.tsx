@@ -3,7 +3,11 @@ import { useState } from "react";
 const HERO_IMAGE =
   "https://upload.wikimedia.org/wikipedia/commons/e/ee/Zoo_Atlanta_Giraffe_%2814233976984%29.jpg";
 
-type WelcomeIntent = "plan" | "quick" | "at-zoo";
+type WelcomeIntent = "quick" | "at-zoo";
+
+type WelcomeScreenProps = {
+  onPlan?: () => void;
+};
 
 function LeafMark() {
   return (
@@ -53,12 +57,8 @@ function ArrowIcon() {
   );
 }
 
-export function WelcomeScreen() {
+export function WelcomeScreen({ onPlan }: WelcomeScreenProps) {
   const [intent, setIntent] = useState<WelcomeIntent | null>(null);
-
-  const choose = (nextIntent: WelcomeIntent) => {
-    setIntent(nextIntent);
-  };
 
   return (
     <main className="welcome-page">
@@ -93,7 +93,7 @@ export function WelcomeScreen() {
           <button
             type="button"
             className="welcome-action welcome-action--primary"
-            onClick={() => choose("plan")}
+            onClick={onPlan}
           >
             <span className="welcome-action__icon"><CalendarIcon /></span>
             <span>Plan a Zoo Day</span>
@@ -103,7 +103,7 @@ export function WelcomeScreen() {
           <button
             type="button"
             className="welcome-action welcome-action--secondary"
-            onClick={() => choose("quick")}
+            onClick={() => setIntent("quick")}
           >
             <span className="welcome-action__icon"><BoltIcon /></span>
             <span>Quick Plan</span>
@@ -113,7 +113,7 @@ export function WelcomeScreen() {
           <button
             type="button"
             className="welcome-action welcome-action--tertiary"
-            onClick={() => choose("at-zoo")}
+            onClick={() => setIntent("at-zoo")}
           >
             <span className="welcome-action__icon"><PinIcon /></span>
             <span>I’m at the Zoo Now</span>
@@ -141,7 +141,6 @@ export function WelcomeScreen() {
 
         {intent ? (
           <p className="welcome-intent" role="status" aria-live="polite">
-            {intent === "plan" && "Opening full-day planning…"}
             {intent === "quick" && "Opening Quick Plan…"}
             {intent === "at-zoo" && "Starting from your current Zoo visit…"}
           </p>
