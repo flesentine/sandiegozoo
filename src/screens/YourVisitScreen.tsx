@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
+import {
+  localISODate,
+  type VisitPreferences,
+} from "../planning/visitPreferences";
 
 type YourVisitScreenProps = {
+  value: VisitPreferences;
+  onChange: (value: VisitPreferences) => void;
   onBack: () => void;
   onContinue?: () => void;
 };
@@ -9,18 +15,20 @@ type PartyKey = "adults" | "kids";
 
 type VisitMeta = {
   hours: string;
+  openTime?: string;
+  closeTime?: string;
   event?: {
     title: string;
     detail: string;
   };
 };
 
-const REFERENCE_DATE = "2026-09-19";
-
 function visitMetaFor(date: string): VisitMeta {
   if (date === "2026-09-19" || date === "2026-09-20") {
     return {
       hours: "9:00 AM–8:00 PM",
+      openTime: "09:00",
+      closeTime: "20:00",
       event: {
         title: "Wild Weekend: African Forest",
         detail: "Special activities and wildlife care specialist talks today.",
@@ -34,7 +42,16 @@ function visitMetaFor(date: string): VisitMeta {
 }
 
 function formatLongDate(value: string) {
+  if (!value) {
+    return "Choose a date";
+  }
+
   const date = new Date(`${value}T12:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Choose a date";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     weekday: "long",
     month: "long",
@@ -149,6 +166,7 @@ function Stepper({
           type="button"
           aria-label={`Add one ${label.toLowerCase()}`}
           onClick={() => onChange(Math.min(12, value + 1))}
+          disabled={value === 12}
         >
           +
         </button>
@@ -157,30 +175,65 @@ function Stepper({
   );
 }
 
-export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
-  const [date, setDate] = useState(REFERENCE_DATE);
-  const [arrival, setArrival] = useState("09:00");
-  const [departure, setDeparture] = useState("17:00");
-  const [party, setParty] = useState({ adults: 2, kids: 1 });
-  const [stroller, setStroller] = useState(false);
+export function YourVisitScreen({
+  value,
+  onChange,
+  onBack,
+  onContinue,
+}: YourVisitScreenProps) {
   const [accessOpen, setAccessOpen] = useState(false);
-  const [easyPaths, setEasyPaths] = useState(false);
-  const [wheelchair, setWheelchair] = useState(false);
   const [reservationOpen, setReservationOpen] = useState(false);
-  const [reservationName, setReservationName] = useState("");
-  const [reservationTime, setReservationTime] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const meta = useMemo(() => visitMetaFor(date), [date]);
-  const invalidTime = departure <= arrival;
+  const today = localISODate();
+  const meta = useMemo(() => visitMetaFor(value.date), [value.date]);
 
-  const updateParty = (key: PartyKey, value: number) => {
-    setParty((current) => ({ ...current, [key]: value }));
+  const invalidDate = !value.date || value.date < today;
+  const invalidTime = value.departure <= value.arrival;
+  const outsideKnownHours =
+    Boolean(meta.openTime && meta.closeTime) &&
+    (value.departure <= meta.openTime! || value.arrival >= meta.closeTime!);
+  const emptyParty = value.party.adults + value.party.kids === 0;
+
+  const reservationName = value.reservation.name.trim();
+  const hasReservationName = reservationName.length > 0;
+  const hasReservationTime = value.reservation.time.length > 0;
+  const incompleteReservation = hasReservationName !== hasReservationTime;
+
+  const patch = (change: Partial<VisitPreferences>) => {
+    onChange({ ...value, ...change });
+  };
+
+  const updateParty = (key: PartyKey, nextValue: number) => {
+    patch({
+      party: {
+        ...value.party,
+        [key]: nextValue,
+      },
+    });
+  };
+
+  const updateReservation = (
+    change: Partial<VisitPreferences["reservation"]>,
+  ) => {
+    patch({
+      reservation: {
+        ...value.reservation,
+        ...change,
+      },
+    });
   };
 
   const continuePlanning = () => {
     setSubmitted(true);
-    if (!invalidTime && party.adults + party.kids > 0) {
+
+    if (
+      !invalidDate &&
+      !invalidTime &&
+      !outsideKnownHours &&
+      !emptyParty &&
+      !incompleteReservation
+    ) {
       onContinue?.();
     }
   };
@@ -189,7 +242,12 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
     <main className="visit-page">
       <section className="visit-shell" aria-labelledby="visit-title">
         <header className="visit-topbar">
-          <button type="button" className="visit-back" onClick={onBack} aria-label="Back to Welcome">
+          <button
+            type="button"
+            className="visit-back"
+            onClick={onBack}
+            aria-label="Back to Welcome"
+          >
             <BackIcon />
           </button>
 
@@ -211,17 +269,25 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
           <span className="visit-date-card__icon"><CalendarIcon /></span>
           <span className="visit-date-card__copy">
             <span className="visit-date-card__label">Visit date</span>
-            <strong>{formatLongDate(date)}</strong>
+            <strong>{formatLongDate(value.date)}</strong>
             <span>{meta.hours}</span>
           </span>
           <input
             type="date"
-            value={date}
-            min="2026-09-06"
-            onChange={(event) => setDate(event.target.value)}
+            value={value.date}
+            min={today}
+            required
+            aria-invalid={submitted && invalidDate}
+            onChange={(event) => patch({ date: event.target.value })}
             aria-label="Visit date"
           />
         </label>
+
+        {submitted && invalidDate ? (
+          <p className="visit-error" role="alert">
+            Choose today or a future visit date.
+          </p>
+        ) : null}
 
         {meta.event ? (
           <aside className="visit-event" aria-label="Special event today">
@@ -248,23 +314,29 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
               <span>Arrive</span>
               <input
                 type="time"
-                value={arrival}
-                onChange={(event) => setArrival(event.target.value)}
+                value={value.arrival}
+                onChange={(event) => patch({ arrival: event.target.value })}
               />
             </label>
             <label>
               <span>Leave</span>
               <input
                 type="time"
-                value={departure}
-                onChange={(event) => setDeparture(event.target.value)}
-                aria-invalid={invalidTime}
+                value={value.departure}
+                onChange={(event) => patch({ departure: event.target.value })}
+                aria-invalid={invalidTime || outsideKnownHours}
               />
             </label>
           </div>
 
           {invalidTime ? (
-            <p className="visit-error" role="alert">Leave time must be later than arrival.</p>
+            <p className="visit-error" role="alert">
+              Leave time must be later than arrival.
+            </p>
+          ) : outsideKnownHours ? (
+            <p className="visit-error" role="alert">
+              Your visit needs to overlap known Zoo hours ({meta.hours}).
+            </p>
           ) : null}
         </section>
 
@@ -278,12 +350,22 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
           </div>
 
           <div className="visit-steppers">
-            <Stepper label="Adults" value={party.adults} onChange={(value) => updateParty("adults", value)} />
-            <Stepper label="Kids" value={party.kids} onChange={(value) => updateParty("kids", value)} />
+            <Stepper
+              label="Adults"
+              value={value.party.adults}
+              onChange={(nextValue) => updateParty("adults", nextValue)}
+            />
+            <Stepper
+              label="Kids"
+              value={value.party.kids}
+              onChange={(nextValue) => updateParty("kids", nextValue)}
+            />
           </div>
 
-          {submitted && party.adults + party.kids === 0 ? (
-            <p className="visit-error" role="alert">Add at least one person to continue.</p>
+          {submitted && emptyParty ? (
+            <p className="visit-error" role="alert">
+              Add at least one person to continue.
+            </p>
           ) : null}
         </section>
 
@@ -296,8 +378,8 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
             </span>
             <input
               type="checkbox"
-              checked={stroller}
-              onChange={(event) => setStroller(event.target.checked)}
+              checked={value.stroller}
+              onChange={(event) => patch({ stroller: event.target.checked })}
             />
             <span className="visit-toggle" aria-hidden="true" />
           </label>
@@ -306,23 +388,28 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
             type="button"
             className="visit-option"
             aria-expanded={accessOpen}
+            aria-controls="visit-accessibility-details"
             onClick={() => setAccessOpen((open) => !open)}
           >
             <span className="visit-option__icon"><AccessIcon /></span>
             <span className="visit-option__copy">
               <strong>Mobility & accessibility</strong>
-              <span>{easyPaths || wheelchair ? "Preferences added" : "Add route needs"}</span>
+              <span>
+                {value.easyPaths || value.wheelchair
+                  ? "Preferences added"
+                  : "Add route needs"}
+              </span>
             </span>
             <span className="visit-option__chevron"><ChevronIcon /></span>
           </button>
 
           {accessOpen ? (
-            <div className="visit-detail-panel">
+            <div className="visit-detail-panel" id="visit-accessibility-details">
               <label>
                 <input
                   type="checkbox"
-                  checked={easyPaths}
-                  onChange={(event) => setEasyPaths(event.target.checked)}
+                  checked={value.easyPaths}
+                  onChange={(event) => patch({ easyPaths: event.target.checked })}
                 />
                 <span>
                   <strong>Prefer easier paths</strong>
@@ -332,12 +419,14 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
               <label>
                 <input
                   type="checkbox"
-                  checked={wheelchair}
-                  onChange={(event) => setWheelchair(event.target.checked)}
+                  checked={value.wheelchair}
+                  onChange={(event) => patch({ wheelchair: event.target.checked })}
                 />
                 <span>
                   <strong>Wheelchair / mobility device</strong>
-                  <small>Use accessible paths and elevators as hard constraints.</small>
+                  <small>
+                    Use accessible paths and elevators as hard constraints.
+                  </small>
                 </span>
               </label>
             </div>
@@ -347,24 +436,33 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
             type="button"
             className="visit-option"
             aria-expanded={reservationOpen}
+            aria-controls="visit-reservation-details"
             onClick={() => setReservationOpen((open) => !open)}
           >
             <span className="visit-option__icon"><TicketIcon /></span>
             <span className="visit-option__copy">
               <strong>Add reservation</strong>
-              <span>{reservationName ? reservationName : "Tour or booked experience"}</span>
+              <span>
+                {reservationName || "Tour or booked experience"}
+              </span>
             </span>
             <span className="visit-option__chevron"><ChevronIcon /></span>
           </button>
 
           {reservationOpen ? (
-            <div className="visit-detail-panel visit-detail-panel--reservation">
+            <div
+              className="visit-detail-panel visit-detail-panel--reservation"
+              id="visit-reservation-details"
+            >
               <label>
                 <span>Experience</span>
                 <input
                   type="text"
-                  value={reservationName}
-                  onChange={(event) => setReservationName(event.target.value)}
+                  value={value.reservation.name}
+                  onChange={(event) =>
+                    updateReservation({ name: event.target.value })
+                  }
+                  aria-invalid={submitted && incompleteReservation}
                   placeholder="e.g. Early Morning with Pandas"
                 />
               </label>
@@ -372,18 +470,34 @@ export function YourVisitScreen({ onBack, onContinue }: YourVisitScreenProps) {
                 <span>Start time</span>
                 <input
                   type="time"
-                  value={reservationTime}
-                  onChange={(event) => setReservationTime(event.target.value)}
+                  value={value.reservation.time}
+                  onChange={(event) =>
+                    updateReservation({ time: event.target.value })
+                  }
+                  aria-invalid={submitted && incompleteReservation}
                 />
               </label>
               <p>Booked experiences become locked anchors in your day.</p>
+              {submitted && incompleteReservation ? (
+                <p className="visit-error" role="alert">
+                  Add both the experience name and start time, or clear both.
+                </p>
+              ) : null}
             </div>
+          ) : submitted && incompleteReservation ? (
+            <p className="visit-error" role="alert">
+              Finish the reservation details or clear the partial reservation.
+            </p>
           ) : null}
         </section>
 
         <div className="visit-footer">
           <p>Schedules will refresh from official Zoo data before your visit.</p>
-          <button type="button" className="visit-continue" onClick={continuePlanning}>
+          <button
+            type="button"
+            className="visit-continue"
+            onClick={continuePlanning}
+          >
             Continue
             <ChevronIcon />
           </button>
