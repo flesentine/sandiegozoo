@@ -402,3 +402,25 @@
     box-shadow: var(--wr-shadow-float);
   }
 }
+
+.priority-schedule-empty {
+  min-height: 5rem;
+  display: grid;
+  gap: 0.25rem;
+  align-content: center;
+  border: 1px dashed var(--wr-color-border);
+  border-radius: var(--wr-radius-md);
+  padding: 0.9rem;
+  color: var(--wr-color-ink-muted);
+  background: rgb(255 253 248 / 0.55);
+}
+
+.priority-schedule-empty strong {
+  color: var(--wr-color-ink);
+  font-family: var(--wr-font-display);
+}
+
+.priority-schedule-empty span {
+  font-size: var(--wr-text-sm);
+  line-height: 1.4;
+}
