@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { getVisitMeta } from "../data/visitMeta";
 import {
   localISODate,
   type VisitPreferences,
@@ -12,34 +13,6 @@ type YourVisitScreenProps = {
 };
 
 type PartyKey = "adults" | "kids";
-
-type VisitMeta = {
-  hours: string;
-  openTime?: string;
-  closeTime?: string;
-  event?: {
-    title: string;
-    detail: string;
-  };
-};
-
-function visitMetaFor(date: string): VisitMeta {
-  if (date === "2026-09-19" || date === "2026-09-20") {
-    return {
-      hours: "9:00 AM–8:00 PM",
-      openTime: "09:00",
-      closeTime: "20:00",
-      event: {
-        title: "Wild Weekend: African Forest",
-        detail: "Special activities and wildlife care specialist talks today.",
-      },
-    };
-  }
-
-  return {
-    hours: "Hours refresh for your selected date",
-  };
-}
 
 function formatLongDate(value: string) {
   if (!value) {
@@ -186,7 +159,7 @@ export function YourVisitScreen({
   const [submitted, setSubmitted] = useState(false);
 
   const today = localISODate();
-  const meta = useMemo(() => visitMetaFor(value.date), [value.date]);
+  const meta = useMemo(() => getVisitMeta(value.date), [value.date]);
 
   const invalidDate = !value.date || value.date < today;
   const missingVisitTime = !value.arrival || !value.departure;
