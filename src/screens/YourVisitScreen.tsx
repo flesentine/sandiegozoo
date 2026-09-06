@@ -189,8 +189,11 @@ export function YourVisitScreen({
   const meta = useMemo(() => visitMetaFor(value.date), [value.date]);
 
   const invalidDate = !value.date || value.date < today;
-  const invalidTime = value.departure <= value.arrival;
+  const missingVisitTime = !value.arrival || !value.departure;
+  const invalidTime =
+    !missingVisitTime && value.departure <= value.arrival;
   const outsideKnownHours =
+    !missingVisitTime &&
     Boolean(meta.openTime && meta.closeTime) &&
     (value.departure <= meta.openTime! || value.arrival >= meta.closeTime!);
   const emptyParty = value.party.adults + value.party.kids === 0;
@@ -229,6 +232,7 @@ export function YourVisitScreen({
 
     if (
       !invalidDate &&
+      !missingVisitTime &&
       !invalidTime &&
       !outsideKnownHours &&
       !emptyParty &&
@@ -315,6 +319,8 @@ export function YourVisitScreen({
               <input
                 type="time"
                 value={value.arrival}
+                required
+                aria-invalid={submitted && missingVisitTime}
                 onChange={(event) => patch({ arrival: event.target.value })}
               />
             </label>
@@ -323,13 +329,22 @@ export function YourVisitScreen({
               <input
                 type="time"
                 value={value.departure}
+                required
                 onChange={(event) => patch({ departure: event.target.value })}
-                aria-invalid={invalidTime || outsideKnownHours}
+                aria-invalid={
+                  (submitted && missingVisitTime) ||
+                  invalidTime ||
+                  outsideKnownHours
+                }
               />
             </label>
           </div>
 
-          {invalidTime ? (
+          {submitted && missingVisitTime ? (
+            <p className="visit-error" role="alert">
+              Choose both an arrival and leave time.
+            </p>
+          ) : invalidTime ? (
             <p className="visit-error" role="alert">
               Leave time must be later than arrival.
             </p>
