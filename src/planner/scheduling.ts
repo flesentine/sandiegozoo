@@ -1,4 +1,5 @@
 import type {
+  RouteMode,
   ScheduleEvent,
   SourceProvenance,
   WildRouteDataPackage,
@@ -105,6 +106,92 @@ export type RoutePolicy = Omit<
   RouteRequest,
   "fromNodeId" | "toNodeId" | "optimize"
 >;
+
+const ROUTE_POLICY_MODES: readonly RouteMode[] = [
+  "walk",
+  "skyfari",
+  "bus",
+  "elevator",
+  "ada-shuttle",
+];
+
+const ROUTE_POLICY_KEYS = new Set([
+  "allowedModes",
+  "requireAccessible",
+  "requireStroller",
+  "enabledConditionalEdgeIds",
+]);
+
+export function assertValidRoutePolicy(
+  value: unknown,
+): asserts value is RoutePolicy | undefined {
+  if (value === undefined) return;
+
+  if (!isRecord(value)) {
+    throw new Error("RoutePolicy must be an object when provided.");
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!ROUTE_POLICY_KEYS.has(key)) {
+      throw new Error(`RoutePolicy contains unsupported field: ${key}`);
+    }
+  }
+
+  if (value.allowedModes !== undefined) {
+    if (!Array.isArray(value.allowedModes)) {
+      throw new Error("RoutePolicy allowedModes must be an array.");
+    }
+
+    const seen = new Set<RouteMode>();
+    for (const mode of value.allowedModes) {
+      if (
+        typeof mode !== "string" ||
+        !ROUTE_POLICY_MODES.includes(mode as RouteMode)
+      ) {
+        throw new Error("RoutePolicy allowedModes contains an invalid mode.");
+      }
+
+      if (seen.has(mode as RouteMode)) {
+        throw new Error("RoutePolicy allowedModes cannot contain duplicates.");
+      }
+      seen.add(mode as RouteMode);
+    }
+  }
+
+  for (const key of ["requireAccessible", "requireStroller"] as const) {
+    if (value[key] !== undefined && typeof value[key] !== "boolean") {
+      throw new Error(`RoutePolicy ${key} must be boolean.`);
+    }
+  }
+
+  if (value.enabledConditionalEdgeIds !== undefined) {
+    if (!Array.isArray(value.enabledConditionalEdgeIds)) {
+      throw new Error(
+        "RoutePolicy enabledConditionalEdgeIds must be an array.",
+      );
+    }
+
+    const seen = new Set<string>();
+    for (const edgeId of value.enabledConditionalEdgeIds) {
+      if (
+        typeof edgeId !== "string" ||
+        edgeId.trim().length === 0 ||
+        edgeId !== edgeId.trim()
+      ) {
+        throw new Error(
+          "RoutePolicy conditional edge IDs must be stable non-empty strings.",
+        );
+      }
+
+      if (seen.has(edgeId)) {
+        throw new Error(
+          "RoutePolicy enabledConditionalEdgeIds cannot contain duplicates.",
+        );
+      }
+      seen.add(edgeId);
+    }
+  }
+}
 
 export type AnchorScheduleStep = {
   anchorId: string;
@@ -469,6 +556,8 @@ export function evaluateAnchorSequence(
   anchors: readonly ScheduleAnchor[],
   routePolicy: RoutePolicy = {},
 ): AnchorSequenceResult {
+  assertValidRoutePolicy(routePolicy);
+
   if (!isValidPlanningHorizon(horizon)) {
     return {
       status: "infeasible",
