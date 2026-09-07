@@ -77,13 +77,18 @@ CI errors include:
 
 - duplicate IDs
 - dangling zone/node/place references
+- malformed runtime JSON records
+- invalid runtime enums and booleans
 - invalid coordinates
 - invalid provenance
+- loose timestamps without an explicit timezone
 - impossible effective-date ranges
+- place / destination-node zone mismatches
 - non-positive edge weights
 - stairs marked accessible or stroller-friendly
 - invalid event dates/times
 - event end before start
+- event dates outside their source effective windows
 
 An orphan route node is currently a warning, allowing incremental graph construction while still surfacing incomplete topology.
 
@@ -99,3 +104,10 @@ This phase does **not**:
 - solve itinerary feasibility
 
 Those come only after verified source ingestion and graph coverage.
+
+
+## Runtime trust boundary
+
+JSON input is treated as `unknown` until validation completes. TypeScript declarations are not considered runtime evidence.
+
+The validator must return deterministic issues rather than throw on malformed collection entries or scalar field types. Routing-critical enums and booleans are validated explicitly before Planner 2 can consume them.
