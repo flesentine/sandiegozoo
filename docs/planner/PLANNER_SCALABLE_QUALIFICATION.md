@@ -99,3 +99,67 @@ Planner 7 does not yet:
 - perform live replanning
 
 The next data-integration phase can use this harness to qualify production-shaped candidate sets before routing them into the visitor experience.
+
+
+## Final pre-merge qualification review
+
+The qualification layer itself is a runtime trust boundary.
+
+The final review hardened threshold configuration so the harness rejects:
+
+- invalid expected status values
+- NaN / infinite thresholds
+- negative thresholds
+- fractional count thresholds
+- minimum headroom larger than the configured state budget
+- non-boolean oracle-parity flags
+- contradictory parity configuration that expects a non-complete scalable result
+- malformed scenario / threshold objects
+
+A malformed threshold can therefore no longer disable a comparison through JavaScript numeric behavior such as comparisons against NaN.
+
+### Semantic parity normalization
+
+Planner 5/6 parity no longer depends on object property insertion order.
+
+Before comparison, optimizer results are recursively canonicalized:
+
+- object keys are sorted
+- array ordering is preserved
+- engine-specific `evaluatedStates` fields are removed
+
+This keeps ordering that is planner semantics (candidate/step arrays) while ignoring irrelevant object-key construction order.
+
+### Budget exhaustion reporting
+
+Qualification reports now distinguish:
+
+- `budgetExhausted`
+- remaining headroom states
+- budget overrun states
+- headroom ratio
+
+Planner 6's sentinel state that detects exhaustion evaluates one state beyond the configured budget. A budget-exhausted report therefore records zero headroom and the explicit one-state overrun rather than allowing a clamped headroom value to hide how exhaustion was detected.
+
+### Capacity gates vs implementation-detail diagnostics
+
+Prune/cache counters remain available as optional qualification thresholds and are useful for dedicated mechanism tests.
+
+However, the frozen workload-family release gates no longer require specific dominance/cache/upper-bound counter activity.
+
+Why: a later exact implementation may legitimately reduce state count by a different proof, precompute a route matrix, or eliminate a branch before the current pruning mechanism runs. Requiring an internal counter would then reject an objectively better implementation.
+
+The frozen workload gates therefore prioritize:
+
+- exact completion / explicit exhaustion status
+- maximum evaluated states
+- minimum budget headroom
+- Planner 5 oracle parity when available
+
+Planner 6's focused engine tests remain responsible for proving that dominance pruning, upper-bound pruning, and route caching work when those mechanisms are present.
+
+### Report isolation and suite ordering
+
+Qualification reports copy optimizer statistics and construct fresh failure arrays.
+
+Regression tests now prove that mutating one returned report does not contaminate a later qualification run and that running the frozen scenarios in reverse order produces the same per-scenario evidence.
