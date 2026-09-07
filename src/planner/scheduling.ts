@@ -101,7 +101,10 @@ export type ShowCandidateBuild = {
   issues: ShowCandidateIssue[];
 };
 
-export type RoutePolicy = Omit<RouteRequest, "fromNodeId" | "toNodeId">;
+export type RoutePolicy = Omit<
+  RouteRequest,
+  "fromNodeId" | "toNodeId" | "optimize"
+>;
 
 export type AnchorScheduleStep = {
   anchorId: string;
@@ -120,6 +123,7 @@ export type AnchorScheduleStep = {
 };
 
 export type AnchorFeasibilityFailureReason =
+  | "HORIZON_INVALID"
   | "START_NODE_UNKNOWN"
   | "DUPLICATE_ANCHOR_ID"
   | "ANCHOR_INVALID"
@@ -360,14 +364,10 @@ export function buildShowCandidateSets(
       nodeId: placeNodeById.get(event.placeId)!,
       eventId: event.id,
       activityId: event.activityId,
-      recommendedArrivalMinute: Math.max(
-        0,
+      recommendedArrivalMinute:
         startMinute - event.recommendedArrivalMinutes,
-      ),
-      arrivalWindowStartMinute: Math.max(
-        0,
+      arrivalWindowStartMinute:
         startMinute - event.recommendedArrivalMinutes,
-      ),
       arrivalWindowEndMinute: startMinute,
       serviceStartMinute: startMinute,
       serviceEndMinute,
@@ -403,6 +403,19 @@ export function buildShowCandidateSets(
   return { sets, issues };
 }
 
+function horizonStructureValid(horizon: PlanningHorizon) {
+  return (
+    validDate(horizon.date) &&
+    Number.isInteger(horizon.startMinute) &&
+    Number.isInteger(horizon.endMinute) &&
+    Number.isInteger(horizon.durationMinutes) &&
+    horizon.startMinute >= 0 &&
+    horizon.endMinute <= 23 * 60 + 59 &&
+    horizon.endMinute > horizon.startMinute &&
+    horizon.durationMinutes === horizon.endMinute - horizon.startMinute
+  );
+}
+
 function anchorStructureValid(anchor: ScheduleAnchor) {
   return (
     nonEmpty(anchor.id) &&
@@ -427,6 +440,14 @@ export function evaluateAnchorSequence(
   anchors: readonly ScheduleAnchor[],
   routePolicy: RoutePolicy = {},
 ): AnchorSequenceResult {
+  if (!horizonStructureValid(horizon)) {
+    return {
+      status: "infeasible",
+      horizon: { ...horizon },
+      reason: "HORIZON_INVALID",
+    };
+  }
+
   if (!graph.hasNode(initialNodeId)) {
     return {
       status: "infeasible",
@@ -494,6 +515,7 @@ export function evaluateAnchorSequence(
   for (const anchor of anchors) {
     const route = findShortestRoute(graph, {
       ...routePolicy,
+      optimize: "duration",
       fromNodeId: currentNodeId,
       toNodeId: anchor.nodeId,
     });
