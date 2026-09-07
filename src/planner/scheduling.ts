@@ -409,40 +409,56 @@ export function buildShowCandidateSets(
 
 export function isValidPlanningHorizon(
   horizon: unknown,
-): horizon is PlanningHorizon {
+): boolean {
   if (!isRecord(horizon)) return false;
+
+  const startMinute = horizon.startMinute;
+  const endMinute = horizon.endMinute;
+  const durationMinutes = horizon.durationMinutes;
 
   return (
     validDate(horizon.date) &&
-    Number.isInteger(horizon.startMinute) &&
-    Number.isInteger(horizon.endMinute) &&
-    Number.isInteger(horizon.durationMinutes) &&
-    horizon.startMinute >= 0 &&
-    horizon.endMinute <= 23 * 60 + 59 &&
-    horizon.endMinute > horizon.startMinute &&
-    horizon.durationMinutes === horizon.endMinute - horizon.startMinute
+    typeof startMinute === "number" &&
+    Number.isInteger(startMinute) &&
+    typeof endMinute === "number" &&
+    Number.isInteger(endMinute) &&
+    typeof durationMinutes === "number" &&
+    Number.isInteger(durationMinutes) &&
+    startMinute >= 0 &&
+    endMinute <= 23 * 60 + 59 &&
+    endMinute > startMinute &&
+    durationMinutes === endMinute - startMinute
   );
 }
 
 export function isValidScheduleAnchor(
   anchor: unknown,
-): anchor is ScheduleAnchor {
+): boolean {
   if (!isRecord(anchor)) return false;
+
+  const arrivalWindowStartMinute = anchor.arrivalWindowStartMinute;
+  const arrivalWindowEndMinute = anchor.arrivalWindowEndMinute;
+  const serviceStartMinute = anchor.serviceStartMinute;
+  const serviceEndMinute = anchor.serviceEndMinute;
 
   return (
     nonEmpty(anchor.id) &&
     (anchor.kind === "locked" || anchor.kind === "show") &&
     nonEmpty(anchor.title) &&
     nonEmpty(anchor.nodeId) &&
-    Number.isInteger(anchor.arrivalWindowStartMinute) &&
-    Number.isInteger(anchor.arrivalWindowEndMinute) &&
-    Number.isInteger(anchor.serviceStartMinute) &&
-    Number.isInteger(anchor.serviceEndMinute) &&
-    anchor.arrivalWindowStartMinute >= 0 &&
-    anchor.arrivalWindowStartMinute <= anchor.arrivalWindowEndMinute &&
-    anchor.arrivalWindowEndMinute <= anchor.serviceStartMinute &&
-    anchor.serviceStartMinute < anchor.serviceEndMinute &&
-    anchor.serviceEndMinute <= 24 * 60
+    typeof arrivalWindowStartMinute === "number" &&
+    Number.isInteger(arrivalWindowStartMinute) &&
+    typeof arrivalWindowEndMinute === "number" &&
+    Number.isInteger(arrivalWindowEndMinute) &&
+    typeof serviceStartMinute === "number" &&
+    Number.isInteger(serviceStartMinute) &&
+    typeof serviceEndMinute === "number" &&
+    Number.isInteger(serviceEndMinute) &&
+    arrivalWindowStartMinute >= 0 &&
+    arrivalWindowStartMinute <= arrivalWindowEndMinute &&
+    arrivalWindowEndMinute <= serviceStartMinute &&
+    serviceStartMinute < serviceEndMinute &&
+    serviceEndMinute <= 24 * 60
   );
 }
 
