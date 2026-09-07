@@ -542,3 +542,166 @@ test("lexical tie-breaking uses stable code-unit order, not host locale", () => 
     "z-second",
   ]);
 });
+
+
+test("compiled graph is isolated from source-data mutation", () => {
+  const data = graph(
+    ["a", "b"],
+    [edge("a-b", "a", "b", { durationMinutes: 2.25 })],
+  );
+  const routing = buildRoutingGraph(data);
+
+  data.routeEdges[0].durationMinutes = 99;
+  data.routeEdges[0].provenance.sourceLabel = "mutated source";
+
+  const result = found(
+    findShortestRoute(routing, { fromNodeId: "a", toNodeId: "b" }),
+  );
+
+  assert.equal(result.durationMinutes, 2.25);
+  assert.equal(result.edges[0].provenance.sourceLabel, "Synthetic routing fixture");
+});
+
+test("mutating returned route provenance cannot alter later route results", () => {
+  const data = graph(["a", "b"], [edge("a-b", "a", "b")]);
+  const routing = buildRoutingGraph(data);
+
+  const first = found(
+    findShortestRoute(routing, { fromNodeId: "a", toNodeId: "b" }),
+  );
+  first.edges[0].provenance.sourceLabel = "caller mutation";
+
+  const second = found(
+    findShortestRoute(routing, { fromNodeId: "a", toNodeId: "b" }),
+  );
+
+  assert.equal(second.edges[0].provenance.sourceLabel, "Synthetic routing fixture");
+});
+
+test("decimal cost accumulation does not break mathematically equal ties", () => {
+  const data = graph(
+    ["a", "b", "d"],
+    [
+      edge("z-direct", "a", "d", {
+        distanceMeters: 30,
+        durationMinutes: 0.3,
+      }),
+      edge("a-part-1", "a", "b", {
+        distanceMeters: 10,
+        durationMinutes: 0.1,
+      }),
+      edge("a-part-2", "b", "d", {
+        distanceMeters: 20,
+        durationMinutes: 0.2,
+      }),
+    ],
+  );
+
+  const result = found(
+    routeData(data, { fromNodeId: "a", toNodeId: "d" }),
+  );
+
+  assert.equal(result.durationMinutes, 0.3);
+  assert.deepEqual(result.edges.map((item) => item.edgeId), ["z-direct"]);
+});
+
+test("empty allowedModes produces no route without weakening same-node routing", () => {
+  const data = graph(["a", "b"], [edge("a-b", "a", "b")]);
+  const routing = buildRoutingGraph(data);
+
+  assert.equal(
+    findShortestRoute(routing, {
+      fromNodeId: "a",
+      toNodeId: "b",
+      allowedModes: [],
+    }).status,
+    "not-found",
+  );
+
+  assert.equal(
+    findShortestRoute(routing, {
+      fromNodeId: "a",
+      toNodeId: "a",
+      allowedModes: [],
+    }).status,
+    "found",
+  );
+});
+
+test("unknown conditional edge IDs are inert", () => {
+  const data = graph(
+    ["a", "b"],
+    [edge("conditional-a-b", "a", "b", { status: "conditional" })],
+  );
+
+  assert.equal(
+    routeData(data, {
+      fromNodeId: "a",
+      toNodeId: "b",
+      enabledConditionalEdgeIds: ["not-a-real-edge"],
+    }).status,
+    "not-found",
+  );
+});
+
+test("accessibility stroller and transport constraints compose as hard filters", () => {
+  const data = graph(
+    ["a", "b", "c", "d"],
+    [
+      edge("skyfari", "a", "d", {
+        mode: "skyfari",
+        durationMinutes: 1,
+      }),
+      edge("accessible-no-stroller", "a", "b", {
+        durationMinutes: 2,
+        accessible: true,
+        stroller: false,
+      }),
+      edge("stroller-accessible-1", "a", "c", {
+        durationMinutes: 3,
+        accessible: true,
+        stroller: true,
+      }),
+      edge("stroller-accessible-2", "c", "d", {
+        durationMinutes: 3,
+        accessible: true,
+        stroller: true,
+      }),
+    ],
+  );
+
+  const result = found(
+    routeData(data, {
+      fromNodeId: "a",
+      toNodeId: "d",
+      allowedModes: ["walk"],
+      requireAccessible: true,
+      requireStroller: true,
+    }),
+  );
+
+  assert.deepEqual(result.edges.map((item) => item.edgeId), [
+    "stroller-accessible-1",
+    "stroller-accessible-2",
+  ]);
+});
+
+test("positive-cost cycles do not disturb the best route", () => {
+  const data = graph(
+    ["a", "b", "c", "d"],
+    [
+      edge("a-b", "a", "b", { oneWay: true, durationMinutes: 1 }),
+      edge("b-c", "b", "c", { oneWay: true, durationMinutes: 1 }),
+      edge("c-b", "c", "b", { oneWay: true, durationMinutes: 1 }),
+      edge("c-d", "c", "d", { oneWay: true, durationMinutes: 1 }),
+      edge("slow-direct", "a", "d", { durationMinutes: 10 }),
+    ],
+  );
+
+  const result = found(
+    routeData(data, { fromNodeId: "a", toNodeId: "d" }),
+  );
+
+  assert.deepEqual(result.nodeIds, ["a", "b", "c", "d"]);
+  assert.equal(result.durationMinutes, 3);
+});
