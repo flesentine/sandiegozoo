@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { getExperienceSchedule } from "./data/priorityOptions";
 import {
+  createDefaultDayPreferences,
+  type DayPreferences,
+} from "./planning/dayPreferences";
+import {
   createDefaultPriorityPreferences,
   retainAvailableExperiencePriorities,
   type PriorityPreferences,
@@ -10,13 +14,15 @@ import {
   type VisitPreferences,
 } from "./planning/visitPreferences";
 import { PrioritiesScreen } from "./screens/PrioritiesScreen";
+import { YourDayScreen } from "./screens/YourDayScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
 import { YourVisitScreen } from "./screens/YourVisitScreen";
 import "./styles/welcome.css";
 import "./styles/visit.css";
 import "./styles/priorities.css";
+import "./styles/day.css";
 
-type AppScreen = "welcome" | "visit" | "priorities";
+type AppScreen = "welcome" | "visit" | "priorities" | "day";
 
 export function App() {
   const [screen, setScreen] = useState<AppScreen>("welcome");
@@ -25,6 +31,9 @@ export function App() {
   );
   const [priorityPreferences, setPriorityPreferences] =
     useState<PriorityPreferences>(createDefaultPriorityPreferences);
+  const [dayPreferences, setDayPreferences] = useState<DayPreferences>(
+    createDefaultDayPreferences,
+  );
 
   const updateVisitPreferences = (next: VisitPreferences) => {
     if (next.date && next.date !== visitPreferences.date) {
@@ -40,6 +49,23 @@ export function App() {
     setVisitPreferences(next);
   };
 
+  if (screen === "day") {
+    return (
+      <YourDayScreen
+        value={dayPreferences}
+        onChange={setDayPreferences}
+        easyPaths={visitPreferences.easyPaths}
+        onEasyPathsChange={(easyPaths) =>
+          setVisitPreferences((current) => ({ ...current, easyPaths }))
+        }
+        onBack={() => setScreen("priorities")}
+        onContinue={() => {
+          // UX-10.5 will replace this with the Day Summary screen.
+        }}
+      />
+    );
+  }
+
   if (screen === "priorities") {
     return (
       <PrioritiesScreen
@@ -47,9 +73,7 @@ export function App() {
         value={priorityPreferences}
         onChange={setPriorityPreferences}
         onBack={() => setScreen("visit")}
-        onContinue={() => {
-          // UX-10.4 will replace this with the Your Day preferences screen.
-        }}
+        onContinue={() => setScreen("day")}
       />
     );
   }
