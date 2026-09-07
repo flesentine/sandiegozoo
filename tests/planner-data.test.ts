@@ -224,3 +224,12 @@ test("warns instead of failing for an orphan route node", async () => {
   assert.doesNotThrow(() => assertValidWildRouteData(value));
   assert.equal(isValidWildRouteData(value), true);
 });
+
+
+test("requires a stable activity ID for schedule grouping", async () => {
+  const value = await fixture();
+  const runtime = value.scheduleEvents[0] as unknown as Record<string, unknown>;
+  runtime.activityId = "";
+
+  assert.ok(codes(value).includes("EVENT_ACTIVITY_ID_REQUIRED"));
+});
