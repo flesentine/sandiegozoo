@@ -403,7 +403,7 @@ export function buildShowCandidateSets(
   return { sets, issues };
 }
 
-function horizonStructureValid(horizon: PlanningHorizon) {
+export function isValidPlanningHorizon(horizon: PlanningHorizon) {
   return (
     validDate(horizon.date) &&
     Number.isInteger(horizon.startMinute) &&
@@ -416,7 +416,7 @@ function horizonStructureValid(horizon: PlanningHorizon) {
   );
 }
 
-function anchorStructureValid(anchor: ScheduleAnchor) {
+export function isValidScheduleAnchor(anchor: ScheduleAnchor) {
   return (
     nonEmpty(anchor.id) &&
     nonEmpty(anchor.title) &&
@@ -440,7 +440,7 @@ export function evaluateAnchorSequence(
   anchors: readonly ScheduleAnchor[],
   routePolicy: RoutePolicy = {},
 ): AnchorSequenceResult {
-  if (!horizonStructureValid(horizon)) {
+  if (!isValidPlanningHorizon(horizon)) {
     return {
       status: "infeasible",
       horizon: { ...horizon },
@@ -470,7 +470,7 @@ export function evaluateAnchorSequence(
     }
     seen.add(anchor.id);
 
-    if (!anchorStructureValid(anchor)) {
+    if (!isValidScheduleAnchor(anchor)) {
       return {
         status: "infeasible",
         horizon,
