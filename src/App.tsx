@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { getExperienceSchedule } from "./data/priorityOptions";
 import {
   createDefaultPriorityPreferences,
+  retainAvailableExperiencePriorities,
   type PriorityPreferences,
 } from "./planning/priorityPreferences";
 import {
@@ -24,6 +26,20 @@ export function App() {
   const [priorityPreferences, setPriorityPreferences] =
     useState<PriorityPreferences>(createDefaultPriorityPreferences);
 
+  const updateVisitPreferences = (next: VisitPreferences) => {
+    if (next.date && next.date !== visitPreferences.date) {
+      const availableExperienceIds = getExperienceSchedule(next.date).options.map(
+        (experience) => experience.id,
+      );
+
+      setPriorityPreferences((current) =>
+        retainAvailableExperiencePriorities(current, availableExperienceIds),
+      );
+    }
+
+    setVisitPreferences(next);
+  };
+
   if (screen === "priorities") {
     return (
       <PrioritiesScreen
@@ -42,7 +58,7 @@ export function App() {
     return (
       <YourVisitScreen
         value={visitPreferences}
-        onChange={setVisitPreferences}
+        onChange={updateVisitPreferences}
         onBack={() => setScreen("welcome")}
         onContinue={() => setScreen("priorities")}
       />
