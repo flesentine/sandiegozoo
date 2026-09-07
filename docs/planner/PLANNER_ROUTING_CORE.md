@@ -98,3 +98,12 @@ It establishes trustworthy point-to-point travel costs for the scheduling and op
 `findShortestRoute(graph, request)` consumes that compiled graph and never reparses or rebuilds the source package for each query. This matters because the later optimizer will request many point-to-point travel costs during one plan build.
 
 `declaredOutgoing(nodeId)` is a diagnostics view of declared graph topology only. It may include closed or conditional edges. Route search always applies availability and request constraints separately.
+
+
+## Snapshot and numeric stability
+
+Graph compilation snapshots routing edges and provenance. Mutating the source data after `buildRoutingGraph(...)` cannot change the compiled graph.
+
+Route and diagnostics results return provenance copies, so caller mutation cannot alter future route results.
+
+Accumulated distance and duration are canonicalized to nine decimal places after each addition. This prevents ordinary IEEE-754 artifacts such as `0.1 + 0.2 !== 0.3` from changing a mathematically equal route tie. Differences below that precision are intentionally treated as equal for routing comparison.
