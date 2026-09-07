@@ -4,6 +4,7 @@ import {
   decideCandidateOmission,
   scoreCandidate,
   assertValidScoringCandidate,
+  assertValidScoreContext,
   type CandidateAuthority,
   type CandidateScore,
   type OmissionDecision,
@@ -84,6 +85,12 @@ export type OptimizedItinerary = {
   evaluatedStates: number;
 };
 
+export type OptimizerBaselineInfeasible = {
+  status: "infeasible";
+  reason: "END_NODE_UNREACHABLE" | "END_NODE_AFTER_HORIZON";
+  evaluatedStates: number;
+};
+
 export type OptimizerTradeoff = {
   status: "tradeoff-required";
   reason: "MANDATORY_SET_INFEASIBLE";
@@ -100,6 +107,7 @@ export type OptimizerSearchLimit = {
 
 export type OptimizerResult =
   | OptimizedItinerary
+  | OptimizerBaselineInfeasible
   | OptimizerTradeoff
   | OptimizerSearchLimit;
 
@@ -609,6 +617,8 @@ function validateRequest(
     );
   }
 
+  assertValidScoreContext(request.scoreContext);
+
   if (
     request.endNodeId !== undefined &&
     !request.graph.hasNode(request.endNodeId)
@@ -633,6 +643,23 @@ export function optimizeItinerary(
   }
 
   const groups = buildGroups(request.graph, request.candidates);
+
+  const baselineOutcome = search(
+    request,
+    [],
+    new Set(),
+  );
+
+  if (!baselineOutcome.best) {
+    return {
+      status: "infeasible",
+      reason: baselineOutcome.failures.has("NO_ROUTE")
+        ? "END_NODE_UNREACHABLE"
+        : "END_NODE_AFTER_HORIZON",
+      evaluatedStates: baselineOutcome.evaluatedStates,
+    };
+  }
+
   const mandatoryGroups = groups.filter(
     (group) => group.authority !== "optional",
   );
