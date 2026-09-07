@@ -294,6 +294,7 @@ test("ignores performances from other visit dates", () => {
     event("today", "show", "stage-a", "10:00"),
     event("tomorrow", "show", "stage-a", "11:00", {
       date: "2026-09-20",
+      endTime: "11:30",
       provenance: {
         ...provenance,
         effectiveFrom: "2026-09-20",
