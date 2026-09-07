@@ -119,3 +119,39 @@ Planner 6 does not yet:
 - claim heuristic/approximate answers when exact search cannot finish
 
 The next performance phases can raise capacity only while preserving Planner 5 differential parity on bounded cases.
+
+
+## Dominance proof hardening
+
+The final pre-merge review found a deterministic tie-break counterexample in the first dominance rule.
+
+An earlier state is not automatically safe to keep over a later state when utility and travel totals tie.
+
+Why: a future fixed/windowed anchor can force both states to wait until the same service time, erasing the earlier state's clock advantage. If the later state has a lexicographically better candidate-order signature, Planner 5's final comparator must choose the later state after that wait.
+
+The dominance rule is therefore stricter:
+
+- better utility may dominate when the other monotone metrics are no worse
+- better travel totals may dominate under the existing monotone constraints
+- when utility and both travel totals tie, the dominating state must also have an equal-or-better lexical history signature **even if its current minute is earlier**
+
+A dedicated differential regression constructs exactly this “time advantage erased by future fixed anchor” case and pins Planner 6 to Planner 5.
+
+## Upper-bound proof review
+
+The optimistic utility bound remains sound:
+
+- each unselected selection key contributes at most one future candidate
+- alternatives share preference tier by Planner 5 validation
+- the bound grants the full raw preference points with zero route-comfort penalty
+- it ignores feasibility, route time, dwell, buffers, and schedule conflicts
+
+Those choices can only overestimate future utility.
+
+Travel/time pruning is applied only when this optimistic utility can do no better than the current best:
+
+- current travel minutes are a monotone lower bound on final travel minutes
+- when travel minutes tie, current travel distance is a monotone lower bound on final distance
+- when utility and travel totals tie, current minute greater than the best final finish cannot recover because future work has non-negative elapsed time
+
+Targeted oracle-parity regressions verify that a branch with a remaining higher-tier Favorite is never pruned merely because it currently has worse travel, and that upper-bound pruning is actually exercised on a bounded fixture.
