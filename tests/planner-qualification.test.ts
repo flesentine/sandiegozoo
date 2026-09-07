@@ -522,8 +522,25 @@ test("qualification rejects malformed harness configuration", () => {
         ...scenario,
         stateBudget: 0,
       }),
-    /stateBudget must be a positive integer/,
+    /stateBudget must be a positive finite integer/,
   );
+
+  for (const badBudget of [
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    1.5,
+    -1,
+  ]) {
+    assert.throws(
+      () =>
+        runOptimizerQualification({
+          ...scenario,
+          id: `bad-budget-${String(badBudget)}`,
+          stateBudget: badBudget,
+        }),
+      /stateBudget must be a positive finite integer/,
+    );
+  }
 });
 
 test("oracle parity requirement reports explicit oracle-limit failure", () => {
