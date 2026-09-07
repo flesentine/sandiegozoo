@@ -776,6 +776,16 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
       return;
     }
 
+    if (!nonEmptyString(rawEvent.activityId)) {
+      push(
+        issues,
+        "error",
+        "EVENT_ACTIVITY_ID_REQUIRED",
+        `${path}.activityId`,
+        "Event activityId must be a non-empty stable string.",
+      );
+    }
+
     if (!nonEmptyString(rawEvent.title)) {
       push(
         issues,
