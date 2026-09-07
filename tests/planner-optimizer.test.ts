@@ -306,9 +306,9 @@ test("infeasible mandatory set returns explicit tradeoff candidates", () => {
     "locked-a",
     "locked-c",
   ]);
-  assert.deepEqual(result.tradeoffSelectionKeys, [
-    "locked-a",
-    "locked-c",
+  assert.deepEqual(result.tradeoffOptions, [
+    ["locked-a"],
+    ["locked-c"],
   ]);
 });
 
@@ -733,4 +733,221 @@ test("malformed runtime anchors fail closed instead of throwing inside validatio
     () => optimizeItinerary(request([bad])),
     /requires a valid schedule anchor/,
   );
+});
+
+
+test("mandatory conflict reports minimal multi-removal tradeoff combinations", () => {
+  const candidates: OptimizerCandidate[] = [
+    {
+      ...flexible("a", "a"),
+      authority: "locked",
+      timing: "fixed",
+      priority: "must",
+      baseDwellMinutes: 30,
+      anchor: lockedAnchor("a", "a", 600, 30),
+    },
+    {
+      ...flexible("b", "b"),
+      authority: "locked",
+      timing: "fixed",
+      priority: "must",
+      baseDwellMinutes: 30,
+      anchor: lockedAnchor("b", "b", 600, 30),
+    },
+    {
+      ...flexible("c", "c"),
+      authority: "locked",
+      timing: "fixed",
+      priority: "must",
+      baseDwellMinutes: 30,
+      anchor: lockedAnchor("c", "c", 600, 30),
+    },
+  ];
+
+  const result = optimizeItinerary(request(candidates));
+
+  assert.equal(result.status, "tradeoff-required");
+  if (result.status !== "tradeoff-required") {
+    throw new Error("expected tradeoff");
+  }
+
+  assert.deepEqual(result.tradeoffOptions, [
+    ["a", "b"],
+    ["a", "c"],
+    ["b", "c"],
+  ]);
+});
+
+test("malformed route policy fails closed at optimizer boundary", () => {
+  assert.throws(
+    () =>
+      optimizeItinerary(
+        request([], {
+          routePolicy: {
+            allowedModes: "walk",
+          } as unknown as Parameters<typeof optimizeItinerary>[0]["routePolicy"],
+        }),
+      ),
+    /allowedModes must be an array/,
+  );
+
+  assert.throws(
+    () =>
+      optimizeItinerary(
+        request([], {
+          routePolicy: {
+            requireAccessible: "false",
+          } as unknown as Parameters<typeof optimizeItinerary>[0]["routePolicy"],
+        }),
+      ),
+    /requireAccessible must be boolean/,
+  );
+
+  assert.throws(
+    () =>
+      optimizeItinerary(
+        request([], {
+          routePolicy: {
+            optimize: "distance",
+          } as unknown as Parameters<typeof optimizeItinerary>[0]["routePolicy"],
+        }),
+      ),
+    /unsupported field: optimize/,
+  );
+});
+
+test("forged routing graph and malformed optimizer request fail closed", () => {
+  assert.throws(
+    () =>
+      optimizeItinerary({
+        ...request([]),
+        graph: {
+          hasNode: () => true,
+          declaredOutgoing: () => [],
+        },
+      } as unknown as Parameters<typeof optimizeItinerary>[0]),
+    /must be created by buildRoutingGraph/,
+  );
+
+  assert.throws(
+    () =>
+      optimizeItinerary(
+        null as unknown as Parameters<typeof optimizeItinerary>[0],
+      ),
+    /OptimizerRequest must be an object/,
+  );
+});
+
+test("oversized requests validate candidate records before returning the search limit", () => {
+  const candidates = Array.from(
+    { length: MAX_EXHAUSTIVE_CANDIDATES + 1 },
+    (_, index) =>
+      flexible(`candidate-${index}`, "a", {
+        baseDwellMinutes: 1,
+      }),
+  );
+  candidates[candidates.length - 1] = {
+    ...candidates[candidates.length - 1],
+    authority: "invalid",
+  } as unknown as OptimizerCandidate;
+
+  assert.throws(
+    () => optimizeItinerary(request(candidates)),
+    /authority is invalid/,
+  );
+});
+
+test("mixed omission failures use conservative insufficient-time diagnosis", () => {
+  const localGraph = graph([
+    edge("entry-a", "entry", "a", 5),
+    edge("entry-b", "entry", "b", 5),
+  ]);
+
+  const optional: OptimizerCandidate[] = [
+    {
+      ...flexible("show-a", "a"),
+      selectionKey: "mixed-show",
+      timing: "windowed",
+      priority: "favorite",
+      baseDwellMinutes: 20,
+      anchor: showAnchor("show-a", "a", 545, 20, 1),
+    },
+    {
+      ...flexible("show-b", "b"),
+      selectionKey: "mixed-show",
+      timing: "windowed",
+      priority: "favorite",
+      baseDwellMinutes: 20,
+      anchor: showAnchor("show-b", "b", 545, 20, 1),
+    },
+  ];
+  localGraph.declaredOutgoing("b");
+
+  const result = optimizeItinerary(
+    request(optional, {
+      graph: localGraph,
+      horizon: horizon("09:00", "09:15"),
+    }),
+  );
+
+  assert.equal(result.status, "optimized");
+  if (result.status !== "optimized") throw new Error("expected optimized");
+  assert.deepEqual(result.selectedCandidateIds, []);
+  assert.equal(result.omissions[0].reason, "INSUFFICIENT_TIME");
+});
+
+test("exact eight-candidate exhaustive search has stable complete state accounting", () => {
+  const localGraph = graph([]);
+  const candidates = Array.from(
+    { length: MAX_EXHAUSTIVE_CANDIDATES },
+    (_, index) =>
+      flexible(`candidate-${index}`, "entry", {
+        priority: "bonus",
+        baseDwellMinutes: 1,
+      }),
+  );
+
+  const result = optimizeItinerary(
+    request(candidates, {
+      graph: localGraph,
+      initialNodeId: "entry",
+      horizon: horizon("09:00", "17:00"),
+    }),
+  );
+
+  assert.equal(result.status, "optimized");
+  if (result.status !== "optimized") throw new Error("expected optimized");
+  assert.equal(result.selectedCandidateIds.length, MAX_EXHAUSTIVE_CANDIDATES);
+  assert.equal(result.evaluatedStates, 109603);
+});
+
+test("completely equal alternatives use stable code-unit candidate ID tie-break", () => {
+  const values: OptimizerCandidate[] = [
+    {
+      ...flexible("ä-alt", "a", {
+        authority: "required",
+        timing: "windowed",
+        priority: "must",
+        baseDwellMinutes: 20,
+      }),
+      selectionKey: "same-show",
+      anchor: showAnchor("ä-alt", "a", 600, 20),
+    },
+    {
+      ...flexible("z-alt", "a", {
+        authority: "required",
+        timing: "windowed",
+        priority: "must",
+        baseDwellMinutes: 20,
+      }),
+      selectionKey: "same-show",
+      anchor: showAnchor("z-alt", "a", 600, 20),
+    },
+  ];
+
+  const result = optimizeItinerary(request(values));
+
+  assert.equal(result.status, "optimized");
+  if (result.status !== "optimized") throw new Error("expected optimized");
+  assert.deepEqual(result.selectedCandidateIds, ["z-alt"]);
 });
