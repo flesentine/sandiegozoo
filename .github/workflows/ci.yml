@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Validate planner data
-        run: npm run validate:data
+      - name: Test planner
+        run: npm run test:planner
 
       - name: Typecheck
         run: npm run typecheck
