@@ -865,6 +865,17 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
         `${path}.recommendedArrivalMinutes`,
         "recommendedArrivalMinutes must be a non-negative integer.",
       );
+    } else if (
+      start !== null &&
+      rawEvent.recommendedArrivalMinutes > start
+    ) {
+      push(
+        issues,
+        "error",
+        "EVENT_ARRIVAL_CROSSES_DAY",
+        `${path}.recommendedArrivalMinutes`,
+        "Recommended arrival cannot fall before midnight in the same-day schedule model.",
+      );
     }
 
     validateProvenance(issues, rawEvent.provenance, `${path}.provenance`);
