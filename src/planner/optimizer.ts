@@ -14,11 +14,13 @@ import {
   type ScoringCandidate,
 } from "./scoring.ts";
 import {
+  assertCompiledRoutingGraph,
   findShortestRoute,
   type RouteFound,
   type RoutingGraph,
 } from "./routing.ts";
 import {
+  assertValidRoutePolicy,
   isValidPlanningHorizon,
   isValidScheduleAnchor,
   type PlanningHorizon,
@@ -95,7 +97,7 @@ export type OptimizerTradeoff = {
   status: "tradeoff-required";
   reason: "MANDATORY_SET_INFEASIBLE";
   mandatorySelectionKeys: string[];
-  tradeoffSelectionKeys: string[];
+  tradeoffOptions: string[][];
   evaluatedStates: number;
 };
 
@@ -149,6 +151,8 @@ type SearchOutcome = {
   best?: FinalizedPlan;
   evaluatedStates: number;
   failures: Set<StepFailure>;
+  finalizeFailures: Set<StepFailure>;
+  failuresBySelectionKey: Map<string, Set<StepFailure>>;
 };
 
 const COST_PRECISION = 1_000_000_000;
@@ -520,6 +524,8 @@ function search(
   requiredKeys: ReadonlySet<string>,
 ): SearchOutcome {
   const failures = new Set<StepFailure>();
+  const finalizeFailures = new Set<StepFailure>();
+  const failuresBySelectionKey = new Map<string, Set<StepFailure>>();
   let evaluatedStates = 0;
   let best: FinalizedPlan | undefined;
 
@@ -542,6 +548,7 @@ function search(
 
       if (typeof finalized === "string") {
         failures.add(finalized);
+        finalizeFailures.add(finalized);
       } else if (!best || comparePlans(finalized, best) < 0) {
         best = finalized;
       }
@@ -555,6 +562,14 @@ function search(
 
         if (typeof next === "string") {
           failures.add(next);
+          const groupFailures =
+            failuresBySelectionKey.get(group.selectionKey) ??
+            new Set<StepFailure>();
+          groupFailures.add(next);
+          failuresBySelectionKey.set(
+            group.selectionKey,
+            groupFailures,
+          );
           continue;
         }
 
@@ -565,7 +580,13 @@ function search(
 
   visit(start);
 
-  return { best, evaluatedStates, failures };
+  return {
+    best,
+    evaluatedStates,
+    failures,
+    finalizeFailures,
+    failuresBySelectionKey,
+  };
 }
 
 function omissionReasonFromFailures(
@@ -579,7 +600,7 @@ function omissionReasonFromFailures(
     return "NO_ROUTE";
   }
 
-  if (failures.has("ANCHOR_CONFLICT")) {
+  if (failures.size === 1 && failures.has("ANCHOR_CONFLICT")) {
     return "ANCHOR_CONFLICT";
   }
 
@@ -599,16 +620,49 @@ function diagnoseOmittedGroup(
   );
   const outcome = search(request, diagnosticGroups, required);
 
-  return outcome.best
-    ? "LOWER_PRIORITY_ALTERNATIVE"
-    : omissionReasonFromFailures(outcome.failures);
+  if (outcome.best) {
+    return {
+      reason: "LOWER_PRIORITY_ALTERNATIVE" as const,
+      evaluatedStates: outcome.evaluatedStates,
+    };
+  }
+
+  const groupFailures =
+    outcome.failuresBySelectionKey.get(group.selectionKey);
+  const diagnosticFailures =
+    groupFailures && groupFailures.size > 0
+      ? groupFailures
+      : outcome.finalizeFailures.size > 0
+        ? outcome.finalizeFailures
+        : outcome.failures;
+
+  return {
+    reason: omissionReasonFromFailures(diagnosticFailures),
+    evaluatedStates: outcome.evaluatedStates,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function validateRequest(
-  request: OptimizerRequest,
-) {
+  request: unknown,
+): asserts request is OptimizerRequest {
+  if (!isRecord(request)) {
+    throw new Error("OptimizerRequest must be an object.");
+  }
+
+  assertCompiledRoutingGraph(request.graph);
+
   if (!isValidPlanningHorizon(request.horizon)) {
     throw new Error("OptimizerRequest horizon is invalid.");
+  }
+
+  if (!nonEmptyStableId(request.initialNodeId)) {
+    throw new Error(
+      "OptimizerRequest initialNodeId must be a stable non-empty ID.",
+    );
   }
 
   if (!request.graph.hasNode(request.initialNodeId)) {
@@ -617,7 +671,14 @@ function validateRequest(
     );
   }
 
-  assertValidScoreContext(request.scoreContext);
+  if (
+    request.endNodeId !== undefined &&
+    !nonEmptyStableId(request.endNodeId)
+  ) {
+    throw new Error(
+      "OptimizerRequest endNodeId must be a stable non-empty ID when provided.",
+    );
+  }
 
   if (
     request.endNodeId !== undefined &&
@@ -627,12 +688,97 @@ function validateRequest(
       `OptimizerRequest end node ${request.endNodeId} is unknown.`,
     );
   }
+
+  if (!Array.isArray(request.candidates)) {
+    throw new Error("OptimizerRequest candidates must be an array.");
+  }
+
+  assertValidScoreContext(request.scoreContext);
+  assertValidRoutePolicy(request.routePolicy);
 }
+
+
+function combinations<T>(
+  values: readonly T[],
+  size: number,
+): T[][] {
+  const result: T[][] = [];
+
+  function visit(start: number, selected: T[]) {
+    if (selected.length === size) {
+      result.push([...selected]);
+      return;
+    }
+
+    for (
+      let index = start;
+      index <= values.length - (size - selected.length);
+      index += 1
+    ) {
+      selected.push(values[index]);
+      visit(index + 1, selected);
+      selected.pop();
+    }
+  }
+
+  visit(0, []);
+  return result;
+}
+
+function findMinimalTradeoffOptions(
+  request: OptimizerRequest,
+  mandatoryGroups: readonly CandidateGroup[],
+) {
+  let evaluatedStates = 0;
+
+  for (let size = 1; size <= mandatoryGroups.length; size += 1) {
+    const options: string[][] = [];
+
+    for (const removedGroups of combinations(mandatoryGroups, size)) {
+      const removedKeys = new Set(
+        removedGroups.map((group) => group.selectionKey),
+      );
+      const remaining = mandatoryGroups.filter(
+        (group) => !removedKeys.has(group.selectionKey),
+      );
+      const required = new Set(
+        remaining.map((group) => group.selectionKey),
+      );
+      const outcome = search(request, remaining, required);
+      evaluatedStates += outcome.evaluatedStates;
+
+      if (outcome.best) {
+        options.push(
+          [...removedKeys].sort(compareText),
+        );
+      }
+    }
+
+    if (options.length > 0) {
+      options.sort((a, b) =>
+        compareText(JSON.stringify(a), JSON.stringify(b)),
+      );
+      return { options, evaluatedStates };
+    }
+  }
+
+  return {
+    options: [
+      mandatoryGroups
+        .map((group) => group.selectionKey)
+        .sort(compareText),
+    ],
+    evaluatedStates,
+  };
+}
+
 
 export function optimizeItinerary(
   request: OptimizerRequest,
 ): OptimizerResult {
   validateRequest(request);
+
+  const groups = buildGroups(request.graph, request.candidates);
 
   if (request.candidates.length > MAX_EXHAUSTIVE_CANDIDATES) {
     return {
@@ -641,8 +787,6 @@ export function optimizeItinerary(
       limit: MAX_EXHAUSTIVE_CANDIDATES,
     };
   }
-
-  const groups = buildGroups(request.graph, request.candidates);
 
   const baselineOutcome = search(
     request,
@@ -674,28 +818,20 @@ export function optimizeItinerary(
   );
 
   if (!mandatoryOutcome.best) {
-    const reliefKeys = mandatoryGroups
-      .filter((group) => {
-        const remaining = mandatoryGroups.filter(
-          (item) => item.selectionKey !== group.selectionKey,
-        );
-        const required = new Set(
-          remaining.map((item) => item.selectionKey),
-        );
-        return search(request, remaining, required).best !== undefined;
-      })
-      .map((group) => group.selectionKey)
-      .sort(compareText);
+    const tradeoffs = findMinimalTradeoffOptions(
+      request,
+      mandatoryGroups,
+    );
 
     return {
       status: "tradeoff-required",
       reason: "MANDATORY_SET_INFEASIBLE",
       mandatorySelectionKeys: [...mandatoryKeys].sort(compareText),
-      tradeoffSelectionKeys:
-        reliefKeys.length > 0
-          ? reliefKeys
-          : [...mandatoryKeys].sort(compareText),
-      evaluatedStates: mandatoryOutcome.evaluatedStates,
+      tradeoffOptions: tradeoffs.options,
+      evaluatedStates:
+        baselineOutcome.evaluatedStates +
+        mandatoryOutcome.evaluatedStates +
+        tradeoffs.evaluatedStates,
     };
   }
 
@@ -707,6 +843,7 @@ export function optimizeItinerary(
   );
   const omissions: OptimizerOmission[] = [];
   const unselectedAlternativeCandidateIds: string[] = [];
+  let diagnosticEvaluatedStates = 0;
 
   for (const group of groups) {
     if (selectedKeys.has(group.selectionKey)) {
@@ -724,18 +861,22 @@ export function optimizeItinerary(
       );
     }
 
-    const reason = diagnoseOmittedGroup(
+    const diagnosis = diagnoseOmittedGroup(
       request,
       mandatoryGroups,
       group,
     );
+    diagnosticEvaluatedStates += diagnosis.evaluatedStates;
     const representative = group.candidates[0];
 
     omissions.push({
       selectionKey: group.selectionKey,
       candidateIds: group.candidates.map((candidate) => candidate.id),
-      reason,
-      decision: decideCandidateOmission(representative, reason),
+      reason: diagnosis.reason,
+      decision: decideCandidateOmission(
+        representative,
+        diagnosis.reason,
+      ),
     });
   }
 
@@ -758,6 +899,9 @@ export function optimizeItinerary(
     omissions,
     unselectedAlternativeCandidateIds,
     evaluatedStates:
-      mandatoryOutcome.evaluatedStates + fullOutcome.evaluatedStates,
+      baselineOutcome.evaluatedStates +
+      mandatoryOutcome.evaluatedStates +
+      fullOutcome.evaluatedStates +
+      diagnosticEvaluatedStates,
   };
 }
