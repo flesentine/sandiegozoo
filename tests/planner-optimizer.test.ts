@@ -861,38 +861,47 @@ test("mixed omission failures use conservative insufficient-time diagnosis", () 
   const localGraph = graph([
     edge("entry-a", "entry", "a", 5),
     edge("entry-b", "entry", "b", 5),
+    edge("a-b", "a", "b", 5),
   ]);
+
+  const reservation: OptimizerCandidate = {
+    ...flexible("reservation", "b"),
+    authority: "locked",
+    timing: "fixed",
+    priority: "must",
+    baseDwellMinutes: 30,
+    anchor: lockedAnchor("reservation", "b", 570, 30),
+  };
 
   const optional: OptimizerCandidate[] = [
     {
-      ...flexible("show-a", "a"),
+      ...flexible("outside-show", "a"),
       selectionKey: "mixed-show",
       timing: "windowed",
       priority: "favorite",
       baseDwellMinutes: 20,
-      anchor: showAnchor("show-a", "a", 545, 20, 1),
+      anchor: showAnchor("outside-show", "a", 620, 20, 5),
     },
     {
-      ...flexible("show-b", "b"),
+      ...flexible("conflict-show", "a"),
       selectionKey: "mixed-show",
       timing: "windowed",
       priority: "favorite",
-      baseDwellMinutes: 20,
-      anchor: showAnchor("show-b", "b", 545, 20, 1),
+      baseDwellMinutes: 10,
+      anchor: showAnchor("conflict-show", "a", 575, 10, 0),
     },
   ];
-  localGraph.declaredOutgoing("b");
 
   const result = optimizeItinerary(
-    request(optional, {
+    request([reservation, ...optional], {
       graph: localGraph,
-      horizon: horizon("09:00", "09:15"),
+      horizon: horizon("09:00", "10:30"),
     }),
   );
 
   assert.equal(result.status, "optimized");
   if (result.status !== "optimized") throw new Error("expected optimized");
-  assert.deepEqual(result.selectedCandidateIds, []);
+  assert.deepEqual(result.selectedCandidateIds, ["reservation"]);
   assert.equal(result.omissions[0].reason, "INSUFFICIENT_TIME");
 });
 
