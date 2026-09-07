@@ -11,8 +11,11 @@ import {
   findShortestRoute,
 } from "../src/planner/routing.ts";
 import {
+  assertValidScoringCandidate,
   bonusPolicy,
+  buildPreferenceUtilityVector,
   compareCandidateScores,
+  comparePreferenceUtilityVectors,
   decideCandidateOmission,
   easierPathPenaltyPoints,
   getPacePolicy,
@@ -391,11 +394,242 @@ test("invalid candidates are rejected before scoring partition or omission", () 
         invalid,
         { pace: "balanced", preferEasyPaths: false },
       ),
-    /stable ID/,
+    /stable non-empty ID/,
   );
-  assert.throws(() => partitionCandidates([invalid]), /invalid scoring/);
+  assert.throws(
+    () => partitionCandidates([invalid]),
+    /stable non-empty ID/,
+  );
   assert.throws(
     () => decideCandidateOmission(invalid, "DATA_UNAVAILABLE"),
-    /invalid scoring/,
+    /stable non-empty ID/,
+  );
+});
+
+
+test("runtime scoring candidates fail closed on malformed enums and shapes", () => {
+  const malformed = {
+    id: "candidate",
+    authority: "maybe",
+    timing: "soon",
+    priority: "huge",
+    baseDwellMinutes: 20,
+  };
+
+  assert.throws(
+    () => assertValidScoringCandidate(malformed),
+    /authority is invalid/,
+  );
+
+  assert.throws(
+    () =>
+      scoreCandidate(
+        null as unknown as ScoringCandidate,
+        { pace: "balanced", preferEasyPaths: false },
+      ),
+    /must be an object/,
+  );
+
+  assert.throws(
+    () =>
+      scoreCandidate(
+        candidate("valid"),
+        {
+          pace: "warp",
+          preferEasyPaths: false,
+        } as unknown as Parameters<typeof scoreCandidate>[1],
+      ),
+    /Pace must be/,
+  );
+
+  assert.throws(
+    () =>
+      scoreCandidate(
+        candidate("valid"),
+        {
+          pace: "balanced",
+          preferEasyPaths: "yes",
+        } as unknown as Parameters<typeof scoreCandidate>[1],
+      ),
+    /preferEasyPaths must be boolean/,
+  );
+});
+
+test("unknown UI priorities fail closed instead of becoming Favorites", () => {
+  assert.throws(
+    () =>
+      policyFromAnimalPriority(
+        "surprise" as unknown as Parameters<
+          typeof policyFromAnimalPriority
+        >[0],
+      ),
+    /Animal priority is invalid/,
+  );
+
+  assert.throws(
+    () =>
+      policyFromExperiencePriority(
+        "surprise" as unknown as Parameters<
+          typeof policyFromExperiencePriority
+        >[0],
+      ),
+    /Experience priority is invalid/,
+  );
+});
+
+test("duplicate candidate IDs are rejected before ranking or partitioning", () => {
+  const values = [
+    candidate("same", { priority: "favorite" }),
+    candidate("same", { priority: "bonus" }),
+  ];
+
+  assert.throws(
+    () =>
+      rankCandidates(
+        values,
+        { pace: "balanced", preferEasyPaths: false },
+      ),
+    /Duplicate scoring candidate ID/,
+  );
+  assert.throws(
+    () => partitionCandidates(values),
+    /Duplicate scoring candidate ID/,
+  );
+});
+
+test("fixed and windowed service durations are not pace-adjusted", () => {
+  const fixed = scoreCandidate(
+    candidate("fixed", {
+      authority: "locked",
+      timing: "fixed",
+      priority: "must",
+      baseDwellMinutes: 45,
+    }),
+    { pace: "relaxed", preferEasyPaths: false },
+  );
+  const windowed = scoreCandidate(
+    candidate("windowed", {
+      authority: "required",
+      timing: "windowed",
+      priority: "must",
+      baseDwellMinutes: 30,
+    }),
+    { pace: "maximize", preferEasyPaths: false },
+  );
+  const flexible = scoreCandidate(
+    candidate("flexible", {
+      timing: "flexible",
+      baseDwellMinutes: 20,
+    }),
+    { pace: "relaxed", preferEasyPaths: false },
+  );
+
+  assert.equal(fixed.paceAdjustedDwellMinutes, 45);
+  assert.equal(windowed.paceAdjustedDwellMinutes, 30);
+  assert.equal(flexible.paceAdjustedDwellMinutes, 23);
+});
+
+test("extreme easier-path penalty cannot make a Bonus outrank a Favorite", () => {
+  const hardRoute = routeFor([
+    edge("hard-1", "a", "b", 60, "steep"),
+    edge("hard-2", "b", "c", 60, "steep"),
+  ]);
+
+  const favorite = scoreCandidate(
+    candidate("favorite", { priority: "favorite" }),
+    { pace: "balanced", preferEasyPaths: true },
+    hardRoute,
+  );
+  const bonus = scoreCandidate(
+    candidate("bonus", { priority: "bonus" }),
+    { pace: "balanced", preferEasyPaths: false },
+  );
+
+  assert.ok(favorite.netPreferencePoints < bonus.netPreferencePoints);
+  assert.ok(compareCandidateScores(favorite, bonus) < 0);
+});
+
+test("many Bonuses cannot outrank one Favorite in aggregate utility", () => {
+  const context = { pace: "balanced" as const, preferEasyPaths: false };
+  const favorite = [
+    scoreCandidate(
+      candidate("favorite", { priority: "favorite" }),
+      context,
+    ),
+  ];
+  const bonuses = Array.from({ length: 100 }, (_, index) =>
+    scoreCandidate(
+      candidate(`bonus-${String(index).padStart(3, "0")}`),
+      context,
+    ),
+  );
+
+  const favoriteVector = buildPreferenceUtilityVector(favorite);
+  const bonusVector = buildPreferenceUtilityVector(bonuses);
+
+  assert.ok(
+    comparePreferenceUtilityVectors(favoriteVector, bonusVector) < 0,
+  );
+});
+
+test("preference utility uses route comfort only within the same tier", () => {
+  const easyFavorite = scoreCandidate(
+    candidate("easy-favorite", { priority: "favorite" }),
+    { pace: "balanced", preferEasyPaths: true },
+  );
+  const hardRoute = routeFor([
+    edge("hard-1", "a", "b", 5, "steep"),
+    edge("hard-2", "b", "c", 5, "steep"),
+  ]);
+  const hardFavorite = scoreCandidate(
+    candidate("hard-favorite", { priority: "favorite" }),
+    { pace: "balanced", preferEasyPaths: true },
+    hardRoute,
+  );
+
+  assert.ok(compareCandidateScores(easyFavorite, hardFavorite) < 0);
+});
+
+test("non-ASCII candidate IDs use fixed code-unit ordering", () => {
+  const context = { pace: "balanced" as const, preferEasyPaths: false };
+  const ranked = rankCandidates(
+    [
+      candidate("ä", { priority: "favorite" }),
+      candidate("z", { priority: "favorite" }),
+    ],
+    context,
+  );
+
+  assert.deepEqual(ranked.map((item) => item.id), ["z", "ä"]);
+});
+
+test("scoring results are snapshots and do not change after candidate mutation", () => {
+  const source = candidate("snapshot", {
+    priority: "favorite",
+    baseDwellMinutes: 20,
+  });
+  const scored = scoreCandidate(
+    source,
+    { pace: "balanced", preferEasyPaths: false },
+  );
+
+  source.priority = "bonus";
+  source.baseDwellMinutes = 99;
+
+  assert.equal(scored.priority, "favorite");
+  assert.equal(scored.preferencePoints, 100);
+  assert.equal(scored.paceAdjustedDwellMinutes, 20);
+});
+
+test("invalid omission reasons fail closed at runtime", () => {
+  assert.throws(
+    () =>
+      decideCandidateOmission(
+        candidate("bonus"),
+        "BECAUSE" as unknown as Parameters<
+          typeof decideCandidateOmission
+        >[1],
+      ),
+    /drop reason is invalid/,
   );
 });
