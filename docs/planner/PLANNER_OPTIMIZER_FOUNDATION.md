@@ -148,3 +148,26 @@ Planner 5 does not yet:
 - use branch-and-bound or dynamic programming
 
 Those optimizations must preserve this oracle's decisions on bounded test cases.
+
+
+## Baseline feasibility
+
+Before candidate authority is considered, Planner 5 validates the empty itinerary against an optional required `endNodeId`.
+
+If the visitor cannot reach the required end node at all, the result is:
+
+`infeasible / END_NODE_UNREACHABLE`
+
+If the route exists but cannot reach the end node before visit departure:
+
+`infeasible / END_NODE_AFTER_HORIZON`
+
+These are baseline trip constraints, not reasons to sacrifice a Must-See or reservation.
+
+## Runtime schedule boundary
+
+Planner 3's exported horizon/anchor validators now accept untrusted runtime values and fail closed.
+
+Schedule minutes must be whole integers. Malformed anchor objects and fractional-minute anchors are rejected before optimizer search.
+
+Planner 5 also validates score context even for an empty candidate set, so invalid pace/easier-path state cannot bypass validation merely because there is nothing to score.
