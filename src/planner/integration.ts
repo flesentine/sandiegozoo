@@ -511,7 +511,7 @@ function routePolicyFor(
 
 function selectedEntries<T extends string>(
   values: Readonly<Record<string, T>>,
-  none: T,
+  none: string,
 ) {
   return Object.entries(values)
     .filter(([, priority]) => priority !== none)
