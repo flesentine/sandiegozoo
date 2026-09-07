@@ -1,0 +1,1072 @@
+import type {
+  DayPreferences,
+  Pace,
+} from "../planning/dayPreferences.ts";
+import type {
+  AnimalPriority,
+  ExperiencePriority,
+  PriorityPreferences,
+} from "../planning/priorityPreferences.ts";
+import type { VisitPreferences } from "../planning/visitPreferences.ts";
+import type {
+  PlaceRecord,
+  RouteEdge,
+  RouteMode,
+  RouteNode,
+  ScheduleEvent,
+  WildRouteDataPackage,
+} from "./contracts.ts";
+import {
+  buildOptimizerGroups,
+  type OptimizerCandidate,
+  type OptimizerRequest,
+} from "./optimizer.ts";
+import {
+  policyFromAnimalPriority,
+  policyFromExperiencePriority,
+} from "./scoring.ts";
+import {
+  buildShowCandidateSets,
+  createLockedAnchor,
+  createPlanningHorizon,
+} from "./scheduling.ts";
+import { buildRoutingGraph } from "./routing.ts";
+import {
+  runOptimizerQualification,
+  type OptimizerQualificationReport,
+  type QualificationThresholds,
+} from "./qualification.ts";
+import { assertValidWildRouteData } from "./validation.ts";
+
+export type AnimalCandidateBinding = {
+  placeId: string;
+  dwellMinutes: number;
+};
+
+export type ExperienceCandidateBinding = {
+  activityId: string;
+  dwellMinutes?: number;
+};
+
+export type ReservationCandidateBinding = {
+  placeId: string;
+  durationMinutes: number;
+};
+
+export type CandidateIntegrationBindings = {
+  animals: Readonly<Record<string, AnimalCandidateBinding>>;
+  experiences: Readonly<Record<string, ExperienceCandidateBinding>>;
+  reservation?: ReservationCandidateBinding;
+};
+
+export type CandidateIntegrationInput = {
+  data: unknown;
+  visit: VisitPreferences;
+  day: DayPreferences;
+  priorities: PriorityPreferences;
+  initialNodeId: string;
+  endNodeId?: string;
+  bindings: CandidateIntegrationBindings;
+  enabledConditionalEdgeIds?: readonly string[];
+};
+
+export type CandidateIntegrationIssueSeverity = "error" | "warning";
+
+export type CandidateIntegrationIssueCode =
+  | "VISIT_HORIZON_INVALID"
+  | "INITIAL_NODE_UNKNOWN"
+  | "END_NODE_UNKNOWN"
+  | "INITIAL_NODE_UNVERIFIED"
+  | "END_NODE_UNVERIFIED"
+  | "ANIMAL_BINDING_REQUIRED"
+  | "ANIMAL_PLACE_UNKNOWN"
+  | "ANIMAL_PLACE_KIND_MISMATCH"
+  | "ANIMAL_PLACE_UNVERIFIED"
+  | "EXPERIENCE_BINDING_REQUIRED"
+  | "EXPERIENCE_ACTIVITY_COLLISION"
+  | "EXPERIENCE_SCHEDULE_MISSING"
+  | "EXPERIENCE_PERFORMANCE_UNVERIFIED"
+  | "EXPERIENCE_NO_TRUSTED_PERFORMANCE"
+  | "RESERVATION_INCOMPLETE"
+  | "RESERVATION_BINDING_REQUIRED"
+  | "RESERVATION_PLACE_UNKNOWN"
+  | "RESERVATION_PLACE_UNVERIFIED"
+  | "RESERVATION_ANCHOR_INVALID"
+  | "ROUTING_DATA_GATED";
+
+export type CandidateIntegrationIssue = {
+  severity: CandidateIntegrationIssueSeverity;
+  code: CandidateIntegrationIssueCode;
+  selectionKey?: string;
+  sourceId?: string;
+  message: string;
+};
+
+export type CandidateIntegrationRoutingGate = {
+  disabledUnverifiedEdgeIds: string[];
+};
+
+export type CandidateIntegrationReady = {
+  status: "ready";
+  request: OptimizerRequest;
+  candidates: OptimizerCandidate[];
+  issues: CandidateIntegrationIssue[];
+  excludedSelectionKeys: string[];
+  routingGate: CandidateIntegrationRoutingGate;
+};
+
+export type CandidateIntegrationBlocked = {
+  status: "blocked";
+  candidates: OptimizerCandidate[];
+  issues: CandidateIntegrationIssue[];
+  excludedSelectionKeys: string[];
+  routingGate: CandidateIntegrationRoutingGate;
+};
+
+export type CandidateIntegrationResult =
+  | CandidateIntegrationReady
+  | CandidateIntegrationBlocked;
+
+export type QualifiedCandidateIntegration =
+  | {
+      status: "integration-blocked";
+      integration: CandidateIntegrationBlocked;
+    }
+  | {
+      status: "qualified" | "not-qualified";
+      integration: CandidateIntegrationReady;
+      report: OptimizerQualificationReport;
+    };
+
+const ANIMAL_PRIORITIES: readonly AnimalPriority[] = [
+  "none",
+  "favorite",
+  "must",
+];
+const EXPERIENCE_PRIORITIES: readonly ExperiencePriority[] = [
+  "none",
+  "interested",
+  "must",
+];
+const PACES: readonly Pace[] = ["relaxed", "balanced", "maximize"];
+const ALL_ROUTE_MODES: readonly RouteMode[] = [
+  "walk",
+  "skyfari",
+  "bus",
+  "elevator",
+  "ada-shuttle",
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stableId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value === value.trim()
+  );
+}
+
+function compareText(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function positiveInteger(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0
+  );
+}
+
+function assertPriorityRecord(
+  value: unknown,
+  allowed: readonly string[],
+  label: string,
+) {
+  if (!isRecord(value)) {
+    throw new Error(`${label} priorities must be an object.`);
+  }
+
+  for (const [id, priority] of Object.entries(value)) {
+    if (!stableId(id)) {
+      throw new Error(`${label} priority ID must be stable and non-empty.`);
+    }
+
+    if (
+      typeof priority !== "string" ||
+      !allowed.includes(priority)
+    ) {
+      throw new Error(`${label} priority is invalid for ${id}.`);
+    }
+  }
+}
+
+function assertVisitPreferences(value: unknown): asserts value is VisitPreferences {
+  if (!isRecord(value)) {
+    throw new Error("VisitPreferences must be an object.");
+  }
+
+  for (const key of [
+    "date",
+    "arrival",
+    "departure",
+  ] as const) {
+    if (typeof value[key] !== "string") {
+      throw new Error(`VisitPreferences ${key} must be a string.`);
+    }
+  }
+
+  for (const key of [
+    "stroller",
+    "easyPaths",
+    "wheelchair",
+  ] as const) {
+    if (typeof value[key] !== "boolean") {
+      throw new Error(`VisitPreferences ${key} must be boolean.`);
+    }
+  }
+
+  if (!isRecord(value.reservation)) {
+    throw new Error("VisitPreferences reservation must be an object.");
+  }
+
+  if (
+    typeof value.reservation.name !== "string" ||
+    typeof value.reservation.time !== "string"
+  ) {
+    throw new Error(
+      "VisitPreferences reservation name/time must be strings.",
+    );
+  }
+}
+
+function assertDayPreferences(value: unknown): asserts value is DayPreferences {
+  if (!isRecord(value)) {
+    throw new Error("DayPreferences must be an object.");
+  }
+
+  if (
+    typeof value.pace !== "string" ||
+    !PACES.includes(value.pace as Pace)
+  ) {
+    throw new Error("DayPreferences pace is invalid.");
+  }
+
+  if (typeof value.useSkyfari !== "boolean") {
+    throw new Error("DayPreferences useSkyfari must be boolean.");
+  }
+}
+
+function assertBindings(
+  value: unknown,
+): asserts value is CandidateIntegrationBindings {
+  if (!isRecord(value)) {
+    throw new Error("Candidate integration bindings must be an object.");
+  }
+
+  if (!isRecord(value.animals) || !isRecord(value.experiences)) {
+    throw new Error(
+      "Candidate integration animal/experience bindings must be objects.",
+    );
+  }
+
+  for (const [id, raw] of Object.entries(value.animals)) {
+    if (!stableId(id) || !isRecord(raw)) {
+      throw new Error("Animal candidate binding is invalid.");
+    }
+
+    if (!stableId(raw.placeId) || !positiveInteger(raw.dwellMinutes)) {
+      throw new Error(
+        `Animal binding ${id} requires stable placeId and positive integer dwellMinutes.`,
+      );
+    }
+  }
+
+  for (const [id, raw] of Object.entries(value.experiences)) {
+    if (!stableId(id) || !isRecord(raw)) {
+      throw new Error("Experience candidate binding is invalid.");
+    }
+
+    if (!stableId(raw.activityId)) {
+      throw new Error(
+        `Experience binding ${id} requires a stable activityId.`,
+      );
+    }
+
+    if (
+      raw.dwellMinutes !== undefined &&
+      !positiveInteger(raw.dwellMinutes)
+    ) {
+      throw new Error(
+        `Experience binding ${id} dwellMinutes must be a positive integer when provided.`,
+      );
+    }
+  }
+
+  if (value.reservation !== undefined) {
+    if (
+      !isRecord(value.reservation) ||
+      !stableId(value.reservation.placeId) ||
+      !positiveInteger(value.reservation.durationMinutes)
+    ) {
+      throw new Error(
+        "Reservation binding requires stable placeId and positive integer durationMinutes.",
+      );
+    }
+  }
+}
+
+function assertConditionalEdgeIds(value: unknown) {
+  if (value === undefined) return;
+
+  if (!Array.isArray(value)) {
+    throw new Error(
+      "enabledConditionalEdgeIds must be an array when provided.",
+    );
+  }
+
+  const seen = new Set<string>();
+  for (const edgeId of value) {
+    if (!stableId(edgeId)) {
+      throw new Error(
+        "enabledConditionalEdgeIds must contain stable non-empty strings.",
+      );
+    }
+    if (seen.has(edgeId)) {
+      throw new Error(
+        "enabledConditionalEdgeIds cannot contain duplicates.",
+      );
+    }
+    seen.add(edgeId);
+  }
+}
+
+function assertIntegrationInput(
+  input: CandidateIntegrationInput,
+) {
+  if (!isRecord(input)) {
+    throw new Error("CandidateIntegrationInput must be an object.");
+  }
+
+  assertVisitPreferences(input.visit);
+  assertDayPreferences(input.day);
+
+  if (!isRecord(input.priorities)) {
+    throw new Error("PriorityPreferences must be an object.");
+  }
+  assertPriorityRecord(
+    input.priorities.animals,
+    ANIMAL_PRIORITIES,
+    "Animal",
+  );
+  assertPriorityRecord(
+    input.priorities.experiences,
+    EXPERIENCE_PRIORITIES,
+    "Experience",
+  );
+
+  if (!stableId(input.initialNodeId)) {
+    throw new Error("initialNodeId must be a stable non-empty ID.");
+  }
+
+  if (
+    input.endNodeId !== undefined &&
+    !stableId(input.endNodeId)
+  ) {
+    throw new Error(
+      "endNodeId must be a stable non-empty ID when provided.",
+    );
+  }
+
+  assertBindings(input.bindings);
+  assertConditionalEdgeIds(input.enabledConditionalEdgeIds);
+}
+
+function confidenceVerified(
+  place: PlaceRecord,
+  node: RouteNode | undefined,
+) {
+  return (
+    place.provenance.confidence === "verified" &&
+    place.navigationPoint.confidence === "verified" &&
+    node?.provenance.confidence === "verified"
+  );
+}
+
+function nodeVerified(node: RouteNode | undefined) {
+  return node?.provenance.confidence === "verified";
+}
+
+function issueSeverityForAnimal(priority: AnimalPriority) {
+  return priority === "must" ? "error" as const : "warning" as const;
+}
+
+function issueSeverityForExperience(priority: ExperiencePriority) {
+  return priority === "must" ? "error" as const : "warning" as const;
+}
+
+function pushIssue(
+  issues: CandidateIntegrationIssue[],
+  severity: CandidateIntegrationIssueSeverity,
+  code: CandidateIntegrationIssueCode,
+  message: string,
+  selectionKey?: string,
+  sourceId?: string,
+) {
+  issues.push({
+    severity,
+    code,
+    ...(selectionKey ? { selectionKey } : {}),
+    ...(sourceId ? { sourceId } : {}),
+    message,
+  });
+}
+
+function trustedRoutingPackage(
+  data: WildRouteDataPackage,
+) {
+  const nodeById = new Map(
+    data.routeNodes.map((node) => [node.id, node]),
+  );
+  const disabledUnverifiedEdgeIds: string[] = [];
+
+  const routeEdges = data.routeEdges.map((edge) => {
+    const from = nodeById.get(edge.fromNodeId);
+    const to = nodeById.get(edge.toNodeId);
+    const trusted =
+      edge.provenance.confidence === "verified" &&
+      nodeVerified(from) &&
+      nodeVerified(to);
+
+    if (trusted) {
+      return {
+        ...edge,
+        provenance: { ...edge.provenance },
+      };
+    }
+
+    disabledUnverifiedEdgeIds.push(edge.id);
+    return {
+      ...edge,
+      status: "closed" as const,
+      provenance: { ...edge.provenance },
+    };
+  });
+
+  return {
+    data: {
+      ...data,
+      zones: data.zones.map((zone) => ({
+        ...zone,
+        provenance: { ...zone.provenance },
+      })),
+      places: data.places.map((place) => ({
+        ...place,
+        navigationPoint: { ...place.navigationPoint },
+        provenance: { ...place.provenance },
+      })),
+      routeNodes: data.routeNodes.map((node) => ({
+        ...node,
+        provenance: { ...node.provenance },
+      })),
+      routeEdges,
+      scheduleEvents: data.scheduleEvents.map((event) => ({
+        ...event,
+        provenance: { ...event.provenance },
+      })),
+    } satisfies WildRouteDataPackage,
+    disabledUnverifiedEdgeIds:
+      disabledUnverifiedEdgeIds.sort(compareText),
+  };
+}
+
+function routePolicyFor(
+  visit: VisitPreferences,
+  day: DayPreferences,
+  enabledConditionalEdgeIds?: readonly string[],
+) {
+  const allowedModes = day.useSkyfari
+    ? undefined
+    : ALL_ROUTE_MODES.filter((mode) => mode !== "skyfari");
+
+  return {
+    ...(allowedModes ? { allowedModes } : {}),
+    ...(visit.wheelchair
+      ? { requireAccessible: true }
+      : {}),
+    ...(visit.stroller ? { requireStroller: true } : {}),
+    ...(enabledConditionalEdgeIds &&
+    enabledConditionalEdgeIds.length > 0
+      ? {
+          enabledConditionalEdgeIds: [
+            ...enabledConditionalEdgeIds,
+          ],
+        }
+      : {}),
+  };
+}
+
+function selectedEntries<T extends string>(
+  values: Readonly<Record<string, T>>,
+  none: T,
+) {
+  return Object.entries(values)
+    .filter(([, priority]) => priority !== none)
+    .sort(([a], [b]) => compareText(a, b));
+}
+
+function findPlace(
+  placeById: ReadonlyMap<string, PlaceRecord>,
+  id: string,
+) {
+  return placeById.get(id);
+}
+
+function trustedPerformance(
+  event: ScheduleEvent | undefined,
+  placeById: ReadonlyMap<string, PlaceRecord>,
+  nodeById: ReadonlyMap<string, RouteNode>,
+) {
+  if (!event || event.provenance.confidence !== "verified") {
+    return false;
+  }
+
+  const place = placeById.get(event.placeId);
+  if (!place) return false;
+
+  return confidenceVerified(
+    place,
+    nodeById.get(place.routeNodeId),
+  );
+}
+
+export function buildCandidateIntegration(
+  input: CandidateIntegrationInput,
+): CandidateIntegrationResult {
+  assertIntegrationInput(input);
+  assertValidWildRouteData(input.data);
+  const data: WildRouteDataPackage = input.data;
+
+  const issues: CandidateIntegrationIssue[] = [];
+  const excluded = new Set<string>();
+  const candidates: OptimizerCandidate[] = [];
+  const placeById = new Map(
+    data.places.map((place) => [place.id, place]),
+  );
+  const nodeById = new Map(
+    data.routeNodes.map((node) => [node.id, node]),
+  );
+  const eventById = new Map(
+    data.scheduleEvents.map((event) => [event.id, event]),
+  );
+
+  const horizon = createPlanningHorizon(
+    input.visit.date,
+    input.visit.arrival,
+    input.visit.departure,
+  );
+
+  if (horizon.status !== "valid") {
+    pushIssue(
+      issues,
+      "error",
+      "VISIT_HORIZON_INVALID",
+      `Visit horizon is invalid: ${horizon.reason}.`,
+    );
+  }
+
+  const initialNode = nodeById.get(input.initialNodeId);
+  if (!initialNode) {
+    pushIssue(
+      issues,
+      "error",
+      "INITIAL_NODE_UNKNOWN",
+      `Initial route node ${input.initialNodeId} is not present in planner data.`,
+      undefined,
+      input.initialNodeId,
+    );
+  } else if (!nodeVerified(initialNode)) {
+    pushIssue(
+      issues,
+      "error",
+      "INITIAL_NODE_UNVERIFIED",
+      `Initial route node ${input.initialNodeId} is not verified.`,
+      undefined,
+      input.initialNodeId,
+    );
+  }
+
+  if (input.endNodeId !== undefined) {
+    const endNode = nodeById.get(input.endNodeId);
+    if (!endNode) {
+      pushIssue(
+        issues,
+        "error",
+        "END_NODE_UNKNOWN",
+        `End route node ${input.endNodeId} is not present in planner data.`,
+        undefined,
+        input.endNodeId,
+      );
+    } else if (!nodeVerified(endNode)) {
+      pushIssue(
+        issues,
+        "error",
+        "END_NODE_UNVERIFIED",
+        `End route node ${input.endNodeId} is not verified.`,
+        undefined,
+        input.endNodeId,
+      );
+    }
+  }
+
+  for (const [preferenceId, priority] of selectedEntries(
+    input.priorities.animals,
+    "none",
+  )) {
+    const selectionKey = `animal:${preferenceId}`;
+    const binding = input.bindings.animals[preferenceId];
+    const severity = issueSeverityForAnimal(priority);
+
+    if (!binding) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "ANIMAL_BINDING_REQUIRED",
+        `Selected animal ${preferenceId} has no explicit planner place binding.`,
+        selectionKey,
+        preferenceId,
+      );
+      continue;
+    }
+
+    const place = findPlace(placeById, binding.placeId);
+    if (!place) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "ANIMAL_PLACE_UNKNOWN",
+        `Animal binding ${preferenceId} references unknown place ${binding.placeId}.`,
+        selectionKey,
+        binding.placeId,
+      );
+      continue;
+    }
+
+    if (place.kind !== "animal") {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "ANIMAL_PLACE_KIND_MISMATCH",
+        `Animal binding ${preferenceId} references place kind ${place.kind} instead of animal.`,
+        selectionKey,
+        place.id,
+      );
+      continue;
+    }
+
+    if (
+      !confidenceVerified(
+        place,
+        nodeById.get(place.routeNodeId),
+      )
+    ) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "ANIMAL_PLACE_UNVERIFIED",
+        `Animal place ${place.id} does not have fully verified place, navigation, and route-node evidence.`,
+        selectionKey,
+        place.id,
+      );
+      continue;
+    }
+
+    const policy = policyFromAnimalPriority(priority);
+    if (!policy) continue;
+
+    candidates.push({
+      id: selectionKey,
+      selectionKey,
+      nodeId: place.routeNodeId,
+      baseDwellMinutes: binding.dwellMinutes,
+      ...policy,
+    });
+  }
+
+  const selectedExperiences = selectedEntries(
+    input.priorities.experiences,
+    "none",
+  );
+  const selectedActivityOwner = new Map<string, string>();
+
+  for (const [preferenceId, priority] of selectedExperiences) {
+    const binding = input.bindings.experiences[preferenceId];
+    if (!binding) continue;
+
+    const priorOwner = selectedActivityOwner.get(binding.activityId);
+    if (priorOwner) {
+      const currentKey = `experience:${preferenceId}`;
+      const priorKey = `experience:${priorOwner}`;
+      excluded.add(currentKey);
+      excluded.add(priorKey);
+      pushIssue(
+        issues,
+        "error",
+        "EXPERIENCE_ACTIVITY_COLLISION",
+        `Selected experiences ${priorOwner} and ${preferenceId} both bind to activity ${binding.activityId}.`,
+        currentKey,
+        binding.activityId,
+      );
+    } else {
+      selectedActivityOwner.set(binding.activityId, preferenceId);
+    }
+  }
+
+  const dwellByActivityId: Record<string, number> = {};
+  for (const [preferenceId, binding] of Object.entries(
+    input.bindings.experiences,
+  )) {
+    if (binding.dwellMinutes !== undefined) {
+      dwellByActivityId[binding.activityId] =
+        binding.dwellMinutes;
+    }
+  }
+
+  const showBuild = buildShowCandidateSets(
+    data,
+    input.visit.date,
+    dwellByActivityId,
+  );
+  const showSetByActivity = new Map(
+    showBuild.sets.map((set) => [set.activityId, set]),
+  );
+  const showIssuesByActivity = new Map<string, typeof showBuild.issues>();
+
+  for (const showIssue of showBuild.issues) {
+    const list =
+      showIssuesByActivity.get(showIssue.activityId) ?? [];
+    list.push(showIssue);
+    showIssuesByActivity.set(showIssue.activityId, list);
+  }
+
+  for (const [preferenceId, priority] of selectedExperiences) {
+    const selectionKey = `experience:${preferenceId}`;
+    if (excluded.has(selectionKey)) continue;
+
+    const binding = input.bindings.experiences[preferenceId];
+    const severity = issueSeverityForExperience(priority);
+
+    if (!binding) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "EXPERIENCE_BINDING_REQUIRED",
+        `Selected experience ${preferenceId} has no explicit activity binding.`,
+        selectionKey,
+        preferenceId,
+      );
+      continue;
+    }
+
+    const set = showSetByActivity.get(binding.activityId);
+    const sourceIssues =
+      showIssuesByActivity.get(binding.activityId) ?? [];
+
+    if (!set) {
+      excluded.add(selectionKey);
+      const detail =
+        sourceIssues.length > 0
+          ? "Available schedule records are missing a trusted service duration."
+          : "No schedule performances exist for the selected visit date.";
+      pushIssue(
+        issues,
+        severity,
+        "EXPERIENCE_SCHEDULE_MISSING",
+        `Experience ${preferenceId} cannot be scheduled. ${detail}`,
+        selectionKey,
+        binding.activityId,
+      );
+      continue;
+    }
+
+    const trusted = set.candidates.filter((show) =>
+      trustedPerformance(
+        eventById.get(show.eventId),
+        placeById,
+        nodeById,
+      ),
+    );
+
+    for (const show of set.candidates) {
+      if (!trusted.includes(show)) {
+        pushIssue(
+          issues,
+          "warning",
+          "EXPERIENCE_PERFORMANCE_UNVERIFIED",
+          `Performance ${show.eventId} was excluded because its event/place/navigation/route-node evidence is not fully verified.`,
+          selectionKey,
+          show.eventId,
+        );
+      }
+    }
+
+    if (trusted.length === 0) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "EXPERIENCE_NO_TRUSTED_PERFORMANCE",
+        `Experience ${preferenceId} has no fully verified performance available for the selected date.`,
+        selectionKey,
+        binding.activityId,
+      );
+      continue;
+    }
+
+    const policy = policyFromExperiencePriority(priority);
+    if (!policy) continue;
+
+    for (const show of trusted) {
+      candidates.push({
+        id: `${selectionKey}:${show.eventId}`,
+        selectionKey,
+        nodeId: show.nodeId,
+        baseDwellMinutes:
+          show.serviceEndMinute - show.serviceStartMinute,
+        anchor: {
+          id: show.id,
+          kind: show.kind,
+          title: show.title,
+          nodeId: show.nodeId,
+          arrivalWindowStartMinute:
+            show.arrivalWindowStartMinute,
+          arrivalWindowEndMinute:
+            show.arrivalWindowEndMinute,
+          serviceStartMinute: show.serviceStartMinute,
+          serviceEndMinute: show.serviceEndMinute,
+        },
+        ...policy,
+      });
+    }
+  }
+
+  const reservationName = input.visit.reservation.name.trim();
+  const reservationTime = input.visit.reservation.time;
+  const hasReservationName = reservationName.length > 0;
+  const hasReservationTime = reservationTime.length > 0;
+
+  if (hasReservationName !== hasReservationTime) {
+    excluded.add("reservation:visit");
+    pushIssue(
+      issues,
+      "error",
+      "RESERVATION_INCOMPLETE",
+      "Reservation requires both a name and a time before it can become a locked planner candidate.",
+      "reservation:visit",
+    );
+  } else if (hasReservationName && hasReservationTime) {
+    const selectionKey = "reservation:visit";
+    const binding = input.bindings.reservation;
+
+    if (!binding) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        "error",
+        "RESERVATION_BINDING_REQUIRED",
+        "A visit reservation requires an explicit planner place/duration binding.",
+        selectionKey,
+        reservationName,
+      );
+    } else {
+      const place = placeById.get(binding.placeId);
+      if (!place) {
+        excluded.add(selectionKey);
+        pushIssue(
+          issues,
+          "error",
+          "RESERVATION_PLACE_UNKNOWN",
+          `Reservation binding references unknown place ${binding.placeId}.`,
+          selectionKey,
+          binding.placeId,
+        );
+      } else if (
+        !confidenceVerified(
+          place,
+          nodeById.get(place.routeNodeId),
+        )
+      ) {
+        excluded.add(selectionKey);
+        pushIssue(
+          issues,
+          "error",
+          "RESERVATION_PLACE_UNVERIFIED",
+          `Reservation place ${place.id} does not have fully verified place, navigation, and route-node evidence.`,
+          selectionKey,
+          place.id,
+        );
+      } else {
+        const anchor = createLockedAnchor({
+          id: "reservation:visit",
+          title: reservationName,
+          nodeId: place.routeNodeId,
+          startTime: reservationTime,
+          durationMinutes: binding.durationMinutes,
+        });
+
+        if (anchor.status !== "valid") {
+          excluded.add(selectionKey);
+          pushIssue(
+            issues,
+            "error",
+            "RESERVATION_ANCHOR_INVALID",
+            `Reservation cannot be scheduled: ${anchor.reason}.`,
+            selectionKey,
+            binding.placeId,
+          );
+        } else {
+          candidates.push({
+            id: selectionKey,
+            selectionKey,
+            nodeId: place.routeNodeId,
+            authority: "locked",
+            timing: "fixed",
+            priority: "must",
+            baseDwellMinutes: binding.durationMinutes,
+            anchor: anchor.anchor,
+          });
+        }
+      }
+    }
+  }
+
+  candidates.sort((a, b) => {
+    const selection = compareText(a.selectionKey, b.selectionKey);
+    return selection !== 0
+      ? selection
+      : compareText(a.id, b.id);
+  });
+
+  buildOptimizerGroups(
+    buildRoutingGraph(data),
+    candidates,
+  );
+
+  const gated = trustedRoutingPackage(data);
+  if (gated.disabledUnverifiedEdgeIds.length > 0) {
+    pushIssue(
+      issues,
+      "warning",
+      "ROUTING_DATA_GATED",
+      `${gated.disabledUnverifiedEdgeIds.length} route edge(s) were disabled because edge or endpoint-node provenance is not fully verified.`,
+    );
+  }
+
+  const routingGate = {
+    disabledUnverifiedEdgeIds:
+      gated.disabledUnverifiedEdgeIds,
+  };
+
+  issues.sort((a, b) => {
+    const severity =
+      a.severity === b.severity
+        ? 0
+        : a.severity === "error"
+          ? -1
+          : 1;
+    if (severity !== 0) return severity;
+
+    const code = compareText(a.code, b.code);
+    if (code !== 0) return code;
+
+    return compareText(
+      a.selectionKey ?? "",
+      b.selectionKey ?? "",
+    );
+  });
+
+  const excludedSelectionKeys = [...excluded].sort(compareText);
+  const hasErrors = issues.some(
+    (issue) => issue.severity === "error",
+  );
+
+  if (
+    hasErrors ||
+    horizon.status !== "valid" ||
+    !initialNode ||
+    !nodeVerified(initialNode) ||
+    (input.endNodeId !== undefined &&
+      !nodeVerified(nodeById.get(input.endNodeId)))
+  ) {
+    return {
+      status: "blocked",
+      candidates,
+      issues,
+      excludedSelectionKeys,
+      routingGate,
+    };
+  }
+
+  const graph = buildRoutingGraph(gated.data);
+
+  return {
+    status: "ready",
+    request: {
+      graph,
+      horizon: horizon.horizon,
+      initialNodeId: input.initialNodeId,
+      ...(input.endNodeId !== undefined
+        ? { endNodeId: input.endNodeId }
+        : {}),
+      candidates,
+      scoreContext: {
+        pace: input.day.pace,
+        preferEasyPaths: input.visit.easyPaths,
+      },
+      routePolicy: routePolicyFor(
+        input.visit,
+        input.day,
+        input.enabledConditionalEdgeIds,
+      ),
+    },
+    candidates,
+    issues,
+    excludedSelectionKeys,
+    routingGate,
+  };
+}
+
+export function qualifyCandidateIntegration(
+  integration: CandidateIntegrationResult,
+  scenarioId: string,
+  stateBudget: number,
+  thresholds: QualificationThresholds,
+): QualifiedCandidateIntegration {
+  if (integration.status === "blocked") {
+    return {
+      status: "integration-blocked",
+      integration,
+    };
+  }
+
+  const report = runOptimizerQualification({
+    id: scenarioId,
+    request: integration.request,
+    stateBudget,
+    thresholds,
+  });
+
+  return {
+    status: report.passed ? "qualified" : "not-qualified",
+    integration,
+    report,
+  };
+}
