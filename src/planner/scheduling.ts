@@ -1,4 +1,5 @@
 import type {
+  RouteMode,
   ScheduleEvent,
   SourceProvenance,
   WildRouteDataPackage,
@@ -106,6 +107,92 @@ export type RoutePolicy = Omit<
   "fromNodeId" | "toNodeId" | "optimize"
 >;
 
+const ROUTE_POLICY_MODES: readonly RouteMode[] = [
+  "walk",
+  "skyfari",
+  "bus",
+  "elevator",
+  "ada-shuttle",
+];
+
+const ROUTE_POLICY_KEYS = new Set([
+  "allowedModes",
+  "requireAccessible",
+  "requireStroller",
+  "enabledConditionalEdgeIds",
+]);
+
+export function assertValidRoutePolicy(
+  value: unknown,
+): asserts value is RoutePolicy | undefined {
+  if (value === undefined) return;
+
+  if (!isRecord(value)) {
+    throw new Error("RoutePolicy must be an object when provided.");
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!ROUTE_POLICY_KEYS.has(key)) {
+      throw new Error(`RoutePolicy contains unsupported field: ${key}`);
+    }
+  }
+
+  if (value.allowedModes !== undefined) {
+    if (!Array.isArray(value.allowedModes)) {
+      throw new Error("RoutePolicy allowedModes must be an array.");
+    }
+
+    const seen = new Set<RouteMode>();
+    for (const mode of value.allowedModes) {
+      if (
+        typeof mode !== "string" ||
+        !ROUTE_POLICY_MODES.includes(mode as RouteMode)
+      ) {
+        throw new Error("RoutePolicy allowedModes contains an invalid mode.");
+      }
+
+      if (seen.has(mode as RouteMode)) {
+        throw new Error("RoutePolicy allowedModes cannot contain duplicates.");
+      }
+      seen.add(mode as RouteMode);
+    }
+  }
+
+  for (const key of ["requireAccessible", "requireStroller"] as const) {
+    if (value[key] !== undefined && typeof value[key] !== "boolean") {
+      throw new Error(`RoutePolicy ${key} must be boolean.`);
+    }
+  }
+
+  if (value.enabledConditionalEdgeIds !== undefined) {
+    if (!Array.isArray(value.enabledConditionalEdgeIds)) {
+      throw new Error(
+        "RoutePolicy enabledConditionalEdgeIds must be an array.",
+      );
+    }
+
+    const seen = new Set<string>();
+    for (const edgeId of value.enabledConditionalEdgeIds) {
+      if (
+        typeof edgeId !== "string" ||
+        edgeId.trim().length === 0 ||
+        edgeId !== edgeId.trim()
+      ) {
+        throw new Error(
+          "RoutePolicy conditional edge IDs must be stable non-empty strings.",
+        );
+      }
+
+      if (seen.has(edgeId)) {
+        throw new Error(
+          "RoutePolicy enabledConditionalEdgeIds cannot contain duplicates.",
+        );
+      }
+      seen.add(edgeId);
+    }
+  }
+}
+
 export type AnchorScheduleStep = {
   anchorId: string;
   anchorKind: ScheduleAnchorKind;
@@ -166,8 +253,8 @@ function addCost(a: number, b: number) {
   return normalizedCost(a + b);
 }
 
-function validDate(value: string) {
-  if (!DATE_RE.test(value)) return false;
+function validDate(value: unknown): value is string {
+  if (typeof value !== "string" || !DATE_RE.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return (
     !Number.isNaN(parsed.getTime()) &&
@@ -175,12 +262,16 @@ function validDate(value: string) {
   );
 }
 
-function nonEmpty(value: string) {
-  return value.trim().length > 0;
+function nonEmpty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
-export function parseClockMinute(value: string): number | null {
-  if (!TIME_RE.test(value)) return null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function parseClockMinute(value: unknown): number | null {
+  if (typeof value !== "string" || !TIME_RE.test(value)) return null;
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
 }
@@ -403,33 +494,58 @@ export function buildShowCandidateSets(
   return { sets, issues };
 }
 
-function horizonStructureValid(horizon: PlanningHorizon) {
+export function isValidPlanningHorizon(
+  horizon: unknown,
+): boolean {
+  if (!isRecord(horizon)) return false;
+
+  const startMinute = horizon.startMinute;
+  const endMinute = horizon.endMinute;
+  const durationMinutes = horizon.durationMinutes;
+
   return (
     validDate(horizon.date) &&
-    Number.isInteger(horizon.startMinute) &&
-    Number.isInteger(horizon.endMinute) &&
-    Number.isInteger(horizon.durationMinutes) &&
-    horizon.startMinute >= 0 &&
-    horizon.endMinute <= 23 * 60 + 59 &&
-    horizon.endMinute > horizon.startMinute &&
-    horizon.durationMinutes === horizon.endMinute - horizon.startMinute
+    typeof startMinute === "number" &&
+    Number.isInteger(startMinute) &&
+    typeof endMinute === "number" &&
+    Number.isInteger(endMinute) &&
+    typeof durationMinutes === "number" &&
+    Number.isInteger(durationMinutes) &&
+    startMinute >= 0 &&
+    endMinute <= 23 * 60 + 59 &&
+    endMinute > startMinute &&
+    durationMinutes === endMinute - startMinute
   );
 }
 
-function anchorStructureValid(anchor: ScheduleAnchor) {
+export function isValidScheduleAnchor(
+  anchor: unknown,
+): boolean {
+  if (!isRecord(anchor)) return false;
+
+  const arrivalWindowStartMinute = anchor.arrivalWindowStartMinute;
+  const arrivalWindowEndMinute = anchor.arrivalWindowEndMinute;
+  const serviceStartMinute = anchor.serviceStartMinute;
+  const serviceEndMinute = anchor.serviceEndMinute;
+
   return (
     nonEmpty(anchor.id) &&
+    (anchor.kind === "locked" || anchor.kind === "show") &&
     nonEmpty(anchor.title) &&
     nonEmpty(anchor.nodeId) &&
-    Number.isFinite(anchor.arrivalWindowStartMinute) &&
-    Number.isFinite(anchor.arrivalWindowEndMinute) &&
-    Number.isFinite(anchor.serviceStartMinute) &&
-    Number.isFinite(anchor.serviceEndMinute) &&
-    anchor.arrivalWindowStartMinute >= 0 &&
-    anchor.arrivalWindowStartMinute <= anchor.arrivalWindowEndMinute &&
-    anchor.arrivalWindowEndMinute <= anchor.serviceStartMinute &&
-    anchor.serviceStartMinute < anchor.serviceEndMinute &&
-    anchor.serviceEndMinute <= 24 * 60
+    typeof arrivalWindowStartMinute === "number" &&
+    Number.isInteger(arrivalWindowStartMinute) &&
+    typeof arrivalWindowEndMinute === "number" &&
+    Number.isInteger(arrivalWindowEndMinute) &&
+    typeof serviceStartMinute === "number" &&
+    Number.isInteger(serviceStartMinute) &&
+    typeof serviceEndMinute === "number" &&
+    Number.isInteger(serviceEndMinute) &&
+    arrivalWindowStartMinute >= 0 &&
+    arrivalWindowStartMinute <= arrivalWindowEndMinute &&
+    arrivalWindowEndMinute <= serviceStartMinute &&
+    serviceStartMinute < serviceEndMinute &&
+    serviceEndMinute <= 24 * 60
   );
 }
 
@@ -440,7 +556,9 @@ export function evaluateAnchorSequence(
   anchors: readonly ScheduleAnchor[],
   routePolicy: RoutePolicy = {},
 ): AnchorSequenceResult {
-  if (!horizonStructureValid(horizon)) {
+  assertValidRoutePolicy(routePolicy);
+
+  if (!isValidPlanningHorizon(horizon)) {
     return {
       status: "infeasible",
       horizon: { ...horizon },
@@ -470,7 +588,7 @@ export function evaluateAnchorSequence(
     }
     seen.add(anchor.id);
 
-    if (!anchorStructureValid(anchor)) {
+    if (!isValidScheduleAnchor(anchor)) {
       return {
         status: "infeasible",
         horizon,
