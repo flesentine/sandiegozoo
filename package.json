@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:data": "node --experimental-strip-types --test tests/planner-data.test.ts"
   },
   "dependencies": {
     "react": "19.2.8",
