@@ -480,3 +480,163 @@ test("route constraints flow through anchor feasibility", () => {
   if (result.status !== "infeasible") throw new Error("expected infeasible");
   assert.equal(result.reason, "NO_ROUTE_TO_ANCHOR");
 });
+
+
+test("schedule feasibility always uses fastest constrained route", () => {
+  const data = dataPackage();
+  data.routeEdges = [
+    edge("short-slow", "entry", "a", 20, 10),
+    edge("fast-1", "entry", "c", 1, 100),
+    edge("fast-2", "c", "b", 1, 100),
+    edge("fast-3", "b", "a", 1, 100),
+  ];
+  const graph = buildRoutingGraph(data);
+
+  const result = evaluateAnchorSequence(
+    graph,
+    horizon(),
+    "entry",
+    [locked("early", "a", "09:05", 10)],
+    { optimize: "distance" } as unknown as Parameters<
+      typeof evaluateAnchorSequence
+    >[4],
+  );
+
+  assert.equal(result.status, "feasible");
+  if (result.status !== "feasible") throw new Error("expected feasible");
+  assert.equal(result.steps[0].travelDurationMinutes, 3);
+  assert.equal(result.steps[0].route.optimize, "duration");
+});
+
+test("rejects malformed hand-constructed planning horizons", () => {
+  const graph = buildRoutingGraph(dataPackage());
+  const malformed: PlanningHorizon = {
+    date: "2026-09-19",
+    startMinute: 600,
+    endMinute: 500,
+    durationMinutes: -100,
+  };
+
+  const result = evaluateAnchorSequence(
+    graph,
+    malformed,
+    "entry",
+    [],
+  );
+
+  assert.equal(result.status, "infeasible");
+  if (result.status !== "infeasible") throw new Error("expected infeasible");
+  assert.equal(result.reason, "HORIZON_INVALID");
+});
+
+test("arrival exactly at the allowed window end is feasible", () => {
+  const data = dataPackage();
+  data.routeEdges = [edge("entry-a-exact", "entry", "a", 60)];
+  const graph = buildRoutingGraph(data);
+
+  const result = evaluateAnchorSequence(
+    graph,
+    horizon(),
+    "entry",
+    [locked("exact", "a", "10:00", 20)],
+  );
+
+  assert.equal(result.status, "feasible");
+  if (result.status !== "feasible") throw new Error("expected feasible");
+  assert.equal(result.steps[0].rawArrivalMinute, 600);
+  assert.equal(result.steps[0].plannedArrivalMinute, 600);
+});
+
+test("back-to-back anchors at the same node are feasible with zero transfer time", () => {
+  const graph = buildRoutingGraph(dataPackage());
+
+  const result = evaluateAnchorSequence(
+    graph,
+    horizon(),
+    "entry",
+    [
+      locked("first", "a", "10:00", 30),
+      locked("second", "a", "10:30", 30),
+    ],
+  );
+
+  assert.equal(result.status, "feasible");
+  if (result.status !== "feasible") throw new Error("expected feasible");
+  assert.equal(result.steps[1].travelDurationMinutes, 0);
+  assert.equal(result.steps[1].rawArrivalMinute, 630);
+});
+
+test("back-to-back anchors at different nodes fail when transfer time is required", () => {
+  const graph = buildRoutingGraph(dataPackage());
+
+  const result = evaluateAnchorSequence(
+    graph,
+    horizon(),
+    "entry",
+    [
+      locked("first", "a", "10:00", 30),
+      locked("second", "b", "10:30", 30),
+    ],
+  );
+
+  assert.equal(result.status, "infeasible");
+  if (result.status !== "infeasible") throw new Error("expected infeasible");
+  assert.equal(result.reason, "ARRIVAL_WINDOW_MISSED");
+  assert.equal(result.anchorId, "second");
+});
+
+test("identical show start times use stable event-ID ordering", () => {
+  const data = dataPackage([
+    event("z-performance", "same-time-show", "stage-a", "12:00", {
+      endTime: "12:20",
+    }),
+    event("a-performance", "same-time-show", "stage-a", "12:00", {
+      endTime: "12:20",
+    }),
+  ]);
+
+  const built = buildShowCandidateSets(data, "2026-09-19");
+
+  assert.deepEqual(
+    built.sets[0].candidates.map((candidate) => candidate.eventId),
+    ["a-performance", "z-performance"],
+  );
+});
+
+test("locked anchors cannot cross midnight", () => {
+  assert.deepEqual(
+    createLockedAnchor({
+      id: "late-tour",
+      title: "Late tour",
+      nodeId: "a",
+      startTime: "23:50",
+      durationMinutes: 20,
+    }),
+    { status: "invalid", reason: "END_AFTER_DAY" },
+  );
+});
+
+test("anchors may start at visit arrival and end exactly at visit departure", () => {
+  const resultHorizon = createPlanningHorizon(
+    "2026-09-19",
+    "09:00",
+    "10:00",
+  );
+  assert.equal(resultHorizon.status, "valid");
+  if (resultHorizon.status !== "valid") {
+    throw new Error("expected valid horizon");
+  }
+
+  const graph = buildRoutingGraph(dataPackage());
+  const result = evaluateAnchorSequence(
+    graph,
+    resultHorizon.horizon,
+    "a",
+    [locked("whole-hour", "a", "09:00", 60)],
+  );
+
+  assert.equal(result.status, "feasible");
+  if (result.status !== "feasible") throw new Error("expected feasible");
+  assert.equal(result.finishMinute, resultHorizon.horizon.endMinute);
+  assert.equal(result.remainingMinutes, 0);
+});
