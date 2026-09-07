@@ -91,10 +91,12 @@ Wheelchair/stroller constraints remain hard filters and are never replaced by th
 Within the current scoring comparator:
 
 1. authority rank
-2. net preference points
-3. raw preference points
+2. raw preference tier / points
+3. net preference points after soft route comfort
 4. shorter pace-adjusted dwell
 5. stable candidate ID using fixed code-unit ordering
+
+This means an easier-path penalty can choose between two Favorites, but it cannot demote a Favorite below a Bonus.
 
 Input array order is not authority.
 
@@ -131,3 +133,47 @@ Planner 4 does not yet:
 - decide the final item to sacrifice when protected constraints conflict
 
 It freezes the policy primitives that those later search phases must obey.
+
+
+## Aggregate preference utility
+
+Preference points are **not additive across tiers** for itinerary choice.
+
+Planner 4 now exposes a lexicographic preference utility vector. Candidate sets are compared tier-by-tier:
+
+1. Must count, then Must net utility
+2. Favorite count, then Favorite net utility
+3. Bonus count, then Bonus net utility
+
+Therefore:
+
+- any feasible Must outranks any number of Favorites/Bonuses
+- any feasible Favorite outranks any number of Bonuses
+- soft route comfort distinguishes choices within a preference tier
+
+This prevents the future optimizer from sacrificing one Favorite merely because many 10-point Bonuses sum to more than 100.
+
+## Runtime trust boundary
+
+Scoring candidates are runtime-validated before ranking, partitioning, scoring, or omission decisions.
+
+Validation rejects:
+
+- non-object candidates
+- empty or whitespace-padded stable IDs
+- unknown authority
+- unknown timing
+- unknown preference priority
+- non-positive/non-integer dwell
+- invalid pace
+- non-boolean easier-path preference
+- duplicate candidate IDs
+- unknown omission reasons
+
+Unknown UI priority values fail closed instead of falling through to Favorite/Interested behavior.
+
+## Pace and timed work
+
+Pace dwell multipliers apply only to **flexible** candidates.
+
+Fixed and windowed service durations preserve their supplied duration. Relaxed/Maximize pace may change buffers and flexible-stop dwell, but it cannot stretch or compress a booked reservation or scheduled presentation.
