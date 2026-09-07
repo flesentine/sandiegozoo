@@ -482,7 +482,7 @@ test("route constraints flow through anchor feasibility", () => {
 });
 
 
-test("schedule feasibility always uses fastest constrained route", () => {
+test("schedule feasibility rejects runtime attempts to override fastest routing", () => {
   const data = dataPackage();
   data.routeEdges = [
     edge("short-slow", "entry", "a", 20, 10),
@@ -492,14 +492,25 @@ test("schedule feasibility always uses fastest constrained route", () => {
   ];
   const graph = buildRoutingGraph(data);
 
+  assert.throws(
+    () =>
+      evaluateAnchorSequence(
+        graph,
+        horizon(),
+        "entry",
+        [locked("early", "a", "09:05", 10)],
+        { optimize: "distance" } as unknown as Parameters<
+          typeof evaluateAnchorSequence
+        >[4],
+      ),
+    /unsupported field: optimize/,
+  );
+
   const result = evaluateAnchorSequence(
     graph,
     horizon(),
     "entry",
     [locked("early", "a", "09:05", 10)],
-    { optimize: "distance" } as unknown as Parameters<
-      typeof evaluateAnchorSequence
-    >[4],
   );
 
   assert.equal(result.status, "feasible");
