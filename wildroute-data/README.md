@@ -36,6 +36,7 @@ Routing edges must explicitly model:
 
 Timed experiences must explicitly model:
 
+- stable activity ID shared by performances of the same presentation
 - visit date that falls within any declared source effective window
 - start/end time
 - recommended arrival lead time

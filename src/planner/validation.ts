@@ -776,6 +776,16 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
       return;
     }
 
+    if (!nonEmptyString(rawEvent.activityId)) {
+      push(
+        issues,
+        "error",
+        "EVENT_ACTIVITY_ID_REQUIRED",
+        `${path}.activityId`,
+        "Event activityId must be a non-empty stable string.",
+      );
+    }
+
     if (!nonEmptyString(rawEvent.title)) {
       push(
         issues,
@@ -854,6 +864,17 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
         "EVENT_ARRIVAL_INVALID",
         `${path}.recommendedArrivalMinutes`,
         "recommendedArrivalMinutes must be a non-negative integer.",
+      );
+    } else if (
+      start !== null &&
+      rawEvent.recommendedArrivalMinutes > start
+    ) {
+      push(
+        issues,
+        "error",
+        "EVENT_ARRIVAL_CROSSES_DAY",
+        `${path}.recommendedArrivalMinutes`,
+        "Recommended arrival cannot fall before midnight in the same-day schedule model.",
       );
     }
 

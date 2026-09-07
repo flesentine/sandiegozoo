@@ -224,3 +224,22 @@ test("warns instead of failing for an orphan route node", async () => {
   assert.doesNotThrow(() => assertValidWildRouteData(value));
   assert.equal(isValidWildRouteData(value), true);
 });
+
+
+test("requires a stable activity ID for schedule grouping", async () => {
+  const value = await fixture();
+  const runtime = value.scheduleEvents[0] as unknown as Record<string, unknown>;
+  runtime.activityId = "";
+
+  assert.ok(codes(value).includes("EVENT_ACTIVITY_ID_REQUIRED"));
+});
+
+
+test("rejects recommended arrival that crosses into the prior day", async () => {
+  const value = await fixture();
+  value.scheduleEvents[0].startTime = "00:05";
+  value.scheduleEvents[0].endTime = "00:20";
+  value.scheduleEvents[0].recommendedArrivalMinutes = 10;
+
+  assert.ok(codes(value).includes("EVENT_ARRIVAL_CROSSES_DAY"));
+});
