@@ -193,6 +193,20 @@ function makeGraph(data: WildRouteDataPackage): InternalGraph {
   return { nodeIds, adjacency };
 }
 
+export function assertCompiledRoutingGraph(
+  value: unknown,
+): asserts value is RoutingGraph {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !graphInternals.has(value as object)
+  ) {
+    throw new Error(
+      "RoutingGraph must be created by buildRoutingGraph before routing.",
+    );
+  }
+}
+
 export function buildRoutingGraph(value: unknown): RoutingGraph {
   assertValidWildRouteData(value);
   const internal = makeGraph(value);
@@ -212,15 +226,8 @@ export function buildRoutingGraph(value: unknown): RoutingGraph {
 }
 
 function getInternalGraph(graph: RoutingGraph) {
-  const internal = graphInternals.get(graph);
-
-  if (!internal) {
-    throw new Error(
-      "RoutingGraph must be created by buildRoutingGraph before routing.",
-    );
-  }
-
-  return internal;
+  assertCompiledRoutingGraph(graph);
+  return graphInternals.get(graph as object)!;
 }
 
 function compareNumber(a: number, b: number) {
