@@ -149,8 +149,7 @@ function makeGraph(data: WildRouteDataPackage): {
 
 export function buildRoutingGraph(value: unknown): RoutingGraph {
   assertValidWildRouteData(value);
-  const data = value as WildRouteDataPackage;
-  const graph = makeGraph(data);
+  const graph = makeGraph(value);
 
   return {
     hasNode(nodeId: string) {
@@ -164,7 +163,7 @@ export function buildRoutingGraph(value: unknown): RoutingGraph {
 
 function internalGraph(value: unknown) {
   assertValidWildRouteData(value);
-  return makeGraph(value as WildRouteDataPackage);
+  return makeGraph(value);
 }
 
 function compareNumber(a: number, b: number) {
