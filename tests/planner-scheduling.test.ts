@@ -370,7 +370,7 @@ test("show candidate may be reached after recommended arrival but before start",
 
 test("missed arrival window fails explicitly", () => {
   const data = dataPackage();
-  data.routeEdges[0].durationMinutes = 70;
+  data.routeEdges = [edge("entry-a-late", "entry", "a", 70)];
   const graph = buildRoutingGraph(data);
 
   const result = evaluateAnchorSequence(
@@ -463,7 +463,9 @@ test("duplicate anchor IDs fail deterministically", () => {
 
 test("route constraints flow through anchor feasibility", () => {
   const data = dataPackage();
-  data.routeEdges[0].accessible = false;
+  for (const routeEdge of data.routeEdges) {
+    routeEdge.accessible = false;
+  }
   const graph = buildRoutingGraph(data);
 
   const result = evaluateAnchorSequence(
