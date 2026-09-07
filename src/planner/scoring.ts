@@ -169,7 +169,7 @@ function assertPace(value: unknown): asserts value is Pace {
   }
 }
 
-function assertScoreContext(
+export function assertValidScoreContext(
   value: unknown,
 ): asserts value is ScoreContext {
   if (!isRecord(value)) {
@@ -304,7 +304,7 @@ export function scoreCandidate(
   route?: RouteFound,
 ): CandidateScore {
   assertValidScoringCandidate(candidate);
-  assertScoreContext(context);
+  assertValidScoreContext(context);
 
   const preferencePoints = PRIORITY_POINTS[candidate.priority];
   const routePenalty = easierPathPenaltyPoints(
@@ -362,7 +362,7 @@ export function rankCandidates(
   context: ScoreContext,
   routesByCandidateId: Readonly<Record<string, RouteFound | undefined>> = {},
 ) {
-  assertScoreContext(context);
+  assertValidScoreContext(context);
   assertUniqueCandidateIds(candidates);
 
   return candidates
