@@ -26,3 +26,20 @@ export function nextExperiencePriority(
   if (current === "interested") return "must";
   return "none";
 }
+
+export function retainAvailableExperiencePriorities(
+  value: PriorityPreferences,
+  availableExperienceIds: readonly string[],
+): PriorityPreferences {
+  const available = new Set(availableExperienceIds);
+  const experiences = Object.fromEntries(
+    Object.entries(value.experiences).filter(
+      ([id, priority]) => priority !== "none" && available.has(id),
+    ),
+  ) as Record<string, ExperiencePriority>;
+
+  return {
+    ...value,
+    experiences,
+  };
+}
