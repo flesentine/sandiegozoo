@@ -74,6 +74,13 @@ function graph(
   };
 }
 
+function route(
+  data: WildRouteDataPackage,
+  request: Parameters<typeof findShortestRoute>[1],
+) {
+  return findShortestRoute(buildRoutingGraph(data), request);
+}
+
 function found(
   result: ReturnType<typeof findShortestRoute>,
 ) {
@@ -96,7 +103,7 @@ test("builds reverse traversal only for non-one-way edges", () => {
   const routing = buildRoutingGraph(data);
 
   assert.deepEqual(
-    routing.outgoing("b").map((item) => [
+    routing.declaredOutgoing("b").map((item) => [
       item.edgeId,
       item.toNodeId,
       item.reversed,
@@ -107,7 +114,7 @@ test("builds reverse traversal only for non-one-way edges", () => {
     ],
   );
   assert.equal(
-    routing.outgoing("c").some((item) => item.edgeId === "one-way"),
+    routing.declaredOutgoing("c").some((item) => item.edgeId === "one-way"),
     false,
   );
 });
@@ -136,7 +143,7 @@ test("chooses the shortest duration route and reports exact totals", () => {
   );
 
   const route = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "d",
     }),
@@ -168,7 +175,7 @@ test("can optimize distance instead of duration", () => {
   );
 
   const route = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "d",
       optimize: "distance",
@@ -187,12 +194,12 @@ test("respects one-way direction", () => {
   );
 
   assert.equal(
-    findShortestRoute(data, { fromNodeId: "a", toNodeId: "b" }).status,
+    route(data, { fromNodeId: "a", toNodeId: "b" }).status,
     "found",
   );
 
   assert.deepEqual(
-    findShortestRoute(data, { fromNodeId: "b", toNodeId: "a" }),
+    route(data, { fromNodeId: "b", toNodeId: "a" }),
     {
       status: "not-found",
       fromNodeId: "b",
@@ -209,7 +216,7 @@ test("closed edges are never routable", () => {
   );
 
   assert.equal(
-    findShortestRoute(data, { fromNodeId: "a", toNodeId: "b" }).status,
+    route(data, { fromNodeId: "a", toNodeId: "b" }).status,
     "not-found",
   );
 });
@@ -224,7 +231,7 @@ test("conditional edges require that exact edge ID to be enabled", () => {
   );
 
   assert.equal(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       enabledConditionalEdgeIds: ["conditional-a-b"],
@@ -233,7 +240,7 @@ test("conditional edges require that exact edge ID to be enabled", () => {
   );
 
   assert.equal(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       enabledConditionalEdgeIds: [
@@ -260,14 +267,14 @@ test("wheelchair routing rejects non-accessible edges", () => {
   );
 
   const normal = found(
-    findShortestRoute(data, { fromNodeId: "a", toNodeId: "c" }),
+    route(data, { fromNodeId: "a", toNodeId: "c" }),
   );
   assert.deepEqual(normal.edges.map((item) => item.edgeId), [
     "short-inaccessible",
   ]);
 
   const accessible = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       requireAccessible: true,
@@ -293,7 +300,7 @@ test("stroller routing rejects non-stroller edges independently", () => {
   );
 
   const route = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       requireStroller: true,
@@ -322,7 +329,7 @@ test("allowed transport modes are enforced", () => {
   );
 
   const unrestricted = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       allowedModes: transportModes,
@@ -333,7 +340,7 @@ test("allowed transport modes are enforced", () => {
   ]);
 
   const walkingOnly = found(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "c",
       allowedModes: ["walk"],
@@ -349,7 +356,7 @@ test("returns explicit unknown-node failures", () => {
   const data = graph(["a", "b"], [edge("a-b", "a", "b")]);
 
   assert.deepEqual(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "missing",
       toNodeId: "b",
     }),
@@ -362,7 +369,7 @@ test("returns explicit unknown-node failures", () => {
   );
 
   assert.deepEqual(
-    findShortestRoute(data, {
+    route(data, {
       fromNodeId: "a",
       toNodeId: "missing",
     }),
@@ -379,7 +386,7 @@ test("same-node routes are valid zero-cost routes", () => {
   const data = graph(["a"], []);
 
   assert.deepEqual(
-    findShortestRoute(data, { fromNodeId: "a", toNodeId: "a" }),
+    route(data, { fromNodeId: "a", toNodeId: "a" }),
     {
       status: "found",
       fromNodeId: "a",
@@ -406,7 +413,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
 
   assert.deepEqual(
     found(
-      findShortestRoute(secondary, { fromNodeId: "a", toNodeId: "d" }),
+      route(secondary, { fromNodeId: "a", toNodeId: "d" }),
     ).edges.map((item) => item.edgeId),
     ["a-c", "c-d"],
   );
@@ -421,7 +428,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
   );
 
   assert.deepEqual(
-    found(findShortestRoute(hops, { fromNodeId: "a", toNodeId: "d" })).edges.map(
+    found(route(hops, { fromNodeId: "a", toNodeId: "d" })).edges.map(
       (item) => item.edgeId,
     ),
     ["direct"],
@@ -439,7 +446,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
 
   assert.deepEqual(
     found(
-      findShortestRoute(lexical, { fromNodeId: "a", toNodeId: "d" }),
+      route(lexical, { fromNodeId: "a", toNodeId: "d" }),
     ).edges.map((item) => item.edgeId),
     ["a-first", "a-second"],
   );
@@ -457,10 +464,10 @@ test("route choice is independent of input edge order", () => {
   const reversed = graph(["a", "b", "c", "d"], [...edges].reverse());
 
   const first = found(
-    findShortestRoute(forward, { fromNodeId: "a", toNodeId: "d" }),
+    route(forward, { fromNodeId: "a", toNodeId: "d" }),
   );
   const second = found(
-    findShortestRoute(reversed, { fromNodeId: "a", toNodeId: "d" }),
+    route(reversed, { fromNodeId: "a", toNodeId: "d" }),
   );
 
   assert.deepEqual(second, first);
@@ -473,10 +480,65 @@ test("path output preserves edge provenance and traversal direction", () => {
   );
 
   const route = found(
-    findShortestRoute(data, { fromNodeId: "b", toNodeId: "a" }),
+    route(data, { fromNodeId: "b", toNodeId: "a" }),
   );
 
   assert.equal(route.edges[0].edgeId, "a-b");
   assert.equal(route.edges[0].reversed, true);
   assert.deepEqual(route.edges[0].provenance, provenance);
+});
+
+
+test("compiled graph can be reused for repeated route queries", () => {
+  const data = graph(
+    ["a", "b", "c"],
+    [
+      edge("a-b", "a", "b"),
+      edge("b-c", "b", "c"),
+    ],
+  );
+  const routing = buildRoutingGraph(data);
+
+  const first = found(
+    findShortestRoute(routing, { fromNodeId: "a", toNodeId: "c" }),
+  );
+  const second = found(
+    findShortestRoute(routing, { fromNodeId: "c", toNodeId: "a" }),
+  );
+
+  assert.deepEqual(first.nodeIds, ["a", "b", "c"]);
+  assert.deepEqual(second.nodeIds, ["c", "b", "a"]);
+});
+
+test("graph compilation rejects invalid source data before search", () => {
+  const data = graph(
+    ["a", "b"],
+    [edge("bad-edge", "a", "b", { distanceMeters: 0 })],
+  );
+
+  assert.throws(
+    () => buildRoutingGraph(data),
+    /EDGE_DISTANCE_INVALID/,
+  );
+});
+
+test("lexical tie-breaking uses stable code-unit order, not host locale", () => {
+  const data = graph(
+    ["a", "b", "c", "d"],
+    [
+      edge("ä-first", "a", "b"),
+      edge("ä-second", "b", "d"),
+      edge("z-first", "a", "c"),
+      edge("z-second", "c", "d"),
+    ],
+  );
+
+  const result = found(
+    route(data, { fromNodeId: "a", toNodeId: "d" }),
+  );
+
+  assert.deepEqual(result.edges.map((item) => item.edgeId), [
+    "z-first",
+    "z-second",
+  ]);
 });
