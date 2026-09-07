@@ -64,20 +64,27 @@ type Traversal = {
   reversed: boolean;
 };
 
+type InternalGraph = {
+  nodeIds: Set<string>;
+  adjacency: Map<string, Traversal[]>;
+};
+
 type SearchState = {
   nodeId: string;
   distanceMeters: number;
   durationMinutes: number;
   hops: number;
-  signature: string;
+  signature: string[];
   nodeIds: string[];
   edges: RoutePathEdge[];
 };
 
 export type RoutingGraph = {
   hasNode(nodeId: string): boolean;
-  outgoing(nodeId: string): readonly RoutePathEdge[];
+  declaredOutgoing(nodeId: string): readonly RoutePathEdge[];
 };
+
+const graphInternals = new WeakMap<object, InternalGraph>();
 
 const ALL_MODES: readonly RouteMode[] = [
   "walk",
@@ -87,13 +94,28 @@ const ALL_MODES: readonly RouteMode[] = [
   "ada-shuttle",
 ];
 
-function traversalKey(traversal: Traversal) {
-  return [
+function compareText(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function traversalSignature(traversal: Traversal) {
+  return JSON.stringify([
     traversal.edge.id,
     traversal.fromNodeId,
     traversal.toNodeId,
     traversal.reversed ? "reverse" : "forward",
-  ].join("|");
+  ]);
+}
+
+function compareSignatures(a: readonly string[], b: readonly string[]) {
+  const length = Math.min(a.length, b.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const compared = compareText(a[index], b[index]);
+    if (compared !== 0) return compared;
+  }
+
+  return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }
 
 function asPathEdge(traversal: Traversal): RoutePathEdge {
@@ -111,10 +133,7 @@ function asPathEdge(traversal: Traversal): RoutePathEdge {
   };
 }
 
-function makeGraph(data: WildRouteDataPackage): {
-  nodeIds: Set<string>;
-  adjacency: Map<string, Traversal[]>;
-} {
+function makeGraph(data: WildRouteDataPackage): InternalGraph {
   const nodeIds = new Set(data.routeNodes.map((node) => node.id));
   const adjacency = new Map<string, Traversal[]>();
 
@@ -141,7 +160,9 @@ function makeGraph(data: WildRouteDataPackage): {
   }
 
   for (const traversals of adjacency.values()) {
-    traversals.sort((a, b) => traversalKey(a).localeCompare(traversalKey(b)));
+    traversals.sort((a, b) =>
+      compareText(traversalSignature(a), traversalSignature(b)),
+    );
   }
 
   return { nodeIds, adjacency };
@@ -149,21 +170,31 @@ function makeGraph(data: WildRouteDataPackage): {
 
 export function buildRoutingGraph(value: unknown): RoutingGraph {
   assertValidWildRouteData(value);
-  const graph = makeGraph(value);
+  const internal = makeGraph(value);
 
-  return {
+  const graph: RoutingGraph = {
     hasNode(nodeId: string) {
-      return graph.nodeIds.has(nodeId);
+      return internal.nodeIds.has(nodeId);
     },
-    outgoing(nodeId: string) {
-      return (graph.adjacency.get(nodeId) ?? []).map(asPathEdge);
+    declaredOutgoing(nodeId: string) {
+      return (internal.adjacency.get(nodeId) ?? []).map(asPathEdge);
     },
   };
+
+  graphInternals.set(graph, internal);
+  return graph;
 }
 
-function internalGraph(value: unknown) {
-  assertValidWildRouteData(value);
-  return makeGraph(value);
+function getInternalGraph(graph: RoutingGraph) {
+  const internal = graphInternals.get(graph);
+
+  if (!internal) {
+    throw new Error(
+      "RoutingGraph must be created by buildRoutingGraph before routing.",
+    );
+  }
+
+  return internal;
 }
 
 function compareNumber(a: number, b: number) {
@@ -190,7 +221,7 @@ function compareStates(
   const hops = compareNumber(a.hops, b.hops);
   if (hops !== 0) return hops;
 
-  return a.signature.localeCompare(b.signature);
+  return compareSignatures(a.signature, b.signature);
 }
 
 function traversalAllowed(
@@ -203,6 +234,7 @@ function traversalAllowed(
   const edge = traversal.edge;
 
   if (edge.status === "closed") return false;
+
   if (
     edge.status === "conditional" &&
     !enabledConditionalEdgeIds.has(edge.id)
@@ -218,13 +250,13 @@ function traversalAllowed(
 }
 
 export function findShortestRoute(
-  value: unknown,
+  graph: RoutingGraph,
   request: RouteRequest,
 ): RouteResult {
-  const graph = internalGraph(value);
+  const internal = getInternalGraph(graph);
   const optimize = request.optimize ?? "duration";
 
-  if (!graph.nodeIds.has(request.fromNodeId)) {
+  if (!internal.nodeIds.has(request.fromNodeId)) {
     return {
       status: "not-found",
       fromNodeId: request.fromNodeId,
@@ -233,7 +265,7 @@ export function findShortestRoute(
     };
   }
 
-  if (!graph.nodeIds.has(request.toNodeId)) {
+  if (!internal.nodeIds.has(request.toNodeId)) {
     return {
       status: "not-found",
       fromNodeId: request.fromNodeId,
@@ -255,9 +287,7 @@ export function findShortestRoute(
     };
   }
 
-  const allowedModes = new Set<RouteMode>(
-    request.allowedModes ?? ALL_MODES,
-  );
+  const allowedModes = new Set<RouteMode>(request.allowedModes ?? ALL_MODES);
   const enabledConditionalEdgeIds = new Set(
     request.enabledConditionalEdgeIds ?? [],
   );
@@ -269,7 +299,7 @@ export function findShortestRoute(
     distanceMeters: 0,
     durationMinutes: 0,
     hops: 0,
-    signature: "",
+    signature: [],
     nodeIds: [request.fromNodeId],
     edges: [],
   };
@@ -299,7 +329,7 @@ export function findShortestRoute(
       };
     }
 
-    const outgoing = graph.adjacency.get(current.nodeId) ?? [];
+    const outgoing = internal.adjacency.get(current.nodeId) ?? [];
 
     for (const traversal of outgoing) {
       if (
@@ -314,7 +344,6 @@ export function findShortestRoute(
         continue;
       }
 
-      const pathEdge = asPathEdge(traversal);
       const next: SearchState = {
         nodeId: traversal.toNodeId,
         distanceMeters:
@@ -322,12 +351,12 @@ export function findShortestRoute(
         durationMinutes:
           current.durationMinutes + traversal.edge.durationMinutes,
         hops: current.hops + 1,
-        signature:
-          current.signature +
-          (current.signature ? ">" : "") +
-          traversalKey(traversal),
+        signature: [
+          ...current.signature,
+          traversalSignature(traversal),
+        ],
         nodeIds: [...current.nodeIds, traversal.toNodeId],
-        edges: [...current.edges, pathEdge],
+        edges: [...current.edges, asPathEdge(traversal)],
       };
 
       const previous = best.get(next.nodeId);
