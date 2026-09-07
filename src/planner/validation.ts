@@ -881,7 +881,9 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
   return issues;
 }
 
-export function assertValidWildRouteData(value: unknown) {
+export function assertValidWildRouteData(
+  value: unknown,
+): asserts value is WildRouteDataPackage {
   const issues = validateWildRouteData(value);
   const errors = issues.filter((issue) => issue.severity === "error");
 
