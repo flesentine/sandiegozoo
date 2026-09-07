@@ -13,6 +13,7 @@ import {
   createDefaultVisitPreferences,
   type VisitPreferences,
 } from "./planning/visitPreferences";
+import { DaySummaryScreen } from "./screens/DaySummaryScreen";
 import { PrioritiesScreen } from "./screens/PrioritiesScreen";
 import { YourDayScreen } from "./screens/YourDayScreen";
 import { WelcomeScreen } from "./screens/WelcomeScreen";
@@ -21,8 +22,9 @@ import "./styles/welcome.css";
 import "./styles/visit.css";
 import "./styles/priorities.css";
 import "./styles/day.css";
+import "./styles/summary.css";
 
-type AppScreen = "welcome" | "visit" | "priorities" | "day";
+type AppScreen = "welcome" | "visit" | "priorities" | "day" | "summary";
 
 export function App() {
   const [screen, setScreen] = useState<AppScreen>("welcome");
@@ -49,6 +51,17 @@ export function App() {
     setVisitPreferences(next);
   };
 
+  if (screen === "summary") {
+    return (
+      <DaySummaryScreen
+        visit={visitPreferences}
+        priorities={priorityPreferences}
+        day={dayPreferences}
+        onBack={() => setScreen("day")}
+      />
+    );
+  }
+
   if (screen === "day") {
     return (
       <YourDayScreen
@@ -59,9 +72,7 @@ export function App() {
           setVisitPreferences((current) => ({ ...current, easyPaths }))
         }
         onBack={() => setScreen("priorities")}
-        onContinue={() => {
-          // UX-10.5 will replace this with the Day Summary screen.
-        }}
+        onContinue={() => setScreen("summary")}
       />
     );
   }
