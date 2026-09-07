@@ -17,6 +17,7 @@ import {
   assertCompiledRoutingGraph,
   findShortestRoute,
   type RouteFound,
+  type RouteResult,
   type RoutingGraph,
 } from "./routing.ts";
 import {
@@ -113,19 +114,19 @@ export type OptimizerResult =
   | OptimizerTradeoff
   | OptimizerSearchLimit;
 
-type CandidateGroup = {
+export type OptimizerOptimizerCandidateGroup = {
   selectionKey: string;
   authority: CandidateAuthority;
   candidates: OptimizerCandidate[];
 };
 
-type StepFailure =
+export type OptimizerOptimizerStepFailure =
   | "OUTSIDE_HORIZON"
   | "NO_ROUTE"
   | "ANCHOR_CONFLICT"
   | "INSUFFICIENT_TIME";
 
-type SearchState = {
+export type OptimizerOptimizerSearchState = {
   nodeId: string;
   minute: number;
   selectedKeys: Set<string>;
@@ -136,8 +137,8 @@ type SearchState = {
   totalTravelMeters: number;
 };
 
-type FinalizedPlan = {
-  state: SearchState;
+export type OptimizerOptimizerFinalizedPlan = {
+  state: OptimizerSearchState;
   utility: PreferenceUtilityVector;
   finishMinute: number;
   remainingMinutes: number;
@@ -148,11 +149,11 @@ type FinalizedPlan = {
 };
 
 type SearchOutcome = {
-  best?: FinalizedPlan;
+  best?: OptimizerFinalizedPlan;
   evaluatedStates: number;
-  failures: Set<StepFailure>;
-  finalizeFailures: Set<StepFailure>;
-  failuresBySelectionKey: Map<string, Set<StepFailure>>;
+  failures: Set<OptimizerStepFailure>;
+  finalizeFailures: Set<OptimizerStepFailure>;
+  failuresBySelectionKey: Map<string, Set<OptimizerStepFailure>>;
 };
 
 const COST_PRECISION = 1_000_000_000;
@@ -257,12 +258,12 @@ function assertOptimizerCandidate(
   }
 }
 
-function buildGroups(
+export function buildOptimizerGroups(
   graph: RoutingGraph,
   candidates: readonly OptimizerCandidate[],
 ) {
   const byId = new Set<string>();
-  const groups = new Map<string, CandidateGroup>();
+  const groups = new Map<string, OptimizerCandidateGroup>();
 
   for (const rawCandidate of candidates) {
     assertOptimizerCandidate(graph, rawCandidate);
@@ -323,16 +324,29 @@ function routePolicyWithDuration(routePolicy: RoutePolicy | undefined) {
   };
 }
 
-function advanceState(
+export type OptimizerRouteResolver = (
+  fromNodeId: string,
+  toNodeId: string,
+) => RouteResult;
+
+export function createOptimizerRouteResolver(
   request: OptimizerRequest,
-  state: SearchState,
+): OptimizerRouteResolver {
+  return (fromNodeId, toNodeId) =>
+    findShortestRoute(request.graph, {
+      ...routePolicyWithDuration(request.routePolicy),
+      fromNodeId,
+      toNodeId,
+    });
+}
+
+export function advanceOptimizerState(
+  request: OptimizerRequest,
+  state: OptimizerSearchState,
   candidate: OptimizerCandidate,
-): SearchState | StepFailure {
-  const route = findShortestRoute(request.graph, {
-    ...routePolicyWithDuration(request.routePolicy),
-    fromNodeId: state.nodeId,
-    toNodeId: candidate.nodeId,
-  });
+  resolveRoute: OptimizerRouteResolver = createOptimizerRouteResolver(request),
+): OptimizerSearchState | OptimizerStepFailure {
+  const route = resolveRoute(state.nodeId, candidate.nodeId);
 
   if (route.status === "not-found") {
     return "NO_ROUTE";
@@ -435,21 +449,18 @@ function advanceState(
   };
 }
 
-function finalizeState(
+export function finalizeOptimizerState(
   request: OptimizerRequest,
-  state: SearchState,
-): FinalizedPlan | StepFailure {
+  state: OptimizerSearchState,
+  resolveRoute: OptimizerRouteResolver = createOptimizerRouteResolver(request),
+): OptimizerFinalizedPlan | OptimizerStepFailure {
   let finishMinute = state.minute;
   let totalTravelMinutes = state.totalTravelMinutes;
   let totalTravelMeters = state.totalTravelMeters;
   let exitRoute: RouteFound | undefined;
 
   if (request.endNodeId !== undefined) {
-    const route = findShortestRoute(request.graph, {
-      ...routePolicyWithDuration(request.routePolicy),
-      fromNodeId: state.nodeId,
-      toNodeId: request.endNodeId,
-    });
+    const route = resolveRoute(state.nodeId, request.endNodeId);
 
     if (route.status === "not-found") {
       return "NO_ROUTE";
@@ -486,7 +497,10 @@ function finalizeState(
   };
 }
 
-function comparePlans(a: FinalizedPlan, b: FinalizedPlan) {
+export function compareOptimizerPlans(
+  a: OptimizerFinalizedPlan,
+  b: OptimizerFinalizedPlan,
+) {
   const utility = comparePreferenceUtilityVectors(
     a.utility,
     b.utility,
@@ -508,8 +522,23 @@ function comparePlans(a: FinalizedPlan, b: FinalizedPlan) {
   return compareText(a.signature, b.signature);
 }
 
+export function createOptimizerInitialState(
+  request: OptimizerRequest,
+): OptimizerSearchState {
+  return {
+    nodeId: request.initialNodeId,
+    minute: request.horizon.startMinute,
+    selectedKeys: new Set(),
+    selectedCandidateIds: [],
+    steps: [],
+    scores: [],
+    totalTravelMinutes: 0,
+    totalTravelMeters: 0,
+  };
+}
+
 function allRequiredSelected(
-  state: SearchState,
+  state: OptimizerSearchState,
   requiredKeys: ReadonlySet<string>,
 ) {
   for (const key of requiredKeys) {
@@ -520,36 +549,27 @@ function allRequiredSelected(
 
 function search(
   request: OptimizerRequest,
-  groups: readonly CandidateGroup[],
+  groups: readonly OptimizerCandidateGroup[],
   requiredKeys: ReadonlySet<string>,
 ): SearchOutcome {
-  const failures = new Set<StepFailure>();
-  const finalizeFailures = new Set<StepFailure>();
-  const failuresBySelectionKey = new Map<string, Set<StepFailure>>();
+  const failures = new Set<OptimizerStepFailure>();
+  const finalizeFailures = new Set<OptimizerStepFailure>();
+  const failuresBySelectionKey = new Map<string, Set<OptimizerStepFailure>>();
   let evaluatedStates = 0;
-  let best: FinalizedPlan | undefined;
+  let best: OptimizerFinalizedPlan | undefined;
 
-  const start: SearchState = {
-    nodeId: request.initialNodeId,
-    minute: request.horizon.startMinute,
-    selectedKeys: new Set(),
-    selectedCandidateIds: [],
-    steps: [],
-    scores: [],
-    totalTravelMinutes: 0,
-    totalTravelMeters: 0,
-  };
+  const start = createOptimizerInitialState(request);
 
-  function visit(state: SearchState) {
+  function visit(state: OptimizerSearchState) {
     evaluatedStates += 1;
 
     if (allRequiredSelected(state, requiredKeys)) {
-      const finalized = finalizeState(request, state);
+      const finalized = finalizeOptimizerState(request, state);
 
       if (typeof finalized === "string") {
         failures.add(finalized);
         finalizeFailures.add(finalized);
-      } else if (!best || comparePlans(finalized, best) < 0) {
+      } else if (!best || compareOptimizerPlans(finalized, best) < 0) {
         best = finalized;
       }
     }
@@ -558,13 +578,13 @@ function search(
       if (state.selectedKeys.has(group.selectionKey)) continue;
 
       for (const candidate of group.candidates) {
-        const next = advanceState(request, state, candidate);
+        const next = advanceOptimizerState(request, state, candidate);
 
         if (typeof next === "string") {
           failures.add(next);
           const groupFailures =
             failuresBySelectionKey.get(group.selectionKey) ??
-            new Set<StepFailure>();
+            new Set<OptimizerStepFailure>();
           groupFailures.add(next);
           failuresBySelectionKey.set(
             group.selectionKey,
@@ -590,7 +610,7 @@ function search(
 }
 
 function omissionReasonFromFailures(
-  failures: ReadonlySet<StepFailure>,
+  failures: ReadonlySet<OptimizerStepFailure>,
 ): OptionalDropReason {
   if (failures.size === 1 && failures.has("OUTSIDE_HORIZON")) {
     return "OUTSIDE_HORIZON";
@@ -609,8 +629,8 @@ function omissionReasonFromFailures(
 
 function diagnoseOmittedGroup(
   request: OptimizerRequest,
-  mandatoryGroups: readonly CandidateGroup[],
-  group: CandidateGroup,
+  mandatoryGroups: readonly OptimizerCandidateGroup[],
+  group: OptimizerCandidateGroup,
 ) {
   const diagnosticGroups = [...mandatoryGroups, group].sort((a, b) =>
     compareText(a.selectionKey, b.selectionKey),
@@ -646,7 +666,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function validateRequest(
+export function assertValidOptimizerRequest(
   request: unknown,
 ): asserts request is OptimizerRequest {
   if (!isRecord(request)) {
@@ -727,7 +747,7 @@ function combinations<T>(
 
 function findMinimalTradeoffOptions(
   request: OptimizerRequest,
-  mandatoryGroups: readonly CandidateGroup[],
+  mandatoryGroups: readonly OptimizerCandidateGroup[],
 ) {
   let evaluatedStates = 0;
 
@@ -776,9 +796,9 @@ function findMinimalTradeoffOptions(
 export function optimizeItinerary(
   request: OptimizerRequest,
 ): OptimizerResult {
-  validateRequest(request);
+  assertValidOptimizerRequest(request);
 
-  const groups = buildGroups(request.graph, request.candidates);
+  const groups = buildOptimizerGroups(request.graph, request.candidates);
 
   if (request.candidates.length > MAX_EXHAUSTIVE_CANDIDATES) {
     return {
