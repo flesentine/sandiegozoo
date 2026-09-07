@@ -166,8 +166,8 @@ function addCost(a: number, b: number) {
   return normalizedCost(a + b);
 }
 
-function validDate(value: string) {
-  if (!DATE_RE.test(value)) return false;
+function validDate(value: unknown): value is string {
+  if (typeof value !== "string" || !DATE_RE.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return (
     !Number.isNaN(parsed.getTime()) &&
@@ -175,12 +175,16 @@ function validDate(value: string) {
   );
 }
 
-function nonEmpty(value: string) {
-  return value.trim().length > 0;
+function nonEmpty(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
 }
 
-export function parseClockMinute(value: string): number | null {
-  if (!TIME_RE.test(value)) return null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function parseClockMinute(value: unknown): number | null {
+  if (typeof value !== "string" || !TIME_RE.test(value)) return null;
   const [hour, minute] = value.split(":").map(Number);
   return hour * 60 + minute;
 }
@@ -403,7 +407,11 @@ export function buildShowCandidateSets(
   return { sets, issues };
 }
 
-export function isValidPlanningHorizon(horizon: PlanningHorizon) {
+export function isValidPlanningHorizon(
+  horizon: unknown,
+): horizon is PlanningHorizon {
+  if (!isRecord(horizon)) return false;
+
   return (
     validDate(horizon.date) &&
     Number.isInteger(horizon.startMinute) &&
@@ -416,15 +424,20 @@ export function isValidPlanningHorizon(horizon: PlanningHorizon) {
   );
 }
 
-export function isValidScheduleAnchor(anchor: ScheduleAnchor) {
+export function isValidScheduleAnchor(
+  anchor: unknown,
+): anchor is ScheduleAnchor {
+  if (!isRecord(anchor)) return false;
+
   return (
     nonEmpty(anchor.id) &&
+    (anchor.kind === "locked" || anchor.kind === "show") &&
     nonEmpty(anchor.title) &&
     nonEmpty(anchor.nodeId) &&
-    Number.isFinite(anchor.arrivalWindowStartMinute) &&
-    Number.isFinite(anchor.arrivalWindowEndMinute) &&
-    Number.isFinite(anchor.serviceStartMinute) &&
-    Number.isFinite(anchor.serviceEndMinute) &&
+    Number.isInteger(anchor.arrivalWindowStartMinute) &&
+    Number.isInteger(anchor.arrivalWindowEndMinute) &&
+    Number.isInteger(anchor.serviceStartMinute) &&
+    Number.isInteger(anchor.serviceEndMinute) &&
     anchor.arrivalWindowStartMinute >= 0 &&
     anchor.arrivalWindowStartMinute <= anchor.arrivalWindowEndMinute &&
     anchor.arrivalWindowEndMinute <= anchor.serviceStartMinute &&
