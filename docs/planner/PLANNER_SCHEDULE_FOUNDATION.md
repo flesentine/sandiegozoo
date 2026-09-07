@@ -102,3 +102,19 @@ Planner 3 does not yet:
 - create the final day
 
 It provides the deterministic feasibility primitives that Planner 4+ can search over.
+
+
+## Feasibility routing authority
+
+Schedule feasibility always asks Planner 2 for the **fastest route** under the active hard constraints.
+
+Callers cannot switch anchor feasibility to distance optimization. A shortest-distance route that misses a timed anchor must never hide a longer but faster feasible path.
+
+## Boundary policy
+
+- Arrival exactly at an anchor's allowed window end is feasible.
+- Back-to-back anchors are feasible only when transfer time permits them.
+- An anchor may begin exactly at visit arrival and end exactly at visit departure.
+- Hand-constructed malformed horizons are rejected at the feasibility boundary.
+- Same-day recommended-arrival lead time may not cross midnight; invalid source data is rejected rather than silently clamped to 00:00.
+- Identical show start times are deterministically ordered by stable event ID.
