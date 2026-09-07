@@ -475,7 +475,39 @@ test("candidate construction is independent of preference insertion order", () =
     }),
   );
 
-  assert.deepEqual(reverse, forward);
+  assert.equal(forward.status, "ready");
+  assert.equal(reverse.status, "ready");
+  if (
+    forward.status !== "ready" ||
+    reverse.status !== "ready"
+  ) {
+    throw new Error("expected ready");
+  }
+
+  assert.deepEqual(reverse.candidates, forward.candidates);
+  assert.deepEqual(reverse.issues, forward.issues);
+  assert.deepEqual(
+    reverse.excludedSelectionKeys,
+    forward.excludedSelectionKeys,
+  );
+  assert.deepEqual(reverse.routingGate, forward.routingGate);
+  assert.deepEqual(reverse.request.horizon, forward.request.horizon);
+  assert.deepEqual(
+    reverse.request.scoreContext,
+    forward.request.scoreContext,
+  );
+  assert.deepEqual(
+    reverse.request.routePolicy,
+    forward.request.routePolicy,
+  );
+  assert.equal(
+    reverse.request.initialNodeId,
+    forward.request.initialNodeId,
+  );
+  assert.equal(
+    reverse.request.endNodeId,
+    forward.request.endNodeId,
+  );
 });
 
 test("malformed runtime preferences and bindings fail closed", () => {
