@@ -114,19 +114,19 @@ export type OptimizerResult =
   | OptimizerTradeoff
   | OptimizerSearchLimit;
 
-export type OptimizerOptimizerCandidateGroup = {
+export type OptimizerCandidateGroup = {
   selectionKey: string;
   authority: CandidateAuthority;
   candidates: OptimizerCandidate[];
 };
 
-export type OptimizerOptimizerStepFailure =
+export type OptimizerStepFailure =
   | "OUTSIDE_HORIZON"
   | "NO_ROUTE"
   | "ANCHOR_CONFLICT"
   | "INSUFFICIENT_TIME";
 
-export type OptimizerOptimizerSearchState = {
+export type OptimizerSearchState = {
   nodeId: string;
   minute: number;
   selectedKeys: Set<string>;
@@ -137,7 +137,7 @@ export type OptimizerOptimizerSearchState = {
   totalTravelMeters: number;
 };
 
-export type OptimizerOptimizerFinalizedPlan = {
+export type OptimizerFinalizedPlan = {
   state: OptimizerSearchState;
   utility: PreferenceUtilityVector;
   finishMinute: number;
