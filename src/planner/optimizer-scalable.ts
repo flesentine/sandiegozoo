@@ -180,13 +180,15 @@ function dominates(a: FrontierEntry, b: FrontierEntry) {
   if (a.totalTravelMinutes > b.totalTravelMinutes) return false;
   if (a.totalTravelMeters > b.totalTravelMeters) return false;
 
-  const equalMetrics =
+  const signatureCanDecideLater =
     utility === 0 &&
-    a.minute === b.minute &&
     a.totalTravelMinutes === b.totalTravelMinutes &&
     a.totalTravelMeters === b.totalTravelMeters;
 
-  if (equalMetrics && compareText(a.signature, b.signature) > 0) {
+  if (
+    signatureCanDecideLater &&
+    compareText(a.signature, b.signature) > 0
+  ) {
     return false;
   }
 
