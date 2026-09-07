@@ -154,7 +154,7 @@ function LocationSheet({
               are manually.
             </p>
             <div className="summary-location-actions">
-              <button type="button" className="summary-location-primary" onClick={onEnable}>
+              <button type="button" className="summary-location-primary" onClick={onEnable} autoFocus>
                 Enable location
               </button>
               <button type="button" className="summary-location-secondary" onClick={onManual}>
@@ -181,10 +181,10 @@ function LocationSheet({
             <p className="eyebrow">Location</p>
             <h2 id="location-title">Location is enabled</h2>
             <p>
-              WildRoute can use your current position for live recommendations.
-              Exact route matching comes with the live routing layer.
+              WildRoute can use your current position to keep live
+              recommendations current as you move around the Zoo.
             </p>
-            <button type="button" className="summary-location-primary" onClick={onClose}>
+            <button type="button" className="summary-location-primary" onClick={onClose} autoFocus>
               Done
             </button>
           </>
@@ -265,8 +265,8 @@ export function DaySummaryScreen({
           <p className="eyebrow">Planning preview</p>
           <h1 id="summary-title">Your day looks great.</h1>
           <p>
-            We have your priorities and preferences. The routing engine will
-            make the final feasibility and walking calculations before live use.
+            We have your priorities and preferences. Walking, timing, and
+            conflict checks will be finalized when your route is built.
           </p>
 
           <div className="summary-hero__stats">
@@ -311,10 +311,10 @@ export function DaySummaryScreen({
           <aside className="summary-confidence">
             <ClockIcon />
             <div>
-              <strong>Reference schedule loaded</strong>
+              <strong>Schedule preview available</strong>
               <p>
-                This preview uses the current reference fixture. Live Zoo data
-                still needs a final refresh before the visit.
+                Zoo hours and presentations will still refresh before your
+                visit so the live day starts with current information.
               </p>
             </div>
           </aside>
@@ -405,7 +405,7 @@ export function DaySummaryScreen({
           <div>
             <span>Estimated walking</span>
             <strong>Route estimate pending</strong>
-            <p>Calculated from the verified Zoo walking graph during route build.</p>
+            <p>Calculated from the Zoo walking network when your route is built.</p>
           </div>
         </section>
 
