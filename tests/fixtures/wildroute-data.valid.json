@@ -1,0 +1,155 @@
+{
+  "schemaVersion": "1",
+  "zones": [
+    {
+      "id": "fixture-west",
+      "name": "Fixture West",
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-zone",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    }
+  ],
+  "places": [
+    {
+      "id": "fixture-animal",
+      "kind": "animal",
+      "name": "Fixture Animal",
+      "zoneId": "fixture-west",
+      "routeNodeId": "fixture-animal-node",
+      "navigationPoint": {
+        "lat": 0.002,
+        "lng": 0.002,
+        "confidence": "verified"
+      },
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-animal",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    },
+    {
+      "id": "fixture-stage",
+      "kind": "experience",
+      "name": "Fixture Stage",
+      "zoneId": "fixture-west",
+      "routeNodeId": "fixture-stage-node",
+      "navigationPoint": {
+        "lat": 0.003,
+        "lng": 0.003,
+        "confidence": "verified"
+      },
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-stage",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    }
+  ],
+  "routeNodes": [
+    {
+      "id": "fixture-entry-node",
+      "kind": "entrance",
+      "zoneId": "fixture-west",
+      "lat": 0.001,
+      "lng": 0.001,
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-entry-node",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    },
+    {
+      "id": "fixture-animal-node",
+      "kind": "destination",
+      "zoneId": "fixture-west",
+      "lat": 0.002,
+      "lng": 0.002,
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-animal-node",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    },
+    {
+      "id": "fixture-stage-node",
+      "kind": "destination",
+      "zoneId": "fixture-west",
+      "lat": 0.003,
+      "lng": 0.003,
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-stage-node",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    }
+  ],
+  "routeEdges": [
+    {
+      "id": "fixture-edge-entry-animal",
+      "fromNodeId": "fixture-entry-node",
+      "toNodeId": "fixture-animal-node",
+      "mode": "walk",
+      "distanceMeters": 120,
+      "durationMinutes": 2.5,
+      "difficulty": "easy",
+      "stairs": false,
+      "accessible": true,
+      "stroller": true,
+      "oneWay": false,
+      "status": "open",
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-edge-entry-animal",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    },
+    {
+      "id": "fixture-edge-animal-stage",
+      "fromNodeId": "fixture-animal-node",
+      "toNodeId": "fixture-stage-node",
+      "mode": "walk",
+      "distanceMeters": 180,
+      "durationMinutes": 3.5,
+      "difficulty": "moderate",
+      "stairs": false,
+      "accessible": true,
+      "stroller": true,
+      "oneWay": false,
+      "status": "open",
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-edge-animal-stage",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified"
+      }
+    }
+  ],
+  "scheduleEvents": [
+    {
+      "id": "fixture-show-1000",
+      "title": "Fixture Show",
+      "date": "2026-09-19",
+      "startTime": "10:00",
+      "endTime": "10:20",
+      "recommendedArrivalMinutes": 15,
+      "placeId": "fixture-stage",
+      "provenance": {
+        "sourceUrl": "https://example.invalid/wildroute/fixture-show",
+        "sourceLabel": "Synthetic test fixture",
+        "lastVerified": "2026-09-06T19:00:00-07:00",
+        "confidence": "verified",
+        "effectiveFrom": "2026-09-19",
+        "effectiveTo": "2026-09-19"
+      }
+    }
+  ]
+}
