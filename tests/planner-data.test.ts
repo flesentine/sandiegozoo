@@ -19,8 +19,8 @@ function codes(value: unknown) {
 
 test("synthetic planner package satisfies the full contract", async () => {
   const value = await fixture();
-  const issues = assertValidWildRouteData(value);
-  assert.deepEqual(issues, []);
+  assert.deepEqual(validateWildRouteData(value), []);
+  assert.doesNotThrow(() => assertValidWildRouteData(value));
   assert.equal(isValidWildRouteData(value), true);
 });
 
