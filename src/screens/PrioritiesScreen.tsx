@@ -278,13 +278,17 @@ export function PrioritiesScreen({
             )}
           </div>
 
-          <aside className="priority-performance-note">
-            <SparkIcon />
-            <p>
-              WildRoute will choose the best performance when multiple times are
-              available. You can pin a specific time later.
-            </p>
-          </aside>
+          {experienceSchedule.options.some(
+            (experience) => experience.multiplePerformances,
+          ) ? (
+            <aside className="priority-performance-note">
+              <SparkIcon />
+              <p>
+                WildRoute will choose the best performance when multiple times are
+                available. You can pin a specific time later.
+              </p>
+            </aside>
+          ) : null}
         </section>
 
         <div className="priorities-footer">
