@@ -5,7 +5,7 @@ import type {
   SourceProvenance,
   WildRouteDataPackage,
 } from "./contracts";
-import { assertValidWildRouteData } from "./validation";
+import { assertValidWildRouteData } from "./validation.ts";
 
 export type RouteOptimization = "duration" | "distance";
 
