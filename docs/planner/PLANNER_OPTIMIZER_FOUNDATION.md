@@ -75,7 +75,11 @@ If no itinerary satisfies every mandatory selection key, optimization stops with
 
 Optional candidates never get a chance to displace mandatory work.
 
-The result also identifies mandatory selection keys whose removal individually restores feasibility when such a single-key relief exists.
+The result identifies **minimal-cardinality tradeoff options**.
+
+Each tradeoff option is a set of mandatory selection keys whose removal restores feasibility. Planner 5 searches removal combinations from size 1 upward and returns every feasible combination at the first successful size.
+
+It therefore does not fall back to a misleading “all mandatory items” list when two removals are required.
 
 ### 2. Optional optimization
 
@@ -171,3 +175,39 @@ Planner 3's exported horizon/anchor validators now accept untrusted runtime valu
 Schedule minutes must be whole integers. Malformed anchor objects and fractional-minute anchors are rejected before optimizer search.
 
 Planner 5 also validates score context even for an empty candidate set, so invalid pace/easier-path state cannot bypass validation merely because there is nothing to score.
+
+
+## Runtime request and route-policy boundary
+
+Planner 5 validates the optimizer request before search:
+
+- request must be an object
+- routing graph must be an authentic graph compiled by Planner 2
+- initial/end node IDs must be stable and known
+- candidates must be an array
+- score context must be valid
+- route policy must be valid
+
+Route-policy validation rejects unsupported fields, invalid/duplicate route modes, non-boolean hard-constraint flags, malformed/duplicate conditional edge IDs, and runtime attempts to inject `optimize`.
+
+Candidate validation occurs **before** the 8-record search-limit result. An oversized malformed request therefore fails closed rather than hiding invalid data behind `search-limit-exceeded`.
+
+## Search accounting
+
+`evaluatedStates` now counts all exhaustive search work performed for the result:
+
+- baseline feasibility
+- mandatory feasibility
+- full optional optimization
+- minimal tradeoff probes
+- omission diagnostics
+
+The exact eight-record / eight-selection-key all-optional fixture evaluates **109,603 states**: 1 baseline state + 1 mandatory-empty state + the complete 109,601-state permutation/subset search.
+
+This count is regression-tested so future pruning/optimization changes cannot silently make the reference oracle incomplete.
+
+## Omission diagnosis
+
+Omission diagnosis now tracks failures by logical selection key and separates finalization/exit failures.
+
+A single unambiguous failure remains specific (outside horizon, no route, or anchor conflict). Mixed failure evidence falls back conservatively to `INSUFFICIENT_TIME` rather than selecting whichever unrelated failure happened to appear elsewhere in the exhaustive search.
