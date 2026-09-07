@@ -1,4 +1,5 @@
 import {
+  assertValidOptimizerRequest,
   optimizeItinerary,
   type OptimizerRequest,
   type OptimizerResult,
@@ -41,7 +42,8 @@ export type OptimizerQualificationFailureCode =
   | "ROUTE_CACHE_HITS_TOO_LOW"
   | "ROUTE_CACHE_MISSES_TOO_HIGH"
   | "ORACLE_LIMIT_EXCEEDED"
-  | "ORACLE_RESULT_MISMATCH";
+  | "ORACLE_RESULT_MISMATCH"
+  | "STATUS_METRICS_INCONSISTENT";
 
 export type OptimizerQualificationFailure = {
   code: OptimizerQualificationFailureCode;
@@ -80,6 +82,23 @@ const COUNT_THRESHOLD_KEYS = [
   "maxRouteCacheMisses",
 ] as const;
 
+const THRESHOLD_KEYS = new Set([
+  "expectedStatus",
+  ...COUNT_THRESHOLD_KEYS,
+  "requireOracleParity",
+]);
+
+const SCENARIO_KEYS = new Set([
+  "id",
+  "request",
+  "stateBudget",
+  "thresholds",
+]);
+
+const COMPLETE_EVIDENCE_KEYS = [
+  ...COUNT_THRESHOLD_KEYS,
+] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -97,7 +116,6 @@ function canonicalSemanticValue(value: unknown): unknown {
     const normalized: Record<string, unknown> = {};
 
     for (const key of Object.keys(value).sort()) {
-      if (key === "evaluatedStates") continue;
       normalized[key] = canonicalSemanticValue(value[key]);
     }
 
@@ -108,7 +126,46 @@ function canonicalSemanticValue(value: unknown): unknown {
 }
 
 function semanticResult(result: OptimizerResult) {
-  return JSON.stringify(canonicalSemanticValue(result));
+  const semantic = { ...result } as Record<string, unknown>;
+  delete semantic.evaluatedStates;
+  return JSON.stringify(canonicalSemanticValue(semantic));
+}
+
+function snapshotOptimizerRequest(
+  request: OptimizerRequest,
+): OptimizerRequest {
+  const routePolicy = request.routePolicy
+    ? {
+        ...request.routePolicy,
+        ...(request.routePolicy.allowedModes
+          ? { allowedModes: [...request.routePolicy.allowedModes] }
+          : {}),
+        ...(request.routePolicy.enabledConditionalEdgeIds
+          ? {
+              enabledConditionalEdgeIds: [
+                ...request.routePolicy.enabledConditionalEdgeIds,
+              ],
+            }
+          : {}),
+      }
+    : undefined;
+
+  return {
+    graph: request.graph,
+    horizon: { ...request.horizon },
+    initialNodeId: request.initialNodeId,
+    ...(request.endNodeId !== undefined
+      ? { endNodeId: request.endNodeId }
+      : {}),
+    candidates: request.candidates.map((candidate) => ({
+      ...candidate,
+      ...(candidate.anchor
+        ? { anchor: { ...candidate.anchor } }
+        : {}),
+    })),
+    scoreContext: { ...request.scoreContext },
+    ...(routePolicy ? { routePolicy } : {}),
+  };
 }
 
 function addFailure(
@@ -132,7 +189,7 @@ function assertNonNegativeInteger(
   if (
     typeof value !== "number" ||
     !Number.isFinite(value) ||
-    !Number.isInteger(value) ||
+    !Number.isSafeInteger(value) ||
     value < 0
   ) {
     throw new Error(
@@ -149,6 +206,14 @@ function assertValidThresholds(
     throw new Error(
       "Optimizer qualification thresholds must be an object.",
     );
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!THRESHOLD_KEYS.has(key)) {
+      throw new Error(
+        `Optimizer qualification thresholds contain unsupported field: ${key}`,
+      );
+    }
   }
 
   if (
@@ -194,6 +259,29 @@ function assertValidThresholds(
       "Optimizer qualification oracle parity requires expectedStatus complete.",
     );
   }
+
+  if (
+    value.minBudgetHeadroomStates !== undefined &&
+    value.expectedStatus !== "complete"
+  ) {
+    throw new Error(
+      "Optimizer qualification budget headroom is only meaningful for expectedStatus complete.",
+    );
+  }
+
+  const hasCompleteEvidence =
+    COMPLETE_EVIDENCE_KEYS.some(
+      (key) => value[key] !== undefined,
+    ) || value.requireOracleParity === true;
+
+  if (
+    value.expectedStatus === "complete" &&
+    !hasCompleteEvidence
+  ) {
+    throw new Error(
+      "Optimizer qualification complete scenarios require at least one capacity or oracle-parity evidence gate.",
+    );
+  }
 }
 
 function assertValidScenario(
@@ -203,6 +291,14 @@ function assertValidScenario(
     throw new Error(
       "Optimizer qualification scenario must be an object.",
     );
+  }
+
+  for (const key of Object.keys(scenario)) {
+    if (!SCENARIO_KEYS.has(key)) {
+      throw new Error(
+        `Optimizer qualification scenario contains unsupported field: ${key}`,
+      );
+    }
   }
 
   if (
@@ -218,7 +314,7 @@ function assertValidScenario(
   if (
     typeof scenario.stateBudget !== "number" ||
     !Number.isFinite(scenario.stateBudget) ||
-    !Number.isInteger(scenario.stateBudget) ||
+    !Number.isSafeInteger(scenario.stateBudget) ||
     scenario.stateBudget <= 0
   ) {
     throw new Error(
@@ -230,6 +326,8 @@ function assertValidScenario(
     scenario.thresholds,
     scenario.stateBudget,
   );
+
+  assertValidOptimizerRequest(scenario.request);
 }
 
 export function runOptimizerQualification(
@@ -237,8 +335,15 @@ export function runOptimizerQualification(
 ): OptimizerQualificationReport {
   assertValidScenario(scenario);
 
-  const result = optimizeItineraryScalable(
+  const scalableRequest = snapshotOptimizerRequest(
     scenario.request,
+  );
+  const oracleRequest = snapshotOptimizerRequest(
+    scenario.request,
+  );
+
+  const result = optimizeItineraryScalable(
+    scalableRequest,
     { stateBudget: scenario.stateBudget },
   );
   const stats = statsFromResult(result);
@@ -257,6 +362,39 @@ export function runOptimizerQualification(
     budgetHeadroomStates / scenario.stateBudget,
   );
   const failures: OptimizerQualificationFailure[] = [];
+
+  if (
+    result.status === "complete" &&
+    evaluatedStates > scenario.stateBudget
+  ) {
+    addFailure(
+      failures,
+      "STATUS_METRICS_INCONSISTENT",
+      `Complete result evaluated ${evaluatedStates} states above state budget ${scenario.stateBudget}.`,
+    );
+  }
+
+  if (
+    result.status === "search-budget-exceeded" &&
+    evaluatedStates <= scenario.stateBudget
+  ) {
+    addFailure(
+      failures,
+      "STATUS_METRICS_INCONSISTENT",
+      `Budget-exceeded result evaluated ${evaluatedStates} states without crossing state budget ${scenario.stateBudget}.`,
+    );
+  }
+
+  if (
+    result.status === "candidate-limit-exceeded" &&
+    evaluatedStates !== 0
+  ) {
+    addFailure(
+      failures,
+      "STATUS_METRICS_INCONSISTENT",
+      `Candidate-limit result evaluated ${evaluatedStates} search states; expected zero search states.`,
+    );
+  }
 
   if (result.status !== scenario.thresholds.expectedStatus) {
     addFailure(
@@ -342,7 +480,7 @@ export function runOptimizerQualification(
     scenario.thresholds.requireOracleParity === true;
 
   if (oracleParityChecked) {
-    const oracle = optimizeItinerary(scenario.request);
+    const oracle = optimizeItinerary(oracleRequest);
 
     if (oracle.status === "search-limit-exceeded") {
       oracleParityMatched = false;
@@ -377,7 +515,7 @@ export function runOptimizerQualification(
     id: scenario.id,
     passed: failures.length === 0,
     optimizerStatus: result.status,
-    candidateCount: scenario.request.candidates.length,
+    candidateCount: scalableRequest.candidates.length,
     stateBudget: scenario.stateBudget,
     evaluatedStates,
     budgetExhausted,
