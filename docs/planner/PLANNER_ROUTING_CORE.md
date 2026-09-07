@@ -2,7 +2,7 @@
 
 **Status:** implementation baseline
 
-Planner 2 computes routes only from a Planner 1 validated graph. It does not infer missing paths from coordinates.
+Planner 2 compiles a Planner 1 validated data package into a reusable routing graph, then answers point-to-point route queries against that compiled graph. It does not infer missing paths from coordinates.
 
 ## Route authority
 
@@ -52,9 +52,9 @@ Path comparison is deterministic:
 1. requested primary cost
 2. secondary cost
 3. fewer hops
-4. lexical traversal signature
+4. lexical traversal signature using fixed JavaScript code-unit ordering
 
-The result therefore does not depend on input edge order.
+The result therefore does not depend on input edge order or host locale.
 
 ## Result
 
@@ -89,3 +89,12 @@ Planner 2 does not yet:
 - evaluate soft route preferences
 
 It establishes trustworthy point-to-point travel costs for the scheduling and optimizer phases.
+
+
+## Graph lifecycle
+
+`buildRoutingGraph(...)` validates and compiles adjacency once.
+
+`findShortestRoute(graph, request)` consumes that compiled graph and never reparses or rebuilds the source package for each query. This matters because the later optimizer will request many point-to-point travel costs during one plan build.
+
+`declaredOutgoing(nodeId)` is a diagnostics view of declared graph topology only. It may include closed or conditional edges. Route search always applies availability and request constraints separately.
