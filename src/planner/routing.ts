@@ -86,6 +86,8 @@ export type RoutingGraph = {
 
 const graphInternals = new WeakMap<object, InternalGraph>();
 
+const COST_PRECISION = 1_000_000_000;
+
 const ALL_MODES: readonly RouteMode[] = [
   "walk",
   "skyfari",
@@ -118,6 +120,27 @@ function compareSignatures(a: readonly string[], b: readonly string[]) {
   return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
 }
 
+function cloneProvenance(
+  provenance: SourceProvenance,
+): SourceProvenance {
+  return { ...provenance };
+}
+
+function snapshotEdge(edge: RouteEdge): RouteEdge {
+  return {
+    ...edge,
+    provenance: Object.freeze(cloneProvenance(edge.provenance)),
+  };
+}
+
+function normalizedCost(value: number) {
+  return Math.round(value * COST_PRECISION) / COST_PRECISION;
+}
+
+function addCost(a: number, b: number) {
+  return normalizedCost(a + b);
+}
+
 function asPathEdge(traversal: Traversal): RoutePathEdge {
   return {
     edgeId: traversal.edge.id,
@@ -129,7 +152,7 @@ function asPathEdge(traversal: Traversal): RoutePathEdge {
     status: traversal.edge.status,
     distanceMeters: traversal.edge.distanceMeters,
     durationMinutes: traversal.edge.durationMinutes,
-    provenance: traversal.edge.provenance,
+    provenance: cloneProvenance(traversal.edge.provenance),
   };
 }
 
@@ -141,7 +164,9 @@ function makeGraph(data: WildRouteDataPackage): InternalGraph {
     adjacency.set(nodeId, []);
   }
 
-  for (const edge of data.routeEdges) {
+  for (const sourceEdge of data.routeEdges) {
+    const edge = Object.freeze(snapshotEdge(sourceEdge));
+
     adjacency.get(edge.fromNodeId)!.push({
       edge,
       fromNodeId: edge.fromNodeId,
@@ -181,6 +206,7 @@ export function buildRoutingGraph(value: unknown): RoutingGraph {
     },
   };
 
+  Object.freeze(graph);
   graphInternals.set(graph, internal);
   return graph;
 }
@@ -346,10 +372,14 @@ export function findShortestRoute(
 
       const next: SearchState = {
         nodeId: traversal.toNodeId,
-        distanceMeters:
-          current.distanceMeters + traversal.edge.distanceMeters,
-        durationMinutes:
-          current.durationMinutes + traversal.edge.durationMinutes,
+        distanceMeters: addCost(
+          current.distanceMeters,
+          traversal.edge.distanceMeters,
+        ),
+        durationMinutes: addCost(
+          current.durationMinutes,
+          traversal.edge.durationMinutes,
+        ),
         hops: current.hops + 1,
         signature: [
           ...current.signature,
