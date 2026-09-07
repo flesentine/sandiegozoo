@@ -74,7 +74,7 @@ function graph(
   };
 }
 
-function route(
+function routeData(
   data: WildRouteDataPackage,
   request: Parameters<typeof findShortestRoute>[1],
 ) {
@@ -143,7 +143,7 @@ test("chooses the shortest duration route and reports exact totals", () => {
   );
 
   const route = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "d",
     }),
@@ -175,7 +175,7 @@ test("can optimize distance instead of duration", () => {
   );
 
   const route = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "d",
       optimize: "distance",
@@ -194,12 +194,12 @@ test("respects one-way direction", () => {
   );
 
   assert.equal(
-    route(data, { fromNodeId: "a", toNodeId: "b" }).status,
+    routeData(data, { fromNodeId: "a", toNodeId: "b" }).status,
     "found",
   );
 
   assert.deepEqual(
-    route(data, { fromNodeId: "b", toNodeId: "a" }),
+    routeData(data, { fromNodeId: "b", toNodeId: "a" }),
     {
       status: "not-found",
       fromNodeId: "b",
@@ -216,7 +216,7 @@ test("closed edges are never routable", () => {
   );
 
   assert.equal(
-    route(data, { fromNodeId: "a", toNodeId: "b" }).status,
+    routeData(data, { fromNodeId: "a", toNodeId: "b" }).status,
     "not-found",
   );
 });
@@ -231,7 +231,7 @@ test("conditional edges require that exact edge ID to be enabled", () => {
   );
 
   assert.equal(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       enabledConditionalEdgeIds: ["conditional-a-b"],
@@ -240,7 +240,7 @@ test("conditional edges require that exact edge ID to be enabled", () => {
   );
 
   assert.equal(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       enabledConditionalEdgeIds: [
@@ -267,14 +267,14 @@ test("wheelchair routing rejects non-accessible edges", () => {
   );
 
   const normal = found(
-    route(data, { fromNodeId: "a", toNodeId: "c" }),
+    routeData(data, { fromNodeId: "a", toNodeId: "c" }),
   );
   assert.deepEqual(normal.edges.map((item) => item.edgeId), [
     "short-inaccessible",
   ]);
 
   const accessible = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       requireAccessible: true,
@@ -300,7 +300,7 @@ test("stroller routing rejects non-stroller edges independently", () => {
   );
 
   const route = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       requireStroller: true,
@@ -329,7 +329,7 @@ test("allowed transport modes are enforced", () => {
   );
 
   const unrestricted = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       allowedModes: transportModes,
@@ -340,7 +340,7 @@ test("allowed transport modes are enforced", () => {
   ]);
 
   const walkingOnly = found(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "c",
       allowedModes: ["walk"],
@@ -356,7 +356,7 @@ test("returns explicit unknown-node failures", () => {
   const data = graph(["a", "b"], [edge("a-b", "a", "b")]);
 
   assert.deepEqual(
-    route(data, {
+    routeData(data, {
       fromNodeId: "missing",
       toNodeId: "b",
     }),
@@ -369,7 +369,7 @@ test("returns explicit unknown-node failures", () => {
   );
 
   assert.deepEqual(
-    route(data, {
+    routeData(data, {
       fromNodeId: "a",
       toNodeId: "missing",
     }),
@@ -386,7 +386,7 @@ test("same-node routes are valid zero-cost routes", () => {
   const data = graph(["a"], []);
 
   assert.deepEqual(
-    route(data, { fromNodeId: "a", toNodeId: "a" }),
+    routeData(data, { fromNodeId: "a", toNodeId: "a" }),
     {
       status: "found",
       fromNodeId: "a",
@@ -413,7 +413,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
 
   assert.deepEqual(
     found(
-      route(secondary, { fromNodeId: "a", toNodeId: "d" }),
+      routeData(secondary, { fromNodeId: "a", toNodeId: "d" }),
     ).edges.map((item) => item.edgeId),
     ["a-c", "c-d"],
   );
@@ -428,7 +428,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
   );
 
   assert.deepEqual(
-    found(route(hops, { fromNodeId: "a", toNodeId: "d" })).edges.map(
+    found(routeData(hops, { fromNodeId: "a", toNodeId: "d" })).edges.map(
       (item) => item.edgeId,
     ),
     ["direct"],
@@ -446,7 +446,7 @@ test("tie-breaking uses secondary cost, then hops, then lexical path signature",
 
   assert.deepEqual(
     found(
-      route(lexical, { fromNodeId: "a", toNodeId: "d" }),
+      routeData(lexical, { fromNodeId: "a", toNodeId: "d" }),
     ).edges.map((item) => item.edgeId),
     ["a-first", "a-second"],
   );
@@ -464,10 +464,10 @@ test("route choice is independent of input edge order", () => {
   const reversed = graph(["a", "b", "c", "d"], [...edges].reverse());
 
   const first = found(
-    route(forward, { fromNodeId: "a", toNodeId: "d" }),
+    routeData(forward, { fromNodeId: "a", toNodeId: "d" }),
   );
   const second = found(
-    route(reversed, { fromNodeId: "a", toNodeId: "d" }),
+    routeData(reversed, { fromNodeId: "a", toNodeId: "d" }),
   );
 
   assert.deepEqual(second, first);
@@ -480,7 +480,7 @@ test("path output preserves edge provenance and traversal direction", () => {
   );
 
   const route = found(
-    route(data, { fromNodeId: "b", toNodeId: "a" }),
+    routeData(data, { fromNodeId: "b", toNodeId: "a" }),
   );
 
   assert.equal(route.edges[0].edgeId, "a-b");
@@ -534,7 +534,7 @@ test("lexical tie-breaking uses stable code-unit order, not host locale", () => 
   );
 
   const result = found(
-    route(data, { fromNodeId: "a", toNodeId: "d" }),
+    routeData(data, { fromNodeId: "a", toNodeId: "d" }),
   );
 
   assert.deepEqual(result.edges.map((item) => item.edgeId), [
