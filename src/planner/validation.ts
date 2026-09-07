@@ -895,7 +895,6 @@ export function assertValidWildRouteData(
     );
   }
 
-  return issues;
 }
 
 export function isValidWildRouteData(
