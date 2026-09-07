@@ -630,3 +630,107 @@ test("fixed code-unit tie-break chooses stable candidate order", () => {
 
   assert.deepEqual(result.selectedCandidateIds, ["z"]);
 });
+
+
+test("unreachable required exit is baseline infeasibility, not a mandatory tradeoff", () => {
+  const localGraph = graph([
+    edge("entry-a", "entry", "a", 5),
+  ]);
+
+  const result = optimizeItinerary(
+    request([], {
+      graph: localGraph,
+      endNodeId: "exit",
+    }),
+  );
+
+  assert.deepEqual(result, {
+    status: "infeasible",
+    reason: "END_NODE_UNREACHABLE",
+    evaluatedStates: 1,
+  });
+});
+
+test("exit that cannot be reached before departure is baseline infeasibility", () => {
+  const localGraph = graph([
+    edge("entry-exit", "entry", "exit", 20),
+  ]);
+
+  const result = optimizeItinerary(
+    request([], {
+      graph: localGraph,
+      horizon: horizon("09:00", "09:10"),
+      endNodeId: "exit",
+    }),
+  );
+
+  assert.deepEqual(result, {
+    status: "infeasible",
+    reason: "END_NODE_AFTER_HORIZON",
+    evaluatedStates: 1,
+  });
+});
+
+test("score context is validated even when there are no candidates", () => {
+  assert.throws(
+    () =>
+      optimizeItinerary(
+        request([], {
+          scoreContext: {
+            pace: "warp",
+            preferEasyPaths: false,
+          } as unknown as Parameters<typeof optimizeItinerary>[0]["scoreContext"],
+        }),
+      ),
+    /Pace must be/,
+  );
+});
+
+test("timed anchors require whole-minute schedule semantics", () => {
+  const bad: OptimizerCandidate = {
+    ...flexible("half-minute-show", "a"),
+    authority: "required",
+    timing: "windowed",
+    priority: "must",
+    baseDwellMinutes: 20,
+    anchor: {
+      id: "half-minute-show",
+      kind: "show",
+      title: "Half minute",
+      nodeId: "a",
+      arrivalWindowStartMinute: 589.5,
+      arrivalWindowEndMinute: 600.5,
+      serviceStartMinute: 600.5,
+      serviceEndMinute: 620.5,
+    },
+  };
+
+  assert.throws(
+    () => optimizeItinerary(request([bad])),
+    /requires a valid schedule anchor/,
+  );
+});
+
+test("malformed runtime anchors fail closed instead of throwing inside validation", () => {
+  const bad = {
+    ...flexible("bad-runtime-anchor", "a"),
+    authority: "required",
+    timing: "windowed",
+    priority: "must",
+    anchor: {
+      id: 42,
+      kind: "show",
+      title: [],
+      nodeId: "a",
+      arrivalWindowStartMinute: 590,
+      arrivalWindowEndMinute: 600,
+      serviceStartMinute: 600,
+      serviceEndMinute: 610,
+    },
+  } as unknown as OptimizerCandidate;
+
+  assert.throws(
+    () => optimizeItinerary(request([bad])),
+    /requires a valid schedule anchor/,
+  );
+});
