@@ -87,6 +87,7 @@ export type RouteEdge = {
 
 export type ScheduleEvent = {
   id: string;
+  activityId: string;
   title: string;
   date: string;
   startTime: string;
