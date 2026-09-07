@@ -663,3 +663,173 @@ test("cached route results are isolated between returned steps", () => {
   first.nodeIds.push("mutated");
   assert.deepEqual(second.nodeIds, ["entry"]);
 });
+
+
+test("dominance preserves a lex-better later state when a future fixed anchor can erase its time deficit", () => {
+  const localGraph = graph([], ["entry"]);
+
+  const flexibleFirst = {
+    ...flexible("z-flex", "entry", {
+      authority: "protected",
+      priority: "must",
+      baseDwellMinutes: 10,
+    }),
+    selectionKey: "a-flex",
+  };
+
+  const middleLock: OptimizerCandidate = {
+    ...flexible("a-lock", "entry"),
+    selectionKey: "b-lock",
+    authority: "locked",
+    timing: "fixed",
+    priority: "must",
+    baseDwellMinutes: 10,
+    anchor: lockedAnchor(
+      "a-lock",
+      "entry",
+      600,
+      10,
+    ),
+  };
+
+  const resetLock: OptimizerCandidate = {
+    ...flexible("c-reset", "entry"),
+    selectionKey: "c-reset",
+    authority: "locked",
+    timing: "fixed",
+    priority: "must",
+    baseDwellMinutes: 10,
+    anchor: lockedAnchor(
+      "c-reset",
+      "entry",
+      660,
+      10,
+    ),
+  };
+
+  const optimizerRequest = request(
+    [flexibleFirst, middleLock, resetLock],
+    {
+      graph: localGraph,
+      initialNodeId: "entry",
+      horizon: horizon("09:00", "12:00"),
+    },
+  );
+
+  const oracle = optimizeItinerary(optimizerRequest);
+  assert.equal(oracle.status, "optimized");
+  if (oracle.status !== "optimized") {
+    throw new Error("expected oracle optimization");
+  }
+
+  assert.deepEqual(oracle.selectedCandidateIds, [
+    "a-lock",
+    "z-flex",
+    "c-reset",
+  ]);
+
+  const scalable = optimizeItineraryScalable(
+    optimizerRequest,
+    { stateBudget: 500_000 },
+  );
+
+  assert.equal(scalable.status, "complete");
+  if (
+    scalable.status !== "complete" ||
+    scalable.result.status !== "optimized"
+  ) {
+    throw new Error("expected scalable optimization");
+  }
+
+  assert.deepEqual(
+    semantic(scalable.result),
+    semantic(oracle),
+  );
+  assert.deepEqual(
+    scalable.result.selectedCandidateIds,
+    ["a-lock", "z-flex", "c-reset"],
+  );
+  assert.ok(scalable.stats.prunedByDominance > 0);
+});
+
+test("upper-bound pruning never lets lower-tier travel advantage block a remaining Favorite", () => {
+  const localGraph = graph([
+    edge("entry-a", "entry", "a", 1),
+    edge("entry-b", "entry", "b", 8),
+    edge("a-b", "a", "b", 8),
+  ], ["entry", "a", "b"]);
+
+  const optimizerRequest = request(
+    [
+      flexible("cheap-bonus", "a", {
+        priority: "bonus",
+        baseDwellMinutes: 5,
+      }),
+      flexible("far-favorite", "b", {
+        priority: "favorite",
+        baseDwellMinutes: 5,
+      }),
+    ],
+    {
+      graph: localGraph,
+      initialNodeId: "entry",
+      horizon: horizon("09:00", "09:30"),
+    },
+  );
+
+  const oracle = optimizeItinerary(optimizerRequest);
+  assert.equal(oracle.status, "optimized");
+  if (oracle.status !== "optimized") {
+    throw new Error("expected oracle optimization");
+  }
+  assert.ok(
+    oracle.selectedCandidateIds.includes("far-favorite"),
+  );
+
+  const scalable = optimizeItineraryScalable(
+    optimizerRequest,
+    { stateBudget: 500_000 },
+  );
+
+  assert.equal(scalable.status, "complete");
+  if (scalable.status !== "complete") {
+    throw new Error("expected scalable completion");
+  }
+
+  assert.deepEqual(
+    semantic(scalable.result),
+    semantic(oracle),
+  );
+});
+
+test("upper-bound pruning is exercised while retaining exact oracle parity", () => {
+  const localGraph = graph([], ["entry"]);
+  const optimizerRequest = request(
+    [
+      flexible("favorite", "entry", {
+        priority: "favorite",
+        baseDwellMinutes: 8,
+      }),
+      flexible("bonus-a", "entry", {
+        priority: "bonus",
+        baseDwellMinutes: 8,
+      }),
+      flexible("bonus-b", "entry", {
+        priority: "bonus",
+        baseDwellMinutes: 8,
+      }),
+      flexible("bonus-c", "entry", {
+        priority: "bonus",
+        baseDwellMinutes: 8,
+      }),
+    ],
+    {
+      graph: localGraph,
+      initialNodeId: "entry",
+      horizon: horizon("09:00", "09:22"),
+    },
+  );
+
+  const scalable = assertOracleParity(optimizerRequest);
+  assert.ok(scalable.stats.prunedByUpperBound > 0);
+});
