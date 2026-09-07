@@ -149,7 +149,8 @@
         "confidence": "verified",
         "effectiveFrom": "2026-09-19",
         "effectiveTo": "2026-09-19"
-      }
+      },
+      "activityId": "fixture-show"
     }
   ]
 }
