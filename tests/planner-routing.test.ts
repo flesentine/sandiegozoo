@@ -26,7 +26,7 @@ function node(id: string): RouteNode {
     zoneId: "fixture-zone",
     lat: 0,
     lng: 0,
-    provenance,
+    provenance: { ...provenance },
   };
 }
 
@@ -49,7 +49,7 @@ function edge(
     stroller: true,
     oneWay: false,
     status: "open",
-    provenance,
+    provenance: { ...provenance },
     ...overrides,
   };
 }
@@ -64,7 +64,7 @@ function graph(
       {
         id: "fixture-zone",
         name: "Fixture Zone",
-        provenance,
+        provenance: { ...provenance },
       },
     ],
     places: [],
