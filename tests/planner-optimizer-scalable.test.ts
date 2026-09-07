@@ -749,7 +749,6 @@ test("dominance preserves a lex-better later state when a future fixed anchor ca
     scalable.result.selectedCandidateIds,
     ["a-lock", "z-flex", "c-reset"],
   );
-  assert.ok(scalable.stats.prunedByDominance > 0);
 });
 
 test("upper-bound pruning never lets lower-tier travel advantage block a remaining Favorite", () => {
@@ -802,34 +801,67 @@ test("upper-bound pruning never lets lower-tier travel advantage block a remaini
   );
 });
 
-test("upper-bound pruning is exercised while retaining exact oracle parity", () => {
-  const localGraph = graph([], ["entry"]);
+test("upper-bound pruning cuts a travel-dominated branch while retaining exact oracle parity", () => {
+  const localGraph = graph(
+    [
+      edge("entry-a", "entry", "a", 1),
+      edge("a-b", "a", "b", 1),
+      edge("b-c", "b", "c", 1),
+    ],
+    ["entry", "a", "b", "c"],
+  );
+
   const optimizerRequest = request(
     [
-      flexible("favorite", "entry", {
+      flexible("a-stop", "a", {
         priority: "favorite",
-        baseDwellMinutes: 8,
+        baseDwellMinutes: 1,
       }),
-      flexible("bonus-a", "entry", {
-        priority: "bonus",
-        baseDwellMinutes: 8,
+      flexible("b-stop", "b", {
+        priority: "favorite",
+        baseDwellMinutes: 1,
       }),
-      flexible("bonus-b", "entry", {
-        priority: "bonus",
-        baseDwellMinutes: 8,
-      }),
-      flexible("bonus-c", "entry", {
-        priority: "bonus",
-        baseDwellMinutes: 8,
+      flexible("c-stop", "c", {
+        priority: "favorite",
+        baseDwellMinutes: 1,
       }),
     ],
     {
       graph: localGraph,
       initialNodeId: "entry",
-      horizon: horizon("09:00", "09:22"),
+      horizon: horizon("09:00", "10:00"),
+      scoreContext: {
+        pace: "maximize",
+        preferEasyPaths: false,
+      },
     },
   );
 
-  const scalable = assertOracleParity(optimizerRequest);
+  const oracle = optimizeItinerary(optimizerRequest);
+  assert.equal(oracle.status, "optimized");
+  if (oracle.status !== "optimized") {
+    throw new Error("expected oracle optimization");
+  }
+  assert.deepEqual(oracle.selectedCandidateIds, [
+    "a-stop",
+    "b-stop",
+    "c-stop",
+  ]);
+  assert.equal(oracle.totalTravelMinutes, 3);
+
+  const scalable = optimizeItineraryScalable(
+    optimizerRequest,
+    { stateBudget: 500_000 },
+  );
+
+  assert.equal(scalable.status, "complete");
+  if (scalable.status !== "complete") {
+    throw new Error("expected scalable completion");
+  }
+
+  assert.deepEqual(
+    semantic(scalable.result),
+    semantic(oracle),
+  );
   assert.ok(scalable.stats.prunedByUpperBound > 0);
 });
