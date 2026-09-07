@@ -163,3 +163,63 @@ Planner 6's focused engine tests remain responsible for proving that dominance p
 Qualification reports copy optimizer statistics and construct fresh failure arrays.
 
 Regression tests now prove that mutating one returned report does not contaminate a later qualification run and that running the frozen scenarios in reverse order produces the same per-scenario evidence.
+
+
+## Final release-gate hardening
+
+The final pre-merge code review treats qualification configuration as untrusted release-policy input.
+
+Planner 7 now rejects:
+
+- unknown scenario fields
+- unknown threshold fields / misspelled threshold names
+- unsafe-integer budgets and count thresholds
+- budget-headroom thresholds on non-complete expected statuses
+- `complete` scenarios that provide no capacity or oracle-parity evidence beyond the status itself
+
+A scenario cannot therefore become green merely because a threshold name was misspelled or because all meaningful gates were omitted.
+
+## Status / metric consistency
+
+The qualification harness independently checks optimizer status against deterministic state accounting:
+
+- `complete` may not evaluate beyond the declared state budget
+- `search-budget-exceeded` must actually cross the declared state budget
+- `candidate-limit-exceeded` must occur before any search state is evaluated
+
+Violations are reported as:
+
+`STATUS_METRICS_INCONSISTENT`
+
+Budget-edge regressions pin both:
+- exact-budget completion
+- budget-plus-one exhaustion
+
+The report distinguishes:
+- `budgetHeadroomStates`
+- `budgetOverrunStates`
+- `budgetExhausted`
+
+so exhaustion is never disguised as zero headroom.
+
+## Oracle isolation and semantic comparison
+
+Planner 6 and Planner 5 now receive independent snapshots of the same qualification request while sharing only the immutable compiled routing graph authority.
+
+Candidate objects, anchors, horizon, score context, and route-policy arrays are cloned separately for each engine.
+
+A future accidental mutation by one engine therefore cannot change the input seen by the other engine or contaminate the caller's scenario.
+
+Oracle semantic comparison ignores only the **top-level engine-specific** `evaluatedStates` field.
+
+Nested fields named `evaluatedStates` are no longer recursively discarded, preventing a future meaningful nested metric from being silently hidden by parity normalization.
+
+## Determinism
+
+The qualification suite now proves:
+
+- running the same scenario twice produces the same report
+- source scenario data remains unchanged
+- reversing scenario execution order does not change any per-scenario report
+
+Qualification evidence is therefore independent of suite ordering and prior scenario execution.
