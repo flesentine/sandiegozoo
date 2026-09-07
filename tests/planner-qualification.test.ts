@@ -735,3 +735,189 @@ test("qualification rejects malformed runtime scenario and threshold objects", (
     /thresholds must be an object/,
   );
 });
+
+
+test("qualification rejects unknown scenario and threshold fields", () => {
+  const scenario = frozenScenarios()[0];
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        typoField: true,
+      } as unknown as OptimizerQualificationScenario),
+    /scenario contains unsupported field: typoField/,
+  );
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        thresholds: {
+          ...scenario.thresholds,
+          maxEvaluateStates: 100,
+        },
+      } as unknown as OptimizerQualificationScenario),
+    /thresholds contain unsupported field: maxEvaluateStates/,
+  );
+});
+
+test("complete qualification cannot pass on status alone", () => {
+  const scenario = frozenScenarios()[0];
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        id: "status-only-complete",
+        thresholds: {
+          expectedStatus: "complete",
+        },
+      }),
+    /require at least one capacity or oracle-parity evidence gate/,
+  );
+});
+
+test("budget headroom threshold is rejected for non-complete expected status", () => {
+  const scenario = frozenScenarios().find(
+    (item) => item.id === "budget-saturation-sentinel",
+  )!;
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        id: "meaningless-budget-headroom",
+        thresholds: {
+          ...scenario.thresholds,
+          minBudgetHeadroomStates: 0,
+        },
+      }),
+    /budget headroom is only meaningful/,
+  );
+});
+
+test("qualification pins exact-budget completion and budget-plus-one exhaustion", () => {
+  const localGraph = graph([], ["entry"]);
+  const emptyRequest = request([], {
+    graph: localGraph,
+    initialNodeId: "entry",
+  });
+
+  const exact = runOptimizerQualification({
+    id: "exact-budget-complete",
+    request: emptyRequest,
+    stateBudget: 3,
+    thresholds: {
+      expectedStatus: "complete",
+      maxEvaluatedStates: 3,
+    },
+  });
+
+  assert.equal(exact.passed, true);
+  assert.equal(exact.optimizerStatus, "complete");
+  assert.equal(exact.evaluatedStates, 3);
+  assert.equal(exact.budgetExhausted, false);
+  assert.equal(exact.budgetHeadroomStates, 0);
+  assert.equal(exact.budgetOverrunStates, 0);
+  assert.equal(exact.budgetHeadroomRatio, 0);
+
+  const over = runOptimizerQualification({
+    id: "budget-plus-one-exhaustion",
+    request: emptyRequest,
+    stateBudget: 2,
+    thresholds: {
+      expectedStatus: "search-budget-exceeded",
+      maxEvaluatedStates: 3,
+    },
+  });
+
+  assert.equal(over.passed, true);
+  assert.equal(
+    over.optimizerStatus,
+    "search-budget-exceeded",
+  );
+  assert.equal(over.evaluatedStates, 3);
+  assert.equal(over.budgetExhausted, true);
+  assert.equal(over.budgetHeadroomStates, 0);
+  assert.equal(over.budgetOverrunStates, 1);
+  assert.equal(over.budgetHeadroomRatio, 0);
+});
+
+test("qualification reports are deterministic under suite ordering", () => {
+  const scenarios = frozenScenarios();
+  const forward = runOptimizerQualificationSuite(scenarios);
+  const reverse = runOptimizerQualificationSuite(
+    [...scenarios].reverse(),
+  );
+
+  const byId = (reports: typeof forward) =>
+    new Map(reports.map((report) => [report.id, report]));
+
+  const forwardById = byId(forward);
+  const reverseById = byId(reverse);
+
+  assert.deepEqual(
+    [...forwardById.keys()].sort(),
+    [...reverseById.keys()].sort(),
+  );
+
+  for (const id of forwardById.keys()) {
+    assert.deepEqual(
+      reverseById.get(id),
+      forwardById.get(id),
+    );
+  }
+});
+
+test("qualification isolates engine runs and does not mutate source scenarios", () => {
+  const scenario = frozenScenarios().find(
+    (item) => item.id === "oracle-mixed",
+  )!;
+  const before = JSON.stringify({
+    horizon: scenario.request.horizon,
+    candidates: scenario.request.candidates,
+    scoreContext: scenario.request.scoreContext,
+    routePolicy: scenario.request.routePolicy,
+  });
+
+  const first = runOptimizerQualification(scenario);
+  const second = runOptimizerQualification(scenario);
+
+  assert.deepEqual(second, first);
+  assert.equal(
+    JSON.stringify({
+      horizon: scenario.request.horizon,
+      candidates: scenario.request.candidates,
+      scoreContext: scenario.request.scoreContext,
+      routePolicy: scenario.request.routePolicy,
+    }),
+    before,
+  );
+});
+
+test("qualification count thresholds and budgets require safe integers", () => {
+  const scenario = frozenScenarios()[0];
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        stateBudget: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    /stateBudget must be a positive finite integer/,
+  );
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...scenario,
+        thresholds: {
+          ...scenario.thresholds,
+          maxEvaluatedStates:
+            Number.MAX_SAFE_INTEGER + 1,
+        },
+      }),
+    /maxEvaluatedStates must be a non-negative finite integer/,
+  );
+});
