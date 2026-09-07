@@ -8,6 +8,7 @@ No generated UI screenshot, guessed coordinate, enclosure centroid, or straight-
 
 Production records must carry:
 
+- runtime-valid record shapes and enum/boolean values
 - stable IDs
 - source URL and source label
 - last-verified timestamp
@@ -17,7 +18,7 @@ Production records must carry:
 Guest-facing places must have:
 
 - a guest navigation point
-- a route-node ID
+- a route-node ID in the same zone
 - a zone ID
 - optional Apple Maps label/place ID
 
@@ -35,7 +36,7 @@ Routing edges must explicitly model:
 
 Timed experiences must explicitly model:
 
-- visit date
+- visit date that falls within any declared source effective window
 - start/end time
 - recommended arrival lead time
 - destination place
