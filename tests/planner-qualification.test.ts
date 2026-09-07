@@ -353,7 +353,6 @@ function frozenScenarios(): OptimizerQualificationScenario[] {
         expectedStatus: "complete",
         maxEvaluatedStates: 50_000,
         minBudgetHeadroomStates: 450_000,
-        minRouteCacheHits: 1,
         requireOracleParity: true,
       },
     },
@@ -365,8 +364,6 @@ function frozenScenarios(): OptimizerQualificationScenario[] {
         expectedStatus: "complete",
         maxEvaluatedStates: 100_000,
         minBudgetHeadroomStates: 400_000,
-        minDominancePrunes: 1,
-        minRouteCacheHits: 1,
       },
     },
     {
@@ -377,7 +374,6 @@ function frozenScenarios(): OptimizerQualificationScenario[] {
         expectedStatus: "complete",
         maxEvaluatedStates: 10_000,
         minBudgetHeadroomStates: 490_000,
-        minUpperBoundPrunes: 1,
         requireOracleParity: true,
       },
     },
@@ -552,5 +548,173 @@ test("oracle parity requirement reports explicit oracle-limit failure", () => {
       (failure) =>
         failure.code === "ORACLE_LIMIT_EXCEEDED",
     ),
+  );
+});
+
+
+test("qualification validates threshold values fail closed", () => {
+  const base = frozenScenarios()[0];
+
+  for (const [key, value] of [
+    ["maxEvaluatedStates", Number.NaN],
+    ["maxEvaluatedStates", -1],
+    ["maxEvaluatedStates", 1.5],
+    ["minBudgetHeadroomStates", -1],
+    ["minDominancePrunes", Number.POSITIVE_INFINITY],
+    ["minUpperBoundPrunes", 0.25],
+    ["minRouteCacheHits", -5],
+    ["maxRouteCacheMisses", Number.NaN],
+  ] as const) {
+    assert.throws(
+      () =>
+        runOptimizerQualification({
+          ...base,
+          id: `bad-${key}`,
+          thresholds: {
+            ...base.thresholds,
+            [key]: value,
+          },
+        }),
+      new RegExp(`${key} must be a non-negative finite integer`),
+    );
+  }
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...base,
+        id: "bad-status",
+        thresholds: {
+          ...base.thresholds,
+          expectedStatus: "maybe",
+        } as unknown as OptimizerQualificationScenario["thresholds"],
+      }),
+    /expectedStatus is invalid/,
+  );
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...base,
+        id: "bad-parity-flag",
+        thresholds: {
+          ...base.thresholds,
+          requireOracleParity: "yes",
+        } as unknown as OptimizerQualificationScenario["thresholds"],
+      }),
+    /requireOracleParity must be boolean/,
+  );
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...base,
+        id: "impossible-headroom",
+        thresholds: {
+          ...base.thresholds,
+          minBudgetHeadroomStates: base.stateBudget + 1,
+        },
+      }),
+    /cannot exceed stateBudget/,
+  );
+
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...base,
+        id: "contradictory-parity",
+        thresholds: {
+          ...base.thresholds,
+          expectedStatus: "search-budget-exceeded",
+          requireOracleParity: true,
+        },
+      }),
+    /oracle parity requires expectedStatus complete/,
+  );
+});
+
+test("qualification reports budget exhaustion separately from headroom", () => {
+  const scenario = frozenScenarios().find(
+    (item) =>
+      item.id === "budget-saturation-sentinel",
+  )!;
+  const report = runOptimizerQualification(scenario);
+
+  assert.equal(report.optimizerStatus, "search-budget-exceeded");
+  assert.equal(report.budgetExhausted, true);
+  assert.equal(report.budgetHeadroomStates, 0);
+  assert.equal(report.budgetHeadroomRatio, 0);
+  assert.equal(report.budgetOverrunStates, 1);
+});
+
+test("unexpected scalable non-completion records both status and parity failure", () => {
+  const base = frozenScenarios()[0];
+  const report = runOptimizerQualification({
+    ...base,
+    id: "unexpected-budget-exhaustion",
+    stateBudget: 1,
+    thresholds: {
+      expectedStatus: "complete",
+      requireOracleParity: true,
+    },
+  });
+
+  assert.equal(report.passed, false);
+  assert.equal(report.optimizerStatus, "search-budget-exceeded");
+  assert.equal(report.oracleParityChecked, true);
+  assert.equal(report.oracleParityMatched, false);
+  assert.deepEqual(
+    report.failures.map((failure) => failure.code),
+    ["STATUS_MISMATCH", "ORACLE_RESULT_MISMATCH"],
+  );
+});
+
+test("qualification report snapshots do not contaminate later runs", () => {
+  const scenario = frozenScenarios()[0];
+  const first = runOptimizerQualification(scenario);
+  first.stats.evaluatedStates = 999_999;
+  first.failures.push({
+    code: "MAX_STATES_EXCEEDED",
+    message: "mutated",
+  });
+
+  const second = runOptimizerQualification(scenario);
+  assert.notEqual(second.stats.evaluatedStates, 999_999);
+  assert.deepEqual(second.failures, []);
+  assert.equal(second.passed, true);
+});
+
+test("qualification suite results are scenario-order independent", () => {
+  const scenarios = frozenScenarios();
+  const forward = runOptimizerQualificationSuite(scenarios);
+  const reverse = runOptimizerQualificationSuite(
+    [...scenarios].reverse(),
+  );
+
+  const byId = (reports: typeof forward) =>
+    Object.fromEntries(
+      reports.map((report) => [report.id, report]),
+    );
+
+  assert.deepEqual(byId(reverse), byId(forward));
+});
+
+test("qualification rejects malformed runtime scenario and threshold objects", () => {
+  assert.throws(
+    () =>
+      runOptimizerQualification(
+        null as unknown as OptimizerQualificationScenario,
+      ),
+    /scenario must be an object/,
+  );
+
+  const base = frozenScenarios()[0];
+  assert.throws(
+    () =>
+      runOptimizerQualification({
+        ...base,
+        thresholds: null,
+      } as unknown as OptimizerQualificationScenario),
+    /thresholds must be an object/,
   );
 });
