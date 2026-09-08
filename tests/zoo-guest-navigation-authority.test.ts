@@ -103,11 +103,19 @@ test("guest access-control and ingress topology are source facts, not route-edge
       entryPlazaWayId: "1126804580",
       controlledPassageWayId: "755054695",
       interiorContinuationWayId: "755054694",
+      interiorConnectionNodeId: "7053320516",
+      frontStreetWayId: "1481425058",
+      frontStreetConnectionNodeId: "7053320515",
       connectsToDescriptor: "Front Street",
-      sourceUrls: [
+      waySourceUrls: [
         "https://www.openstreetmap.org/way/1126804580",
         "https://www.openstreetmap.org/way/755054695",
         "https://www.openstreetmap.org/way/755054694",
+        "https://www.openstreetmap.org/way/1481425058",
+      ],
+      connectionNodeSourceUrls: [
+        "https://www.openstreetmap.org/node/7053320516",
+        "https://www.openstreetmap.org/node/7053320515",
       ],
       plannerMaterialization: "topology-only",
     },
