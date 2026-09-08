@@ -8,7 +8,7 @@ import {
   type RouteEdgeSemanticAudit,
 } from "../src/data/zooIngressEdgeSemanticsAuthority.ts";
 
-test("controlled entrance passage supports walk mode and derived distance without promoting generic oneway", () => {
+test("controlled entrance passage supports route-node endpoints, walk mode, and derived distance without promoting generic oneway", () => {
   const audit = INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
     (candidate) => candidate.sourceWayId === "755054695",
   );
@@ -18,6 +18,17 @@ test("controlled entrance passage supports walk mode and derived distance withou
     highway: "pedestrian",
     oneway: "yes",
     tunnel: "building_passage",
+  });
+  assert.deepEqual(audit.routeNodesAuthority, {
+    status: "supported",
+    value: {
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-interior-route-node",
+    },
+    basis:
+      "Planner 15 route-node materialization from frozen OSM way endpoint nodes",
   });
   assert.deepEqual(audit.modeAuthority, {
     status: "supported",
@@ -36,7 +47,7 @@ test("controlled entrance passage supports walk mode and derived distance withou
   });
 });
 
-test("interior Front Street connection supports walk mode and distance while pedestrian direction remains unsourced", () => {
+test("interior Front Street connection supports route-node endpoints, walk mode, and distance while pedestrian direction remains unsourced", () => {
   const audit = INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
     (candidate) => candidate.sourceWayId === "755054694",
   );
@@ -44,6 +55,17 @@ test("interior Front Street connection supports walk mode and distance while ped
 
   assert.deepEqual(audit.sourceTags, {
     highway: "pedestrian",
+  });
+  assert.deepEqual(audit.routeNodesAuthority, {
+    status: "supported",
+    value: {
+      fromNodeId:
+        "sdz-ingress-node-interior-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+    },
+    basis:
+      "Planner 15 route-node materialization from frozen OSM way endpoint nodes",
   });
   assert.deepEqual(audit.modeAuthority, {
     status: "supported",
@@ -70,10 +92,9 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
   );
 
   for (const audit of INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS) {
-    assert.equal(audit.routeNodesAuthority.status, "blocked");
     assert.equal(
-      audit.routeNodesAuthority.reason,
-      "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
+      audit.routeNodesAuthority.status,
+      "supported",
     );
 
     assert.equal(audit.durationAuthority.status, "blocked");
@@ -119,7 +140,7 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
   }
 });
 
-test("route-edge readiness exposes only mode and distance as supported", () => {
+test("route-edge readiness exposes route nodes, mode, and distance as supported", () => {
   assert.deepEqual(
     assessIngressRouteEdgeReadiness(
       "sdz-geo-main-entrance",
@@ -131,9 +152,12 @@ test("route-edge readiness exposes only mode and distance as supported", () => {
         "sdz-ingress-way-controlled-passage-route-edge-audit",
         "sdz-ingress-way-front-street-connection-route-edge-audit",
       ],
-      supportedFields: ["mode", "distance"],
-      blockedFields: [
+      supportedFields: [
         "routeNodes",
+        "mode",
+        "distance",
+      ],
+      blockedFields: [
         "duration",
         "difficulty",
         "stairs",
@@ -211,6 +235,35 @@ test("route-edge semantic audits are deeply immutable", () => {
       INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS[0].oneWayAuthority,
     ),
     true,
+  );
+});
+
+
+test("integrity rejects route-node endpoint drift from Planner 15 authority", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              routeNodesAuthority: {
+                ...audit.routeNodesAuthority,
+                value: {
+                  ...audit.routeNodesAuthority.value,
+                  toNodeId:
+                    "sdz-ingress-node-front-street-route-node",
+                },
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed its supported fields/,
   );
 });
 
