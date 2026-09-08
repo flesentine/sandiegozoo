@@ -11,6 +11,7 @@ import {
 } from "./zooIngressRouteNodeAuthority.ts";
 import {
   assessPedestrianDirectionAuthority,
+  pedestrianDirectionSourceForWay,
 } from "./zooIngressPedestrianDirectionAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
@@ -155,17 +156,6 @@ function validOsmWayUrl(value: string, wayId: string) {
   }
 }
 
-const SOURCE_TAGS_BY_WAY = deepFreeze({
-  "755054695": {
-    highway: "pedestrian",
-    oneway: "yes",
-    tunnel: "building_passage",
-  },
-  "755054694": {
-    highway: "pedestrian",
-  },
-} as const);
-
 function blocked(
   reason: BlockedFieldAuthority["reason"],
 ): BlockedFieldAuthority {
@@ -190,15 +180,14 @@ function buildAudit(
     );
   }
 
-  const sourceTags =
-    SOURCE_TAGS_BY_WAY[
-      sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
-    ];
-  if (!sourceTags) {
+  const directionSource =
+    pedestrianDirectionSourceForWay(sourceWayId);
+  if (!directionSource) {
     throw new Error(
-      `Ingress way ${sourceWayId} has no frozen semantic source tags.`,
+      `Ingress way ${sourceWayId} has no Planner 16 source-tag snapshot.`,
     );
   }
+  const sourceTags = directionSource.sourceTags;
 
   const fromRouteNode =
     routeNodeForSourceObjectId(way.nodeIds[0]);
@@ -331,10 +320,11 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
 
     const way = wayById.get(audit.sourceWayId);
     const distance = distanceByWay.get(audit.sourceWayId);
-    const sourceTags =
-      SOURCE_TAGS_BY_WAY[
-        audit.sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
-      ];
+    const directionSource =
+      pedestrianDirectionSourceForWay(
+        audit.sourceWayId,
+      );
+    const sourceTags = directionSource?.sourceTags;
 
     if (
       !way ||
