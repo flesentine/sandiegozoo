@@ -350,6 +350,81 @@ test("divergent independent observations are reported as conflicting rather than
   );
 });
 
+test("agreement helper fails closed on empty or cross-target evidence", () => {
+  assert.throws(
+    () =>
+      classifyFeatureObservationAgreement(
+        "sdz-geo-wegeforth-bowl",
+        [],
+      ),
+    /requires at least one observation/,
+  );
+
+  assert.throws(
+    () =>
+      classifyFeatureObservationAgreement(
+        "sdz-geo-wegeforth-bowl",
+        [INDEPENDENT_GEOSPATIAL_OBSERVATIONS[2]],
+      ),
+    /does not belong to target/,
+  );
+});
+
+test("multiple observations from one provider do not become independent corroboration", () => {
+  const first = INDEPENDENT_GEOSPATIAL_OBSERVATIONS[0];
+  const second: IndependentGeospatialObservation = {
+    ...first,
+    id: "same-provider-second-object",
+    sourceObjectId: "same-provider-second-object",
+    lat: first.lat + 0.00001,
+  };
+
+  assert.deepEqual(
+    classifyFeatureObservationAgreement(
+      first.targetId,
+      [first, second],
+    ),
+    {
+      status: "single-source-feature-location",
+      targetId: first.targetId,
+      observationIds: [
+        first.id,
+        second.id,
+      ].sort(),
+    },
+  );
+});
+
+test("geospatial runtime authority enums fail closed", () => {
+  const target = {
+    ...INDEPENDENT_GEOSPATIAL_TARGETS[0],
+    targetKind: "invented-kind",
+  } as unknown as GeospatialTarget;
+
+  assert.throws(
+    () =>
+      assertIndependentGeospatialAuthorityIntegrity(
+        [target],
+        [INDEPENDENT_GEOSPATIAL_OBSERVATIONS[0]],
+      ),
+    /unsupported authority semantics/,
+  );
+
+  const observation = {
+    ...INDEPENDENT_GEOSPATIAL_OBSERVATIONS[0],
+    provider: "InventedProvider",
+  } as unknown as IndependentGeospatialObservation;
+
+  assert.throws(
+    () =>
+      assertIndependentGeospatialAuthorityIntegrity(
+        [INDEPENDENT_GEOSPATIAL_TARGETS[0]],
+        [observation],
+      ),
+    /unsupported provider authority/,
+  );
+});
+
 test("unknown feature target is explicit", () => {
   assert.deepEqual(
     assessFeatureGeospatialAuthority(
