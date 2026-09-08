@@ -139,6 +139,31 @@ function validOfficialContextUrl(value: string) {
   }
 }
 
+const FORBIDDEN_ROUTE_FIELDS = [
+  "routeNodeId",
+  "distanceMeters",
+  "durationMinutes",
+  "difficulty",
+  "stairs",
+  "accessible",
+  "stroller",
+  "oneWay",
+  "status",
+] as const;
+
+function assertNoRouteMaterialization(
+  value: object,
+  label: string,
+) {
+  for (const field of FORBIDDEN_ROUTE_FIELDS) {
+    if (field in value) {
+      throw new Error(
+        `${label} cannot contain planner route field ${field}.`,
+      );
+    }
+  }
+}
+
 function validOsmObjectUrl(
   value: string,
   objectType: "node" | "way",
@@ -242,10 +267,8 @@ export function assertGuestNavigationAuthorityIntegrity(
       target,
     ]),
   );
-  const entranceAnchorIds = new Set(
-    OFFICIAL_MAP_ANCHORS.filter(
-      (anchor) => anchor.role === "entrance",
-    ).map((anchor) => anchor.id),
+  const officialMapAnchorIds = new Set(
+    OFFICIAL_MAP_ANCHORS.map((anchor) => anchor.id),
   );
   const featureWayIdsByTarget = new Map<string, Set<string>>();
 
@@ -270,6 +293,11 @@ export function assertGuestNavigationAuthorityIntegrity(
   >();
 
   for (const entrance of entrances) {
+    assertNoRouteMaterialization(
+      entrance,
+      `Explicit guest entrance ${entrance.id}`,
+    );
+
     if (!stableId(entrance.id)) {
       throw new Error(
         "Explicit guest entrance contains an invalid stable ID.",
@@ -288,9 +316,9 @@ export function assertGuestNavigationAuthorityIntegrity(
         `Explicit guest entrance ${entrance.id} references unknown target ${entrance.targetId}.`,
       );
     }
-    if (!entranceAnchorIds.has(target.mapAnchorId)) {
+    if (!officialMapAnchorIds.has(target.mapAnchorId)) {
       throw new Error(
-        `Explicit guest entrance ${entrance.id} target is not an official entrance map anchor.`,
+        `Explicit guest entrance ${entrance.id} target does not match a known official map anchor.`,
       );
     }
     if (entranceByTarget.has(entrance.targetId)) {
@@ -369,6 +397,11 @@ export function assertGuestNavigationAuthorityIntegrity(
   >();
 
   for (const accessControl of accessControls) {
+    assertNoRouteMaterialization(
+      accessControl,
+      `Entrance access control ${accessControl.id}`,
+    );
+
     if (!stableId(accessControl.id)) {
       throw new Error(
         "Entrance access-control observation contains an invalid stable ID.",
@@ -450,6 +483,11 @@ export function assertGuestNavigationAuthorityIntegrity(
   >();
 
   for (const record of topology) {
+    assertNoRouteMaterialization(
+      record,
+      `Entrance topology ${record.id}`,
+    );
+
     if (!stableId(record.id)) {
       throw new Error(
         "Entrance pedestrian topology contains an invalid stable ID.",
