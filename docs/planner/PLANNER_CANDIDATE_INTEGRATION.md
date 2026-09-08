@@ -167,3 +167,64 @@ Planner 8 does not yet:
 - execute live replanning
 
 The next data phase can add source-backed bindings and verified records without bypassing this adapter or its qualification gate.
+
+
+## Final integration-boundary hardening
+
+The final pre-merge code review found four trust/correctness gaps and closed them.
+
+### Effective date is part of trust
+
+`confidence: "verified"` is not sufficient by itself.
+
+For the selected visit date, Planner 8 now also requires applicable provenance ranges for:
+
+- initial/end route nodes
+- animal places and destination nodes
+- scheduled performance event/place/destination node
+- reservation place/destination node
+- route edges and endpoint nodes
+
+A verified record outside `effectiveFrom/effectiveTo` is not used as current planning authority.
+
+No arbitrary “stale after N days” rule is invented. `lastVerified` remains provenance evidence; age-based expiry can be added only when product/data policy defines one.
+
+### Conditional edges are explicit authority
+
+Every requested `enabledConditionalEdgeId` must:
+
+- exist
+- actually have source status `conditional`
+- survive the verified/effective routing gate
+
+Unknown, open/closed, or untrusted conditional-edge IDs block integration rather than being silently ignored.
+
+Validated IDs are code-unit sorted before entering route policy, so input order cannot affect the request.
+
+### Animal binding collisions
+
+Two selected UI animal IDs may not bind to the same planner place.
+
+Such a mapping would create two logical optimizer requests for one physical animal stop and double-count visitor preference utility.
+
+Planner 8 now reports `ANIMAL_PLACE_COLLISION`, excludes both logical keys, and blocks integration.
+
+### Selected-only show dwell authority
+
+Show-duration fallback is now built only from the selected UI experience that owns an activity binding.
+
+Unselected aliases that happen to bind to the same `activityId` cannot overwrite the selected experience's explicit dwell duration.
+
+This removes an insertion-order/data-configuration dependency.
+
+## Isolation and deterministic evidence
+
+Additional regressions prove:
+
+- source data/preferences/bindings are unchanged after repeated integration
+- issue ordering is identical when schedule source-array order is reversed
+- same-place animal aliases cannot double-count preference value
+- out-of-range edge provenance causes planner gating
+- out-of-range event/place/node provenance excludes performances
+- reservation place effective ranges are enforced
+- conditional-edge IDs are canonicalized after validation
