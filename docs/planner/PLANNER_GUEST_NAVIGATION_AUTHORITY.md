@@ -199,7 +199,7 @@ No entrance is inferred from the theatre building geometry.
 The Planner 12 authority layer fails closed when:
 
 - an entrance target is unknown
-- the target does not resolve to an official entrance map anchor
+- the target does not resolve to a known official map anchor
 - multiple entrance nodes exist without routing-preference authority
 - an entrance observation is not an OSM node
 - the entrance is not tagged `main`
