@@ -131,6 +131,20 @@ function validHttpsUrl(value: string) {
   }
 }
 
+function validOfficialContextUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "www.sandiego.gov" ||
+        url.hostname === "sandiego.gov" ||
+        url.hostname === "zoo.sandiegozoo.org")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function haversineMeters(
   a: Pick<IndependentGeospatialObservation, "lat" | "lng">,
   b: Pick<IndependentGeospatialObservation, "lat" | "lng">,
@@ -294,7 +308,9 @@ export function assertIndependentGeospatialAuthorityIntegrity(
 
     if (
       target.officialContextUrl !== undefined &&
-      !validHttpsUrl(target.officialContextUrl)
+      !validOfficialContextUrl(
+        target.officialContextUrl,
+      )
     ) {
       throw new Error(
         `Geospatial target ${target.id} has an invalid official context URL.`,
@@ -304,6 +320,10 @@ export function assertIndependentGeospatialAuthorityIntegrity(
 
   const observationIds = new Set<string>();
   const providerObjects = new Set<string>();
+  const observationCountByTarget = new Map<
+    string,
+    number
+  >();
 
   for (const observation of observations) {
     if (!stableId(observation.id)) {
@@ -348,6 +368,12 @@ export function assertIndependentGeospatialAuthorityIntegrity(
       );
     }
     providerObjects.add(providerObjectKey);
+    observationCountByTarget.set(
+      observation.targetId,
+      (observationCountByTarget.get(
+        observation.targetId,
+      ) ?? 0) + 1,
+    );
 
     if (
       observation.coordinateSemantics !==
@@ -355,6 +381,17 @@ export function assertIndependentGeospatialAuthorityIntegrity(
     ) {
       throw new Error(
         `Geospatial observation ${observation.id} has unsupported coordinate semantics.`,
+      );
+    }
+  }
+
+  for (const target of targets) {
+    if (
+      (observationCountByTarget.get(target.id) ?? 0) ===
+      0
+    ) {
+      throw new Error(
+        `Geospatial target ${target.id} has no observations.`,
       );
     }
   }
@@ -384,6 +421,71 @@ export function geospatialObservationsForTarget(
     .sort((a, b) => compareText(a.id, b.id));
 }
 
+export function classifyFeatureObservationAgreement(
+  targetId: string,
+  observations: readonly IndependentGeospatialObservation[],
+): Exclude<
+  FeatureAuthorityAssessment,
+  { status: "unknown-target" }
+> {
+  const ordered = [...observations].sort((a, b) =>
+    compareText(a.id, b.id),
+  );
+
+  if (ordered.length < 2) {
+    return {
+      status: "single-source-feature-location",
+      targetId,
+      observationIds: ordered.map(
+        (observation) => observation.id,
+      ),
+    };
+  }
+
+  let maximumSourceSeparationMeters = 0;
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    for (
+      let j = i + 1;
+      j < ordered.length;
+      j += 1
+    ) {
+      maximumSourceSeparationMeters = Math.max(
+        maximumSourceSeparationMeters,
+        haversineMeters(
+          ordered[i],
+          ordered[j],
+        ),
+      );
+    }
+  }
+
+  const roundedSeparation =
+    Math.round(maximumSourceSeparationMeters * 1000) /
+    1000;
+
+  return maximumSourceSeparationMeters <=
+    CORROBORATION_MAX_SEPARATION_METERS
+    ? {
+        status: "corroborated-feature-location",
+        targetId,
+        observationIds: ordered.map(
+          (observation) => observation.id,
+        ),
+        maximumSourceSeparationMeters:
+          roundedSeparation,
+      }
+    : {
+        status: "conflicting-feature-location",
+        targetId,
+        observationIds: ordered.map(
+          (observation) => observation.id,
+        ),
+        maximumSourceSeparationMeters:
+          roundedSeparation,
+      };
+}
+
 export function assessFeatureGeospatialAuthority(
   targetId: string,
 ): FeatureAuthorityAssessment {
@@ -399,65 +501,10 @@ export function assessFeatureGeospatialAuthority(
     };
   }
 
-  const observations =
-    geospatialObservationsForTarget(targetId);
-
-  if (observations.length < 2) {
-    return {
-      status: "single-source-feature-location",
-      targetId,
-      observationIds: observations.map(
-        (observation) => observation.id,
-      ),
-    };
-  }
-
-  let maximumSourceSeparationMeters = 0;
-
-  for (let i = 0; i < observations.length; i += 1) {
-    for (
-      let j = i + 1;
-      j < observations.length;
-      j += 1
-    ) {
-      maximumSourceSeparationMeters = Math.max(
-        maximumSourceSeparationMeters,
-        haversineMeters(
-          observations[i],
-          observations[j],
-        ),
-      );
-    }
-  }
-
-  const roundedSeparation =
-    Math.round(maximumSourceSeparationMeters * 1000) /
-    1000;
-
-  if (
-    maximumSourceSeparationMeters <=
-    CORROBORATION_MAX_SEPARATION_METERS
-  ) {
-    return {
-      status: "corroborated-feature-location",
-      targetId,
-      observationIds: observations.map(
-        (observation) => observation.id,
-      ),
-      maximumSourceSeparationMeters:
-        roundedSeparation,
-    };
-  }
-
-  return {
-    status: "conflicting-feature-location",
+  return classifyFeatureObservationAgreement(
     targetId,
-    observationIds: observations.map(
-      (observation) => observation.id,
-    ),
-    maximumSourceSeparationMeters:
-      roundedSeparation,
-  };
+    geospatialObservationsForTarget(targetId),
+  );
 }
 
 export function assessGuestNavigationPointAuthority(
