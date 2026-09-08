@@ -129,8 +129,12 @@ test("explicit UI bindings build deterministic optimizer candidates", () => {
 });
 
 test("visit/day preferences map to hard route policy and soft score context", () => {
+  const data = fixture();
+  data.routeEdges[0].status = "conditional";
+
   const result = buildCandidateIntegration(
     input({
+      data,
       visit: visit({
         wheelchair: true,
         stroller: true,
@@ -140,7 +144,9 @@ test("visit/day preferences map to hard route policy and soft score context", ()
         pace: "relaxed",
         useSkyfari: false,
       }),
-      enabledConditionalEdgeIds: ["conditional-1"],
+      enabledConditionalEdgeIds: [
+        "fixture-edge-entry-animal",
+      ],
     }),
   );
 
@@ -155,7 +161,9 @@ test("visit/day preferences map to hard route policy and soft score context", ()
     allowedModes: ["walk", "bus", "elevator", "ada-shuttle"],
     requireAccessible: true,
     requireStroller: true,
-    enabledConditionalEdgeIds: ["conditional-1"],
+    enabledConditionalEdgeIds: [
+      "fixture-edge-entry-animal",
+    ],
   });
 });
 
