@@ -138,14 +138,6 @@ export function auditPriorityFixturesAgainstOfficialSources(
     }
   }
 
-  const boundUiIds = new Set(
-    SOURCE_BACKED_ZOO_RECORDS.flatMap((record) =>
-      record.kind === "presentation" && record.uiPriorityId
-        ? [record.uiPriorityId]
-        : [],
-    ),
-  );
-
   for (const record of SOURCE_BACKED_ZOO_RECORDS) {
     if (
       record.kind === "presentation" &&
