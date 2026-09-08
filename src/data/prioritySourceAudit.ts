@@ -11,7 +11,7 @@ import {
 export type PrioritySourceAuditCode =
   | "ANIMAL_SOURCE_IDENTITY_MISSING"
   | "ANIMAL_DISPLAY_NAME_DIFFERS"
-  | "ANIMAL_LOCATION_LABEL_DIFFERS"
+  | "ANIMAL_AREA_LABEL_DIFFERS"
   | "EXPERIENCE_SOURCE_IDENTITY_MISSING"
   | "EXPERIENCE_VENUE_DIFFERS"
   | "EXPERIENCE_TIME_DIFFERS"
@@ -91,14 +91,14 @@ export function auditPriorityFixturesAgainstOfficialSources(
     }
 
     if (
-      source.officialLocationLabel &&
-      animal.zone !== source.officialLocationLabel
+      source.officialAreaLabel &&
+      animal.zone !== source.officialAreaLabel
     ) {
       issues.push({
-        code: "ANIMAL_LOCATION_LABEL_DIFFERS",
+        code: "ANIMAL_AREA_LABEL_DIFFERS",
         uiPriorityId: animal.id,
         sourceRecordId: source.id,
-        message: `UI location "${animal.zone}" differs from official location label "${source.officialLocationLabel}".`,
+        message: `UI zone label "${animal.zone}" is not identical to the official Zoo area label "${source.officialAreaLabel}". These fields may have different geographic granularity.`,
       });
     }
   }
