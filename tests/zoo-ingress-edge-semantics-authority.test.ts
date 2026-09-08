@@ -44,6 +44,10 @@ test("controlled entrance passage supports route-node endpoints, walk mode, and 
   assert.deepEqual(audit.oneWayAuthority, {
     status: "blocked",
     reason: "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT",
+    basis:
+      "Planner 16 pedestrian-direction authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054695",
   });
 });
 
@@ -82,6 +86,10 @@ test("interior Front Street connection supports route-node endpoints, walk mode,
     status: "blocked",
     reason:
       "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+    basis:
+      "Planner 16 pedestrian-direction authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054694",
   });
 });
 
@@ -335,7 +343,32 @@ test("integrity rejects generic OSM oneway being promoted to pedestrian directio
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed blocked-field authority/,
+    /changed Planner 16 pedestrian-direction linkage|changed blocked-field authority/,
+  );
+});
+
+test("integrity rejects pedestrian-direction source linkage drift", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              oneWayAuthority: {
+                ...audit.oneWayAuthority,
+                sourceSnapshotId:
+                  "sdz-pedestrian-direction-way-755054694",
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 16 pedestrian-direction linkage/,
   );
 });
 

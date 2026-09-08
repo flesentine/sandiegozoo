@@ -9,6 +9,10 @@ import {
 import {
   routeNodeForSourceObjectId,
 } from "./zooIngressRouteNodeAuthority.ts";
+import {
+  assessPedestrianDirectionAuthority,
+  pedestrianDirectionSourceForWay,
+} from "./zooIngressPedestrianDirectionAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -26,8 +30,15 @@ export type BlockedFieldAuthority = {
     | "STROLLER_ACCESS_NOT_SOURCED"
     | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
     | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
+    | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED"
     | "EDGE_STATUS_NOT_SOURCED";
 };
+
+export type PedestrianOneWayFieldAuthority =
+  BlockedFieldAuthority & {
+    basis: "Planner 16 pedestrian-direction authority";
+    sourceSnapshotId: string;
+  };
 
 export type RouteEdgeSemanticAudit = {
   id: string;
@@ -48,7 +59,7 @@ export type RouteEdgeSemanticAudit = {
   stairsAuthority: BlockedFieldAuthority;
   accessibleAuthority: BlockedFieldAuthority;
   strollerAuthority: BlockedFieldAuthority;
-  oneWayAuthority: BlockedFieldAuthority;
+  oneWayAuthority: PedestrianOneWayFieldAuthority;
   edgeStatusAuthority: BlockedFieldAuthority;
   plannerMaterialization: "route-edge-audit-only";
 };
@@ -146,17 +157,6 @@ function validOsmWayUrl(value: string, wayId: string) {
   }
 }
 
-const SOURCE_TAGS_BY_WAY = deepFreeze({
-  "755054695": {
-    highway: "pedestrian",
-    oneway: "yes",
-    tunnel: "building_passage",
-  },
-  "755054694": {
-    highway: "pedestrian",
-  },
-} as const);
-
 function blocked(
   reason: BlockedFieldAuthority["reason"],
 ): BlockedFieldAuthority {
@@ -181,15 +181,14 @@ function buildAudit(
     );
   }
 
-  const sourceTags =
-    SOURCE_TAGS_BY_WAY[
-      sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
-    ];
-  if (!sourceTags) {
+  const directionSource =
+    pedestrianDirectionSourceForWay(sourceWayId);
+  if (!directionSource) {
     throw new Error(
-      `Ingress way ${sourceWayId} has no frozen semantic source tags.`,
+      `Ingress way ${sourceWayId} has no Planner 16 source-tag snapshot.`,
     );
   }
+  const sourceTags = directionSource.sourceTags;
 
   const fromRouteNode =
     routeNodeForSourceObjectId(way.nodeIds[0]);
@@ -204,9 +203,18 @@ function buildAudit(
     );
   }
 
-  const genericOneway =
-    "oneway" in sourceTags &&
-    sourceTags.oneway === "yes";
+  const directionAuthority =
+    assessPedestrianDirectionAuthority(sourceWayId);
+
+  if (
+    directionAuthority.status !== "blocked" ||
+    directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
+    !directionAuthority.sourceSnapshotId
+  ) {
+    throw new Error(
+      `Ingress way ${sourceWayId} does not have the expected blocked Planner 16 pedestrian-direction authority.`,
+    );
+  }
 
   return {
     id: `${way.id}-route-edge-audit`,
@@ -241,11 +249,14 @@ function buildAudit(
       "WHEELCHAIR_ACCESS_NOT_SOURCED",
     ),
     strollerAuthority: blocked("STROLLER_ACCESS_NOT_SOURCED"),
-    oneWayAuthority: blocked(
-      genericOneway
-        ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
-        : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
-    ),
+    oneWayAuthority: {
+      status: "blocked",
+      reason: directionAuthority.reason,
+      basis:
+        "Planner 16 pedestrian-direction authority",
+      sourceSnapshotId:
+        directionAuthority.sourceSnapshotId,
+    },
     edgeStatusAuthority: blocked("EDGE_STATUS_NOT_SOURCED"),
     plannerMaterialization: "route-edge-audit-only",
   };
@@ -310,10 +321,11 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
 
     const way = wayById.get(audit.sourceWayId);
     const distance = distanceByWay.get(audit.sourceWayId);
-    const sourceTags =
-      SOURCE_TAGS_BY_WAY[
-        audit.sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
-      ];
+    const directionSource =
+      pedestrianDirectionSourceForWay(
+        audit.sourceWayId,
+      );
+    const sourceTags = directionSource?.sourceTags;
 
     if (
       !way ||
@@ -367,12 +379,25 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
-    const genericOneway =
-      "oneway" in sourceTags &&
-      sourceTags.oneway === "yes";
-    const expectedDirectionReason = genericOneway
-      ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
-      : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
+    const directionAuthority =
+      assessPedestrianDirectionAuthority(
+        audit.sourceWayId,
+      );
+    if (
+      directionAuthority.status !== "blocked" ||
+      directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
+      !directionAuthority.sourceSnapshotId ||
+      audit.oneWayAuthority.basis !==
+        "Planner 16 pedestrian-direction authority" ||
+      audit.oneWayAuthority.sourceSnapshotId !==
+        directionAuthority.sourceSnapshotId
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} changed Planner 16 pedestrian-direction linkage.`,
+      );
+    }
+    const expectedDirectionReason =
+      directionAuthority.reason;
 
     const expectedBlockedReasons = [
       [
