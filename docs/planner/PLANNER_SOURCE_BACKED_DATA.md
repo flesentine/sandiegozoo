@@ -123,3 +123,55 @@ Planner 9 does not yet:
 - fetch sources at runtime
 
 The next source-data step is to establish **guest-facing navigation points and route-node authority** for a very small destination set before any of these source identities are allowed into the optimizer.
+
+
+## Final source-authority review
+
+A focused pre-merge review rechecked every current fact against the live official Zoo pages and found two source-model issues.
+
+### Fact-class evidence is now explicit
+
+A single record-level source URL was too coarse.
+
+The clearest example was Skyfari:
+- the Skyfari detail page establishes the transport identity and operational caveats
+- the Zoo Activities index is the page that currently states `Operating daily, 10 a.m. to close.`
+
+Planner 9 now stores evidence by fact class:
+- `identity`
+- optional `location`
+- optional `schedule`
+- optional `hours`
+
+This prevents one official page from being cited as support for a fact it does not actually contain.
+
+### Runtime immutability
+
+TypeScript `readonly` and `as const` do not make objects immutable at runtime.
+
+The source catalog is now recursively frozen, including nested evidence objects and duration ranges.
+
+Lookup helpers therefore return shared immutable authority rather than mutable shared state.
+
+### Catalog integrity
+
+Module initialization and tests now fail closed on:
+- duplicate source-record IDs
+- duplicate animal UI bindings
+- duplicate presentation UI bindings
+- animal area labels without location evidence
+- presentation records without schedule evidence
+- transport records without hours evidence
+- malformed official evidence entries
+
+### Animal label audit semantics
+
+The official animal pages use broad Zoo area labels such as `Lost Forest` and `Outback`.
+
+The current UI's `zone` strings sometimes name a more specific exhibit, such as `Tiger Trail` or `Gorilla Tropics`.
+
+Planner 9 no longer describes every non-identical pair as a stale location mismatch.
+
+The audit code is now `ANIMAL_AREA_LABEL_DIFFERS` and explicitly notes that the UI zone and official area may represent different geographic granularity.
+
+This keeps the audit informative without claiming one label is necessarily wrong.
