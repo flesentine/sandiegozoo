@@ -596,3 +596,408 @@ test("blocked integration never enters the optimizer qualification harness", () 
     integration,
   });
 });
+
+
+test("verified confidence outside effective range is not trusted for selected places", () => {
+  const data = fixture();
+  data.places[0].provenance.effectiveTo = "2026-09-18";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities({
+        animals: { panda: "must" },
+      }),
+      bindings: {
+        animals: {
+          panda: {
+            placeId: "fixture-animal",
+            dwellMinutes: 20,
+          },
+        },
+        experiences: {},
+      },
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.candidates, []);
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code === "ANIMAL_PLACE_OUTSIDE_EFFECTIVE_RANGE",
+    ),
+  );
+});
+
+test("initial and end nodes must be effective on the visit date", () => {
+  const data = fixture();
+  data.routeNodes[0].provenance.effectiveFrom = "2026-09-20";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities(),
+      bindings: {
+        animals: {},
+        experiences: {},
+      },
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code === "INITIAL_NODE_OUTSIDE_EFFECTIVE_RANGE",
+    ),
+  );
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code === "END_NODE_OUTSIDE_EFFECTIVE_RANGE",
+    ),
+  );
+});
+
+test("route edges outside effective range are planner-disabled", () => {
+  const data = fixture();
+  data.routeEdges[0].provenance.effectiveTo = "2026-09-18";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities({
+        animals: { panda: "favorite" },
+      }),
+      bindings: {
+        animals: {
+          panda: {
+            placeId: "fixture-animal",
+            dwellMinutes: 20,
+          },
+        },
+        experiences: {},
+      },
+    }),
+  );
+
+  assert.equal(result.status, "ready");
+  assert.deepEqual(result.routingGate.disabledUnverifiedEdgeIds, [
+    "fixture-edge-entry-animal",
+  ]);
+});
+
+test("conditional edge enabling rejects unknown, non-conditional, and untrusted IDs", () => {
+  const unknown = buildCandidateIntegration(
+    input({
+      priorities: priorities(),
+      bindings: {
+        animals: {},
+        experiences: {},
+      },
+      enabledConditionalEdgeIds: ["missing-edge"],
+    }),
+  );
+  assert.equal(unknown.status, "blocked");
+  assert.ok(
+    unknown.issues.some(
+      (issue) => issue.code === "CONDITIONAL_EDGE_UNKNOWN",
+    ),
+  );
+
+  const nonConditional = buildCandidateIntegration(
+    input({
+      priorities: priorities(),
+      bindings: {
+        animals: {},
+        experiences: {},
+      },
+      enabledConditionalEdgeIds: ["fixture-edge-entry-animal"],
+    }),
+  );
+  assert.equal(nonConditional.status, "blocked");
+  assert.ok(
+    nonConditional.issues.some(
+      (issue) =>
+        issue.code === "CONDITIONAL_EDGE_NOT_CONDITIONAL",
+    ),
+  );
+
+  const data = fixture();
+  data.routeEdges[0].status = "conditional";
+  data.routeEdges[0].provenance.confidence = "provisional";
+
+  const untrusted = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities(),
+      bindings: {
+        animals: {},
+        experiences: {},
+      },
+      enabledConditionalEdgeIds: ["fixture-edge-entry-animal"],
+    }),
+  );
+  assert.equal(untrusted.status, "blocked");
+  assert.ok(
+    untrusted.issues.some(
+      (issue) => issue.code === "CONDITIONAL_EDGE_UNTRUSTED",
+    ),
+  );
+});
+
+test("verified conditional edges may be enabled and IDs are canonicalized", () => {
+  const data = fixture();
+  data.routeEdges[0].status = "conditional";
+  data.routeEdges[1].status = "conditional";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities(),
+      bindings: {
+        animals: {},
+        experiences: {},
+      },
+      enabledConditionalEdgeIds: [
+        "fixture-edge-entry-animal",
+        "fixture-edge-animal-stage",
+      ].reverse(),
+    }),
+  );
+
+  assert.equal(result.status, "ready");
+  if (result.status !== "ready") throw new Error("expected ready");
+  assert.deepEqual(
+    result.request.routePolicy?.enabledConditionalEdgeIds,
+    [
+      "fixture-edge-animal-stage",
+      "fixture-edge-entry-animal",
+    ],
+  );
+});
+
+test("two selected animal UX IDs cannot double-count the same planner place", () => {
+  const result = buildCandidateIntegration(
+    input({
+      priorities: priorities({
+        animals: {
+          panda: "must",
+          pandaAlias: "favorite",
+        },
+      }),
+      bindings: {
+        animals: {
+          panda: {
+            placeId: "fixture-animal",
+            dwellMinutes: 20,
+          },
+          pandaAlias: {
+            placeId: "fixture-animal",
+            dwellMinutes: 30,
+          },
+        },
+        experiences: {},
+      },
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.excludedSelectionKeys, [
+    "animal:panda",
+    "animal:pandaAlias",
+  ]);
+  assert.ok(
+    result.issues.some(
+      (issue) => issue.code === "ANIMAL_PLACE_COLLISION",
+    ),
+  );
+});
+
+test("unselected experience aliases cannot overwrite selected show dwell fallback", () => {
+  const data = fixture();
+  delete data.scheduleEvents[0].endTime;
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities({
+        experiences: {
+          selected: "must",
+          alias: "none",
+        },
+      }),
+      bindings: {
+        animals: {},
+        experiences: {
+          selected: {
+            activityId: "fixture-show",
+            dwellMinutes: 20,
+          },
+          alias: {
+            activityId: "fixture-show",
+            dwellMinutes: 99,
+          },
+        },
+      },
+    }),
+  );
+
+  assert.equal(result.status, "ready");
+  if (result.status !== "ready") throw new Error("expected ready");
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].baseDwellMinutes, 20);
+});
+
+test("performance place/node effective range is enforced independently of event confidence", () => {
+  const data = fixture();
+  data.places[1].provenance.effectiveFrom = "2026-09-20";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities({
+        experiences: {
+          "wildlife-wonders": "must",
+        },
+      }),
+      bindings: {
+        animals: {},
+        experiences: {
+          "wildlife-wonders": {
+            activityId: "fixture-show",
+          },
+        },
+      },
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code ===
+        "EXPERIENCE_PERFORMANCE_OUTSIDE_EFFECTIVE_RANGE",
+    ),
+  );
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code === "EXPERIENCE_NO_TRUSTED_PERFORMANCE",
+    ),
+  );
+});
+
+test("reservation place must be effective on visit date", () => {
+  const data = fixture();
+  data.places[1].provenance.effectiveTo = "2026-09-18";
+
+  const result = buildCandidateIntegration(
+    input({
+      data,
+      priorities: priorities(),
+      visit: visit({
+        reservation: {
+          name: "Tour",
+          time: "11:00",
+        },
+      }),
+      bindings: {
+        animals: {},
+        experiences: {},
+        reservation: {
+          placeId: "fixture-stage",
+          durationMinutes: 30,
+        },
+      },
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code ===
+        "RESERVATION_PLACE_OUTSIDE_EFFECTIVE_RANGE",
+    ),
+  );
+});
+
+test("candidate integration does not mutate source data or preference/binding inputs", () => {
+  const value = input();
+  const before = JSON.stringify({
+    data: value.data,
+    visit: value.visit,
+    day: value.day,
+    priorities: value.priorities,
+    bindings: value.bindings,
+    enabledConditionalEdgeIds: value.enabledConditionalEdgeIds,
+  });
+
+  buildCandidateIntegration(value);
+  buildCandidateIntegration(value);
+
+  assert.equal(
+    JSON.stringify({
+      data: value.data,
+      visit: value.visit,
+      day: value.day,
+      priorities: value.priorities,
+      bindings: value.bindings,
+      enabledConditionalEdgeIds: value.enabledConditionalEdgeIds,
+    }),
+    before,
+  );
+});
+
+test("issue ordering is deterministic across source schedule insertion order", () => {
+  const dataA = fixture();
+  const second = {
+    ...dataA.scheduleEvents[0],
+    id: "fixture-show-1100",
+    startTime: "11:00",
+    endTime: "11:20",
+    provenance: {
+      ...dataA.scheduleEvents[0].provenance,
+      confidence: "provisional" as const,
+    },
+  };
+  dataA.scheduleEvents[0].provenance.confidence = "provisional";
+  dataA.scheduleEvents.push(second);
+
+  const dataB = JSON.parse(
+    JSON.stringify(dataA),
+  ) as WildRouteDataPackage;
+  dataB.scheduleEvents.reverse();
+
+  const build = (data: WildRouteDataPackage) =>
+    buildCandidateIntegration(
+      input({
+        data,
+        priorities: priorities({
+          experiences: {
+            "wildlife-wonders": "must",
+          },
+        }),
+        bindings: {
+          animals: {},
+          experiences: {
+            "wildlife-wonders": {
+              activityId: "fixture-show",
+            },
+          },
+        },
+      }),
+    );
+
+  const a = build(dataA);
+  const b = build(dataB);
+
+  assert.deepEqual(a.issues, b.issues);
+  assert.deepEqual(
+    a.excludedSelectionKeys,
+    b.excludedSelectionKeys,
+  );
+});
