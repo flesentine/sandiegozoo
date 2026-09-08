@@ -1,3 +1,4 @@
+import { INDEPENDENT_GEOSPATIAL_TARGETS } from "./zooGeospatialAuthority.ts";
 import {
   DERIVED_INGRESS_DISTANCES,
   INGRESS_GEOMETRY_WAYS,
@@ -371,8 +372,9 @@ export function assessIngressRouteEdgeReadiness(
   targetId: string,
 ): IngressRouteEdgeReadiness {
   const knownTarget =
-    targetId === "sdz-geo-main-entrance" ||
-    targetId === "sdz-geo-wegeforth-bowl";
+    INDEPENDENT_GEOSPATIAL_TARGETS.some(
+      (target) => target.id === targetId,
+    );
 
   if (!knownTarget) {
     return {
