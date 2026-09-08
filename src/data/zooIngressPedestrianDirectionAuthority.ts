@@ -22,7 +22,8 @@ export type PedestrianDirectionAssessment =
       reason:
         | "SOURCE_WAY_UNKNOWN"
         | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
-        | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
+        | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
+        | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED";
       sourceWayId: string;
       sourceSnapshotId?: string;
     }
@@ -319,6 +320,16 @@ export function classifyPedestrianDirectionSnapshot(
       oneWay: false,
       direction: "bidirectional",
       basis: "OSM oneway:foot=no",
+    };
+  }
+
+  if (onewayFootTag !== undefined) {
+    return {
+      status: "blocked",
+      reason:
+        "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED",
+      sourceWayId: snapshot.sourceWayId,
+      sourceSnapshotId: snapshot.id,
     };
   }
 
