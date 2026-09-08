@@ -44,8 +44,12 @@ export type EntrancePedestrianTopology = {
   entryPlazaWayId: string;
   controlledPassageWayId: string;
   interiorContinuationWayId: string;
+  interiorConnectionNodeId: string;
+  frontStreetWayId: string;
+  frontStreetConnectionNodeId: string;
   connectsToDescriptor: "Front Street";
-  sourceUrls: readonly string[];
+  waySourceUrls: readonly string[];
+  connectionNodeSourceUrls: readonly string[];
   plannerMaterialization: "topology-only";
 };
 
@@ -201,11 +205,19 @@ const RAW_TOPOLOGY: EntrancePedestrianTopology[] = [
     entryPlazaWayId: "1126804580",
     controlledPassageWayId: "755054695",
     interiorContinuationWayId: "755054694",
+    interiorConnectionNodeId: "7053320516",
+    frontStreetWayId: "1481425058",
+    frontStreetConnectionNodeId: "7053320515",
     connectsToDescriptor: "Front Street",
-    sourceUrls: [
+    waySourceUrls: [
       "https://www.openstreetmap.org/way/1126804580",
       "https://www.openstreetmap.org/way/755054695",
       "https://www.openstreetmap.org/way/755054694",
+      "https://www.openstreetmap.org/way/1481425058",
+    ],
+    connectionNodeSourceUrls: [
+      "https://www.openstreetmap.org/node/7053320516",
+      "https://www.openstreetmap.org/node/7053320515",
     ],
     plannerMaterialization: "topology-only",
   },
@@ -477,10 +489,18 @@ export function assertGuestNavigationAuthorityIntegrity(
       record.entryPlazaWayId,
       record.controlledPassageWayId,
       record.interiorContinuationWayId,
+      record.frontStreetWayId,
+    ];
+    const connectionNodeIds = [
+      record.interiorConnectionNodeId,
+      record.frontStreetConnectionNodeId,
     ];
     if (
       wayIds.some((id) => !stableId(id)) ||
       new Set(wayIds).size !== wayIds.length ||
+      connectionNodeIds.some((id) => !stableId(id)) ||
+      new Set(connectionNodeIds).size !==
+        connectionNodeIds.length ||
       record.controlledPassageWayId !==
         accessControl.pedestrianWayId ||
       !entrance.connectedPedestrianWayIds.includes(
@@ -496,10 +516,20 @@ export function assertGuestNavigationAuthorityIntegrity(
     }
 
     if (
-      record.sourceUrls.length !== wayIds.length ||
-      record.sourceUrls.some(
+      record.waySourceUrls.length !== wayIds.length ||
+      record.waySourceUrls.some(
         (url, index) =>
           !validOsmObjectUrl(url, "way", wayIds[index]),
+      ) ||
+      record.connectionNodeSourceUrls.length !==
+        connectionNodeIds.length ||
+      record.connectionNodeSourceUrls.some(
+        (url, index) =>
+          !validOsmObjectUrl(
+            url,
+            "node",
+            connectionNodeIds[index],
+          ),
       )
     ) {
       throw new Error(
