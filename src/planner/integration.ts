@@ -78,20 +78,29 @@ export type CandidateIntegrationIssueCode =
   | "END_NODE_UNKNOWN"
   | "INITIAL_NODE_UNVERIFIED"
   | "END_NODE_UNVERIFIED"
+  | "INITIAL_NODE_OUTSIDE_EFFECTIVE_RANGE"
+  | "END_NODE_OUTSIDE_EFFECTIVE_RANGE"
   | "ANIMAL_BINDING_REQUIRED"
   | "ANIMAL_PLACE_UNKNOWN"
   | "ANIMAL_PLACE_KIND_MISMATCH"
   | "ANIMAL_PLACE_UNVERIFIED"
+  | "ANIMAL_PLACE_OUTSIDE_EFFECTIVE_RANGE"
+  | "ANIMAL_PLACE_COLLISION"
   | "EXPERIENCE_BINDING_REQUIRED"
   | "EXPERIENCE_ACTIVITY_COLLISION"
   | "EXPERIENCE_SCHEDULE_MISSING"
   | "EXPERIENCE_PERFORMANCE_UNVERIFIED"
+  | "EXPERIENCE_PERFORMANCE_OUTSIDE_EFFECTIVE_RANGE"
   | "EXPERIENCE_NO_TRUSTED_PERFORMANCE"
   | "RESERVATION_INCOMPLETE"
   | "RESERVATION_BINDING_REQUIRED"
   | "RESERVATION_PLACE_UNKNOWN"
   | "RESERVATION_PLACE_UNVERIFIED"
+  | "RESERVATION_PLACE_OUTSIDE_EFFECTIVE_RANGE"
   | "RESERVATION_ANCHOR_INVALID"
+  | "CONDITIONAL_EDGE_UNKNOWN"
+  | "CONDITIONAL_EDGE_NOT_CONDITIONAL"
+  | "CONDITIONAL_EDGE_UNTRUSTED"
   | "ROUTING_DATA_GATED";
 
 export type CandidateIntegrationIssue = {
@@ -385,19 +394,76 @@ function assertIntegrationInput(
   assertConditionalEdgeIds(input.enabledConditionalEdgeIds);
 }
 
-function confidenceVerified(
+function provenanceEffectiveOnDate(
+  provenance: {
+    effectiveFrom?: string;
+    effectiveTo?: string;
+  },
+  date: string,
+) {
+  return (
+    (provenance.effectiveFrom === undefined ||
+      provenance.effectiveFrom <= date) &&
+    (provenance.effectiveTo === undefined ||
+      date <= provenance.effectiveTo)
+  );
+}
+
+function nodeConfidenceVerified(node: RouteNode | undefined) {
+  return node?.provenance.confidence === "verified";
+}
+
+function nodeEffectiveOnDate(
+  node: RouteNode | undefined,
+  date: string,
+) {
+  return Boolean(
+    node &&
+      provenanceEffectiveOnDate(node.provenance, date),
+  );
+}
+
+function nodeVerified(
+  node: RouteNode | undefined,
+  date: string,
+) {
+  return (
+    nodeConfidenceVerified(node) &&
+    nodeEffectiveOnDate(node, date)
+  );
+}
+
+function placeConfidenceVerified(
   place: PlaceRecord,
   node: RouteNode | undefined,
 ) {
   return (
     place.provenance.confidence === "verified" &&
     place.navigationPoint.confidence === "verified" &&
-    node?.provenance.confidence === "verified"
+    nodeConfidenceVerified(node)
   );
 }
 
-function nodeVerified(node: RouteNode | undefined) {
-  return node?.provenance.confidence === "verified";
+function placeEffectiveOnDate(
+  place: PlaceRecord,
+  node: RouteNode | undefined,
+  date: string,
+) {
+  return (
+    provenanceEffectiveOnDate(place.provenance, date) &&
+    nodeEffectiveOnDate(node, date)
+  );
+}
+
+function confidenceVerified(
+  place: PlaceRecord,
+  node: RouteNode | undefined,
+  date: string,
+) {
+  return (
+    placeConfidenceVerified(place, node) &&
+    placeEffectiveOnDate(place, node, date)
+  );
 }
 
 function issueSeverityForAnimal(priority: AnimalPriority) {
@@ -427,6 +493,7 @@ function pushIssue(
 
 function trustedRoutingPackage(
   data: WildRouteDataPackage,
+  date: string,
 ) {
   const nodeById = new Map(
     data.routeNodes.map((node) => [node.id, node]),
@@ -438,8 +505,9 @@ function trustedRoutingPackage(
     const to = nodeById.get(edge.toNodeId);
     const trusted =
       edge.provenance.confidence === "verified" &&
-      nodeVerified(from) &&
-      nodeVerified(to);
+      provenanceEffectiveOnDate(edge.provenance, date) &&
+      nodeVerified(from, date) &&
+      nodeVerified(to, date);
 
     if (trusted) {
       return {
@@ -525,22 +593,38 @@ function findPlace(
   return placeById.get(id);
 }
 
-function trustedPerformance(
+type PerformanceTrust =
+  | "trusted"
+  | "unverified"
+  | "outside-effective-range";
+
+function performanceTrust(
   event: ScheduleEvent | undefined,
   placeById: ReadonlyMap<string, PlaceRecord>,
   nodeById: ReadonlyMap<string, RouteNode>,
-) {
-  if (!event || event.provenance.confidence !== "verified") {
-    return false;
-  }
+  date: string,
+): PerformanceTrust {
+  if (!event) return "unverified";
 
   const place = placeById.get(event.placeId);
-  if (!place) return false;
+  if (!place) return "unverified";
+  const node = nodeById.get(place.routeNodeId);
 
-  return confidenceVerified(
-    place,
-    nodeById.get(place.routeNodeId),
-  );
+  if (
+    event.provenance.confidence !== "verified" ||
+    !placeConfidenceVerified(place, node)
+  ) {
+    return "unverified";
+  }
+
+  if (
+    !provenanceEffectiveOnDate(event.provenance, date) ||
+    !placeEffectiveOnDate(place, node, date)
+  ) {
+    return "outside-effective-range";
+  }
+
+  return "trusted";
 }
 
 export function buildCandidateIntegration(
@@ -561,6 +645,16 @@ export function buildCandidateIntegration(
   );
   const eventById = new Map(
     data.scheduleEvents.map((event) => [event.id, event]),
+  );
+  const edgeById = new Map(
+    data.routeEdges.map((edge) => [edge.id, edge]),
+  );
+  const gated = trustedRoutingPackage(
+    data,
+    input.visit.date,
+  );
+  const gatedEdgeIds = new Set(
+    gated.disabledUnverifiedEdgeIds,
   );
 
   const horizon = createPlanningHorizon(
@@ -588,12 +682,21 @@ export function buildCandidateIntegration(
       undefined,
       input.initialNodeId,
     );
-  } else if (!nodeVerified(initialNode)) {
+  } else if (!nodeConfidenceVerified(initialNode)) {
     pushIssue(
       issues,
       "error",
       "INITIAL_NODE_UNVERIFIED",
       `Initial route node ${input.initialNodeId} is not verified.`,
+      undefined,
+      input.initialNodeId,
+    );
+  } else if (!nodeEffectiveOnDate(initialNode, input.visit.date)) {
+    pushIssue(
+      issues,
+      "error",
+      "INITIAL_NODE_OUTSIDE_EFFECTIVE_RANGE",
+      `Initial route node ${input.initialNodeId} is outside its effective range for ${input.visit.date}.`,
       undefined,
       input.initialNodeId,
     );
@@ -610,7 +713,7 @@ export function buildCandidateIntegration(
         undefined,
         input.endNodeId,
       );
-    } else if (!nodeVerified(endNode)) {
+    } else if (!nodeConfidenceVerified(endNode)) {
       pushIssue(
         issues,
         "error",
@@ -619,16 +722,99 @@ export function buildCandidateIntegration(
         undefined,
         input.endNodeId,
       );
+    } else if (!nodeEffectiveOnDate(endNode, input.visit.date)) {
+      pushIssue(
+        issues,
+        "error",
+        "END_NODE_OUTSIDE_EFFECTIVE_RANGE",
+        `End route node ${input.endNodeId} is outside its effective range for ${input.visit.date}.`,
+        undefined,
+        input.endNodeId,
+      );
     }
   }
 
-  for (const [preferenceId, priority] of selectedEntries(
+  for (const edgeId of input.enabledConditionalEdgeIds ?? []) {
+    const edge = edgeById.get(edgeId);
+
+    if (!edge) {
+      pushIssue(
+        issues,
+        "error",
+        "CONDITIONAL_EDGE_UNKNOWN",
+        `Enabled conditional edge ${edgeId} does not exist in planner data.`,
+        undefined,
+        edgeId,
+      );
+      continue;
+    }
+
+    if (edge.status !== "conditional") {
+      pushIssue(
+        issues,
+        "error",
+        "CONDITIONAL_EDGE_NOT_CONDITIONAL",
+        `Enabled edge ${edgeId} has status ${edge.status}; only conditional edges may be explicitly enabled.`,
+        undefined,
+        edgeId,
+      );
+      continue;
+    }
+
+    if (gatedEdgeIds.has(edgeId)) {
+      pushIssue(
+        issues,
+        "error",
+        "CONDITIONAL_EDGE_UNTRUSTED",
+        `Conditional edge ${edgeId} cannot be enabled because its edge/endpoint evidence is not fully verified and effective for ${input.visit.date}.`,
+        undefined,
+        edgeId,
+      );
+    }
+  }
+
+  const selectedAnimals = selectedEntries(
     input.priorities.animals,
     "none",
-  )) {
+  );
+  const animalPreferenceIdsByPlace = new Map<string, string[]>();
+
+  for (const [preferenceId] of selectedAnimals) {
+    const binding = input.bindings.animals[preferenceId];
+    if (!binding) continue;
+
+    const owners =
+      animalPreferenceIdsByPlace.get(binding.placeId) ?? [];
+    owners.push(preferenceId);
+    animalPreferenceIdsByPlace.set(binding.placeId, owners);
+  }
+
+  for (const [placeId, owners] of animalPreferenceIdsByPlace) {
+    if (owners.length < 2) continue;
+
+    owners.sort(compareText);
+    for (const owner of owners) {
+      excluded.add(`animal:${owner}`);
+    }
+
+    pushIssue(
+      issues,
+      "error",
+      "ANIMAL_PLACE_COLLISION",
+      `Selected animal priorities ${owners.join(", ")} all bind to the same planner place ${placeId}.`,
+      `animal:${owners[0]}`,
+      placeId,
+    );
+  }
+
+  for (const [preferenceId, priority] of selectedAnimals) {
     const selectionKey = `animal:${preferenceId}`;
     const binding = input.bindings.animals[preferenceId];
     const severity = issueSeverityForAnimal(priority);
+
+    if (excluded.has(selectionKey)) {
+      continue;
+    }
 
     if (!binding) {
       excluded.add(selectionKey);
@@ -670,18 +856,34 @@ export function buildCandidateIntegration(
       continue;
     }
 
-    if (
-      !confidenceVerified(
-        place,
-        nodeById.get(place.routeNodeId),
-      )
-    ) {
+    const placeNode = nodeById.get(place.routeNodeId);
+
+    if (!placeConfidenceVerified(place, placeNode)) {
       excluded.add(selectionKey);
       pushIssue(
         issues,
         severity,
         "ANIMAL_PLACE_UNVERIFIED",
         `Animal place ${place.id} does not have fully verified place, navigation, and route-node evidence.`,
+        selectionKey,
+        place.id,
+      );
+      continue;
+    }
+
+    if (
+      !placeEffectiveOnDate(
+        place,
+        placeNode,
+        input.visit.date,
+      )
+    ) {
+      excluded.add(selectionKey);
+      pushIssue(
+        issues,
+        severity,
+        "ANIMAL_PLACE_OUTSIDE_EFFECTIVE_RANGE",
+        `Animal place ${place.id} is outside its place/route-node effective range for ${input.visit.date}.`,
         selectionKey,
         place.id,
       );
@@ -730,11 +932,14 @@ export function buildCandidateIntegration(
   }
 
   const dwellByActivityId: Record<string, number> = {};
-  for (const [preferenceId, binding] of Object.entries(
-    input.bindings.experiences,
-  )) {
-    if (binding.dwellMinutes !== undefined) {
-      dwellByActivityId[binding.activityId] =
+  for (const [activityId, preferenceId] of selectedActivityOwner) {
+    const selectionKey = `experience:${preferenceId}`;
+    if (excluded.has(selectionKey)) continue;
+
+    const binding =
+      input.bindings.experiences[preferenceId];
+    if (binding?.dwellMinutes !== undefined) {
+      dwellByActivityId[activityId] =
         binding.dwellMinutes;
     }
   }
@@ -797,21 +1002,39 @@ export function buildCandidateIntegration(
       continue;
     }
 
-    const trusted = set.candidates.filter((show) =>
-      trustedPerformance(
-        eventById.get(show.eventId),
-        placeById,
-        nodeById,
-      ),
+    const trusted = set.candidates.filter(
+      (show) =>
+        performanceTrust(
+          eventById.get(show.eventId),
+          placeById,
+          nodeById,
+          input.visit.date,
+        ) === "trusted",
     );
 
     for (const show of set.candidates) {
-      if (!trusted.includes(show)) {
+      const trust = performanceTrust(
+        eventById.get(show.eventId),
+        placeById,
+        nodeById,
+        input.visit.date,
+      );
+
+      if (trust === "unverified") {
         pushIssue(
           issues,
           "warning",
           "EXPERIENCE_PERFORMANCE_UNVERIFIED",
           `Performance ${show.eventId} was excluded because its event/place/navigation/route-node evidence is not fully verified.`,
+          selectionKey,
+          show.eventId,
+        );
+      } else if (trust === "outside-effective-range") {
+        pushIssue(
+          issues,
+          "warning",
+          "EXPERIENCE_PERFORMANCE_OUTSIDE_EFFECTIVE_RANGE",
+          `Performance ${show.eventId} was excluded because its event/place/route-node evidence is outside the effective range for ${input.visit.date}.`,
           selectionKey,
           show.eventId,
         );
@@ -898,22 +1121,36 @@ export function buildCandidateIntegration(
           selectionKey,
           binding.placeId,
         );
-      } else if (
-        !confidenceVerified(
-          place,
-          nodeById.get(place.routeNodeId),
-        )
-      ) {
-        excluded.add(selectionKey);
-        pushIssue(
-          issues,
-          "error",
-          "RESERVATION_PLACE_UNVERIFIED",
-          `Reservation place ${place.id} does not have fully verified place, navigation, and route-node evidence.`,
-          selectionKey,
-          place.id,
-        );
       } else {
+        const placeNode = nodeById.get(place.routeNodeId);
+
+        if (!placeConfidenceVerified(place, placeNode)) {
+          excluded.add(selectionKey);
+          pushIssue(
+            issues,
+            "error",
+            "RESERVATION_PLACE_UNVERIFIED",
+            `Reservation place ${place.id} does not have fully verified place, navigation, and route-node evidence.`,
+            selectionKey,
+            place.id,
+          );
+        } else if (
+          !placeEffectiveOnDate(
+            place,
+            placeNode,
+            input.visit.date,
+          )
+        ) {
+          excluded.add(selectionKey);
+          pushIssue(
+            issues,
+            "error",
+            "RESERVATION_PLACE_OUTSIDE_EFFECTIVE_RANGE",
+            `Reservation place ${place.id} is outside its place/route-node effective range for ${input.visit.date}.`,
+            selectionKey,
+            place.id,
+          );
+        } else {
         const anchor = createLockedAnchor({
           id: "reservation:visit",
           title: reservationName,
@@ -945,6 +1182,7 @@ export function buildCandidateIntegration(
           });
         }
       }
+      }
     }
   }
 
@@ -960,13 +1198,12 @@ export function buildCandidateIntegration(
     candidates,
   );
 
-  const gated = trustedRoutingPackage(data);
   if (gated.disabledUnverifiedEdgeIds.length > 0) {
     pushIssue(
       issues,
       "warning",
       "ROUTING_DATA_GATED",
-      `${gated.disabledUnverifiedEdgeIds.length} route edge(s) were disabled because edge or endpoint-node provenance is not fully verified.`,
+      `${gated.disabledUnverifiedEdgeIds.length} route edge(s) were disabled because edge or endpoint-node provenance is not fully verified/effective for ${input.visit.date}.`,
     );
   }
 
@@ -987,10 +1224,19 @@ export function buildCandidateIntegration(
     const code = compareText(a.code, b.code);
     if (code !== 0) return code;
 
-    return compareText(
+    const selection = compareText(
       a.selectionKey ?? "",
       b.selectionKey ?? "",
     );
+    if (selection !== 0) return selection;
+
+    const source = compareText(
+      a.sourceId ?? "",
+      b.sourceId ?? "",
+    );
+    if (source !== 0) return source;
+
+    return compareText(a.message, b.message);
   });
 
   const excludedSelectionKeys = [...excluded].sort(compareText);
@@ -1002,9 +1248,12 @@ export function buildCandidateIntegration(
     hasErrors ||
     horizon.status !== "valid" ||
     !initialNode ||
-    !nodeVerified(initialNode) ||
+    !nodeVerified(initialNode, input.visit.date) ||
     (input.endNodeId !== undefined &&
-      !nodeVerified(nodeById.get(input.endNodeId)))
+      !nodeVerified(
+        nodeById.get(input.endNodeId),
+        input.visit.date,
+      ))
   ) {
     return {
       status: "blocked",
