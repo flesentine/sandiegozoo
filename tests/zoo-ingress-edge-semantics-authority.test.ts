@@ -19,18 +19,18 @@ test("controlled entrance passage supports walk mode and derived distance withou
     oneway: "yes",
     tunnel: "building_passage",
   });
-  assert.deepEqual(audit.mode, {
+  assert.deepEqual(audit.modeAuthority, {
     status: "supported",
     value: "walk",
     basis: "OSM highway=pedestrian",
   });
-  assert.deepEqual(audit.distance, {
+  assert.deepEqual(audit.distanceAuthority, {
     status: "supported",
     value: 16.836,
     basis:
       "Planner 13 Haversine sum over frozen OSM way node sequence",
   });
-  assert.deepEqual(audit.oneWay, {
+  assert.deepEqual(audit.oneWayAuthority, {
     status: "blocked",
     reason: "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT",
   });
@@ -45,18 +45,18 @@ test("interior Front Street connection supports walk mode and distance while ped
   assert.deepEqual(audit.sourceTags, {
     highway: "pedestrian",
   });
-  assert.deepEqual(audit.mode, {
+  assert.deepEqual(audit.modeAuthority, {
     status: "supported",
     value: "walk",
     basis: "OSM highway=pedestrian",
   });
-  assert.deepEqual(audit.distance, {
+  assert.deepEqual(audit.distanceAuthority, {
     status: "supported",
     value: 25.376,
     basis:
       "Planner 13 Haversine sum over frozen OSM way node sequence",
   });
-  assert.deepEqual(audit.oneWay, {
+  assert.deepEqual(audit.oneWayAuthority, {
     status: "blocked",
     reason:
       "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
@@ -70,45 +70,45 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
   );
 
   for (const audit of INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS) {
-    assert.equal(audit.routeNodes.status, "blocked");
+    assert.equal(audit.routeNodesAuthority.status, "blocked");
     assert.equal(
-      audit.routeNodes.reason,
+      audit.routeNodesAuthority.reason,
       "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
     );
 
-    assert.equal(audit.duration.status, "blocked");
+    assert.equal(audit.durationAuthority.status, "blocked");
     assert.equal(
-      audit.duration.reason,
+      audit.durationAuthority.reason,
       "DURATION_POLICY_NOT_SOURCED",
     );
 
-    assert.equal(audit.difficulty.status, "blocked");
+    assert.equal(audit.difficultyAuthority.status, "blocked");
     assert.equal(
-      audit.difficulty.reason,
+      audit.difficultyAuthority.reason,
       "DIFFICULTY_NOT_SOURCED",
     );
 
-    assert.equal(audit.stairs.status, "blocked");
+    assert.equal(audit.stairsAuthority.status, "blocked");
     assert.equal(
-      audit.stairs.reason,
+      audit.stairsAuthority.reason,
       "STAIRS_NOT_EXPLICITLY_SOURCED",
     );
 
-    assert.equal(audit.accessible.status, "blocked");
+    assert.equal(audit.accessibleAuthority.status, "blocked");
     assert.equal(
-      audit.accessible.reason,
+      audit.accessibleAuthority.reason,
       "WHEELCHAIR_ACCESS_NOT_SOURCED",
     );
 
-    assert.equal(audit.stroller.status, "blocked");
+    assert.equal(audit.strollerAuthority.status, "blocked");
     assert.equal(
-      audit.stroller.reason,
+      audit.strollerAuthority.reason,
       "STROLLER_ACCESS_NOT_SOURCED",
     );
 
-    assert.equal(audit.edgeStatus.status, "blocked");
+    assert.equal(audit.edgeStatusAuthority.status, "blocked");
     assert.equal(
-      audit.edgeStatus.reason,
+      audit.edgeStatusAuthority.reason,
       "EDGE_STATUS_NOT_SOURCED",
     );
 
@@ -202,13 +202,13 @@ test("route-edge semantic audits are deeply immutable", () => {
   );
   assert.equal(
     Object.isFrozen(
-      INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS[0].mode,
+      INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS[0].modeAuthority,
     ),
     true,
   );
   assert.equal(
     Object.isFrozen(
-      INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS[0].oneWay,
+      INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS[0].oneWayAuthority,
     ),
     true,
   );
@@ -221,8 +221,8 @@ test("integrity rejects mode promotion beyond the sourced pedestrian tag", () =>
         index === 0
           ? {
               ...audit,
-              mode: {
-                ...audit.mode,
+              modeAuthority: {
+                ...audit.modeAuthority,
                 value: "skyfari" as unknown as "walk",
               },
             }
@@ -245,9 +245,9 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
         index === 0
           ? {
               ...audit,
-              distance: {
-                ...audit.distance,
-                value: audit.distance.value + 1,
+              distanceAuthority: {
+                ...audit.distanceAuthority,
+                value: audit.distanceAuthority.value + 1,
               },
             }
           : { ...audit },
@@ -269,10 +269,10 @@ test("integrity rejects generic OSM oneway being promoted to pedestrian directio
         audit.sourceWayId === "755054695"
           ? {
               ...audit,
-              oneWay: {
+              oneWayAuthority: {
                 status: "supported",
                 value: true,
-              } as unknown as RouteEdgeSemanticAudit["oneWay"],
+              } as unknown as RouteEdgeSemanticAudit["oneWayAuthority"],
             }
           : { ...audit },
     );
