@@ -300,3 +300,36 @@ test("integrity rejects malformed OSM object URLs", () => {
     /is malformed/,
   );
 });
+
+
+test("integrity rejects hidden planner route fields at runtime", () => {
+  const leakedEntrance = {
+    ...EXPLICIT_GUEST_ENTRANCE_OBSERVATIONS[0],
+    distanceMeters: 10,
+  } as unknown as ExplicitGuestEntranceObservation;
+
+  assert.throws(
+    () =>
+      assertGuestNavigationAuthorityIntegrity(
+        [leakedEntrance],
+        ENTRANCE_ACCESS_CONTROL_OBSERVATIONS,
+        ENTRANCE_PEDESTRIAN_TOPOLOGY,
+      ),
+    /cannot contain planner route field distanceMeters/,
+  );
+
+  const leakedTopology = {
+    ...ENTRANCE_PEDESTRIAN_TOPOLOGY[0],
+    accessible: true,
+  } as unknown as EntrancePedestrianTopology;
+
+  assert.throws(
+    () =>
+      assertGuestNavigationAuthorityIntegrity(
+        EXPLICIT_GUEST_ENTRANCE_OBSERVATIONS,
+        ENTRANCE_ACCESS_CONTROL_OBSERVATIONS,
+        [leakedTopology],
+      ),
+    /cannot contain planner route field accessible/,
+  );
+});
