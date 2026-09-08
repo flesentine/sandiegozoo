@@ -78,10 +78,6 @@ export const GUEST_NAVIGATION_SEMANTIC_CONTEXT_URLS = Object.freeze([
   "https://www.sandiego.gov/blog/zoo-balboa-park-traffic-information",
 ] as const);
 
-function compareText(a: string, b: string) {
-  return a < b ? -1 : a > b ? 1 : 0;
-}
-
 function deepFreeze<T>(value: T): T {
   if (
     value &&
