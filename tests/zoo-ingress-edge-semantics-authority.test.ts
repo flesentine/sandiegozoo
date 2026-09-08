@@ -125,14 +125,21 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
 
     assert.equal(audit.accessibleAuthority.status, "blocked");
     assert.equal(
-      audit.accessibleAuthority.reason,
-      "WHEELCHAIR_ACCESS_NOT_SOURCED",
+      audit.accessibleAuthority.basis,
+      "Planner 17 accessibility authority",
     );
-
     assert.equal(audit.strollerAuthority.status, "blocked");
     assert.equal(
       audit.strollerAuthority.reason,
-      "STROLLER_ACCESS_NOT_SOURCED",
+      "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY",
+    );
+    assert.equal(
+      audit.strollerAuthority.basis,
+      "Planner 17 stroller authority",
+    );
+    assert.equal(
+      audit.strollerAuthority.policyEvidenceId,
+      "sdz-stroller-facility-policy-2026-09-08",
     );
 
     assert.equal(audit.edgeStatusAuthority.status, "blocked");
@@ -146,6 +153,42 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "route-edge-audit-only",
     );
   }
+});
+
+test("Planner 17 mobility linkage preserves exact edge-specific blocked reasons", () => {
+  const controlled =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054695",
+    );
+  const frontStreet =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054694",
+    );
+  assert.ok(controlled);
+  assert.ok(frontStreet);
+
+  assert.deepEqual(controlled.accessibleAuthority, {
+    status: "blocked",
+    reason:
+      "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED",
+    basis:
+      "Planner 17 accessibility authority",
+  });
+  assert.deepEqual(frontStreet.accessibleAuthority, {
+    status: "blocked",
+    reason:
+      "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY",
+    basis:
+      "Planner 17 accessibility authority",
+    corridorEvidenceId:
+      "sdz-accessibility-front-street-wheelchair-indicator",
+  });
+  assert.deepEqual(
+    controlled.strollerAuthority,
+    frontStreet.strollerAuthority,
+  );
 });
 
 test("route-edge readiness exposes route nodes, mode, and distance as supported", () => {
@@ -320,6 +363,54 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
         badAudits,
       ),
     /changed its supported fields/,
+  );
+});
+
+test("integrity rejects accessibility promotion beyond Planner 17 exact-edge authority", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit) =>
+        audit.sourceWayId === "755054694"
+          ? {
+              ...audit,
+              accessibleAuthority: {
+                status: "supported",
+                value: true,
+              } as unknown as RouteEdgeSemanticAudit["accessibleAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 17 mobility linkage/,
+  );
+});
+
+test("integrity rejects stroller promotion from facility permission", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              strollerAuthority: {
+                status: "supported",
+                value: true,
+              } as unknown as RouteEdgeSemanticAudit["strollerAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 17 mobility linkage/,
   );
 });
 
