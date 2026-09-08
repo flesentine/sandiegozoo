@@ -9,7 +9,7 @@ import {
   type PedestrianDirectionSourceSnapshot,
 } from "../src/data/zooIngressPedestrianDirectionAuthority.ts";
 
-test("current ingress direction snapshots preserve only sourced OSM direction tags", () => {
+test("current ingress direction snapshots are the single frozen OSM tag authority", () => {
   assert.deepEqual(
     PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOTS,
     [
@@ -19,9 +19,11 @@ test("current ingress direction snapshots preserve only sourced OSM direction ta
         sourceWayId: "755054695",
         sourceUrl:
           "https://www.openstreetmap.org/way/755054695",
-        highwayTag: "pedestrian",
-        genericOnewayTag: "yes",
-        onewayFootTag: "absent",
+        sourceTags: {
+          highway: "pedestrian",
+          oneway: "yes",
+          tunnel: "building_passage",
+        },
         accessControlObservationId:
           "sdz-guest-entrance-turnstile-osm-node-7053320517",
         plannerMaterialization:
@@ -33,9 +35,9 @@ test("current ingress direction snapshots preserve only sourced OSM direction ta
         sourceWayId: "755054694",
         sourceUrl:
           "https://www.openstreetmap.org/way/755054694",
-        highwayTag: "pedestrian",
-        genericOnewayTag: "absent",
-        onewayFootTag: "absent",
+        sourceTags: {
+          highway: "pedestrian",
+        },
         plannerMaterialization:
           "pedestrian-direction-authority-only",
       },
@@ -83,8 +85,7 @@ test("unknown ingress way fails closed", () => {
 });
 
 function syntheticSnapshot(
-  onewayFootTag:
-    PedestrianDirectionSourceSnapshot["onewayFootTag"],
+  onewayFootTag: "yes" | "no" | "-1" | "absent",
 ): PedestrianDirectionSourceSnapshot {
   return {
     id: `synthetic-${onewayFootTag}`,
@@ -92,9 +93,12 @@ function syntheticSnapshot(
     sourceWayId: "synthetic-way",
     sourceUrl:
       "https://www.openstreetmap.org/way/synthetic-way",
-    highwayTag: "pedestrian",
-    genericOnewayTag: "absent",
-    onewayFootTag,
+    sourceTags: {
+      highway: "pedestrian",
+      ...(onewayFootTag === "absent"
+        ? {}
+        : { "oneway:foot": onewayFootTag }),
+    },
     plannerMaterialization:
       "pedestrian-direction-authority-only",
   };
@@ -151,7 +155,10 @@ test("explicit oneway:foot=no maps to bidirectional foot travel", () => {
 test("generic oneway cannot override absent oneway:foot", () => {
   const snapshot = {
     ...syntheticSnapshot("absent"),
-    genericOnewayTag: "yes" as const,
+    sourceTags: {
+      highway: "pedestrian",
+      oneway: "yes",
+    },
   };
 
   assert.deepEqual(
@@ -195,6 +202,13 @@ test("direction authority exports are deeply immutable", () => {
     ),
     true,
   );
+  assert.equal(
+    Object.isFrozen(
+      PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOTS[0]
+        .sourceTags,
+    ),
+    true,
+  );
 });
 
 test("integrity rejects generic oneway drift on controlled passage", () => {
@@ -205,7 +219,10 @@ test("integrity rejects generic oneway drift on controlled passage", () => {
         snapshot.sourceWayId === "755054695"
           ? {
               ...snapshot,
-              genericOnewayTag: "absent",
+              sourceTags: {
+                highway: "pedestrian",
+                tunnel: "building_passage",
+              },
             }
           : { ...snapshot },
     );
@@ -215,7 +232,7 @@ test("integrity rejects generic oneway drift on controlled passage", () => {
       assertPedestrianDirectionAuthorityIntegrity(
         badSnapshots,
       ),
-    /Controlled entrance passage direction tags drifted/,
+    /does not match ingress source\/tag authority/,
   );
 });
 
@@ -227,7 +244,10 @@ test("integrity rejects invented oneway:foot authority", () => {
         snapshot.sourceWayId === "755054694"
           ? {
               ...snapshot,
-              onewayFootTag: "yes",
+              sourceTags: {
+                ...snapshot.sourceTags,
+                "oneway:foot": "yes",
+              },
             }
           : { ...snapshot },
     );
@@ -237,7 +257,7 @@ test("integrity rejects invented oneway:foot authority", () => {
       assertPedestrianDirectionAuthorityIntegrity(
         badSnapshots,
       ),
-    /Interior Front Street connection direction tags drifted/,
+    /does not match ingress source\/tag authority/,
   );
 });
 
