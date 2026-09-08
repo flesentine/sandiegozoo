@@ -19,6 +19,7 @@ test("current ingress direction snapshots are the single frozen OSM tag authorit
         sourceWayId: "755054695",
         sourceUrl:
           "https://www.openstreetmap.org/way/755054695",
+        observedAt: "2026-09-07T23:05:00-07:00",
         sourceTags: {
           highway: "pedestrian",
           oneway: "yes",
@@ -35,6 +36,7 @@ test("current ingress direction snapshots are the single frozen OSM tag authorit
         sourceWayId: "755054694",
         sourceUrl:
           "https://www.openstreetmap.org/way/755054694",
+        observedAt: "2026-09-07T23:05:00-07:00",
         sourceTags: {
           highway: "pedestrian",
         },
@@ -93,6 +95,7 @@ function syntheticSnapshot(
     sourceWayId: "synthetic-way",
     sourceUrl:
       "https://www.openstreetmap.org/way/synthetic-way",
+    observedAt: "2026-09-07T23:05:00-07:00",
     sourceTags: {
       highway: "pedestrian",
       ...(onewayFootTag === "absent"
@@ -229,6 +232,29 @@ test("direction authority exports are deeply immutable", () => {
         .sourceTags,
     ),
     true,
+  );
+});
+
+test("integrity rejects observation-time drift from Planner 13 ingress way authority", () => {
+  const badSnapshots:
+    PedestrianDirectionSourceSnapshot[] =
+    PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOTS.map(
+      (snapshot, index) =>
+        index === 0
+          ? {
+              ...snapshot,
+              observedAt:
+                "2026-09-08T00:00:00-07:00",
+            }
+          : { ...snapshot },
+    );
+
+  assert.throws(
+    () =>
+      assertPedestrianDirectionAuthorityIntegrity(
+        badSnapshots,
+      ),
+    /does not match ingress source\/tag authority/,
   );
 });
 
