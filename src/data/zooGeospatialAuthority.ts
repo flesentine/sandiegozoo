@@ -47,6 +47,12 @@ export type FeatureAuthorityAssessment =
       targetId: string;
       observationIds: string[];
       maximumSourceSeparationMeters: number;
+    }
+  | {
+      status: "conflicting-feature-location";
+      targetId: string;
+      observationIds: string[];
+      maximumSourceSeparationMeters: number;
     };
 
 export type GuestNavigationPointAssessment =
@@ -444,11 +450,13 @@ export function assessFeatureGeospatialAuthority(
   }
 
   return {
-    status: "single-source-feature-location",
+    status: "conflicting-feature-location",
     targetId,
     observationIds: observations.map(
       (observation) => observation.id,
     ),
+    maximumSourceSeparationMeters:
+      roundedSeparation,
   };
 }
 
