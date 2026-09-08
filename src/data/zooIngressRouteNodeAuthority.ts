@@ -157,11 +157,14 @@ if (!explicitMainEntrance) {
   );
 }
 
+const EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID =
+  EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID;
+
 const RAW_BINDINGS: IngressRouteNodeBinding[] =
   INGRESS_GEOMETRY_NODES.map((sourceNode) => {
     const nodeRole =
       sourceNode.sourceObjectId ===
-      explicitMainEntrance.sourceObjectId
+      EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID
         ? "entrance" as const
         : "junction" as const;
 
@@ -304,7 +307,7 @@ export function assertIngressRouteNodeAuthorityIntegrity(
 
     const expectedKind =
       sourceNode.sourceObjectId ===
-      explicitMainEntrance.sourceObjectId
+      EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID
         ? "entrance"
         : "junction";
 
