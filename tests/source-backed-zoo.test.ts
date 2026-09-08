@@ -13,25 +13,39 @@ import {
   sourceBackedAnimalByUiPriorityId,
   sourceBackedPresentationByUiPriorityId,
   sourceBackedRecordById,
+  assertSourceBackedZooCatalogIntegrity,
+  type SourceBackedZooRecord,
 } from "../src/data/zooSourceCatalog.ts";
 
-test("source-backed Zoo record IDs and official URLs are stable and unique", () => {
+test("source-backed Zoo record IDs and fact evidence are stable and official", () => {
+  assert.doesNotThrow(() =>
+    assertSourceBackedZooCatalogIntegrity(
+      SOURCE_BACKED_ZOO_RECORDS,
+    ),
+  );
+
   const ids = SOURCE_BACKED_ZOO_RECORDS.map(
     (record) => record.id,
   );
-
   assert.equal(new Set(ids).size, ids.length);
 
   for (const record of SOURCE_BACKED_ZOO_RECORDS) {
-    assert.equal(record.source.confidence, "verified");
-    assert.equal(
-      record.source.lastVerified,
-      "2026-09-07T21:53:00-07:00",
-    );
+    for (const source of Object.values(record.evidence)) {
+      if (!source) continue;
 
-    const url = new URL(record.source.sourceUrl);
-    assert.equal(url.protocol, "https:");
-    assert.equal(url.hostname, "zoo.sandiegozoo.org");
+      assert.equal(source.authority, "official");
+      assert.equal(
+        source.observedAt,
+        "2026-09-07T21:53:00-07:00",
+      );
+
+      const url = new URL(source.sourceUrl);
+      assert.equal(url.protocol, "https:");
+      assert.equal(
+        url.hostname,
+        "zoo.sandiegozoo.org",
+      );
+    }
   }
 });
 
@@ -152,17 +166,17 @@ test("official-source audit exposes current UX fixture drift deterministically",
     ]),
     [
       [
-        "ANIMAL_LOCATION_LABEL_DIFFERS",
+        "ANIMAL_AREA_LABEL_DIFFERS",
         "gorilla",
         "sdz-gorilla-tropics",
       ],
       [
-        "ANIMAL_LOCATION_LABEL_DIFFERS",
+        "ANIMAL_AREA_LABEL_DIFFERS",
         "koala",
         "sdz-koala-outback",
       ],
       [
-        "ANIMAL_LOCATION_LABEL_DIFFERS",
+        "ANIMAL_AREA_LABEL_DIFFERS",
         "tiger",
         "sdz-tiger-trail",
       ],
@@ -195,16 +209,105 @@ test("source-backed records do not pretend to contain planner geometry", () => {
   }
 });
 
-test("source lookup helpers are read-only and deterministic", () => {
+test("source lookup helpers return deeply frozen shared authority", () => {
   const first = sourceBackedRecordById("sdz-skyfari");
   const second = sourceBackedRecordById("sdz-skyfari");
 
-  assert.deepEqual(second, first);
+  assert.equal(second, first);
   assert.equal(first?.kind, "transport");
   if (!first || first.kind !== "transport") {
     throw new Error("expected transport");
   }
 
+  assert.equal(Object.isFrozen(SOURCE_BACKED_ZOO_RECORDS), true);
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(Object.isFrozen(first.evidence), true);
+  assert.equal(
+    Object.isFrozen(first.evidence.identity),
+    true,
+  );
+  assert.equal(
+    Object.isFrozen(first.evidence.hours),
+    true,
+  );
+
+  assert.throws(
+    () => {
+      (first as unknown as { startTime: string }).startTime =
+        "09:00";
+    },
+    TypeError,
+  );
+
   assert.equal(first.startTime, "10:00");
   assert.equal(first.endTimePolicy, "zoo-close");
+});
+
+test("Skyfari identity and hours cite the pages that actually support those fact classes", () => {
+  const record = sourceBackedRecordById("sdz-skyfari");
+
+  assert.ok(record);
+  assert.equal(record?.kind, "transport");
+  if (!record || record.kind !== "transport") {
+    throw new Error("expected transport");
+  }
+
+  assert.equal(
+    record.evidence.identity.sourceUrl,
+    "https://zoo.sandiegozoo.org/activities/skyfarir-aerial-tram",
+  );
+  assert.equal(
+    record.evidence.hours?.sourceUrl,
+    "https://zoo.sandiegozoo.org/activities",
+  );
+  assert.notEqual(
+    record.evidence.identity.id,
+    record.evidence.hours?.id,
+  );
+});
+
+test("catalog integrity rejects duplicate UI bindings and missing fact evidence", () => {
+  const animalA = SOURCE_BACKED_ZOO_RECORDS.find(
+    (record) => record.kind === "animal-destination",
+  );
+  assert.ok(animalA);
+  if (!animalA || animalA.kind !== "animal-destination") {
+    throw new Error("expected animal destination");
+  }
+
+  const duplicateAnimal: SourceBackedZooRecord = {
+    ...animalA,
+    id: "duplicate-animal",
+  };
+
+  assert.throws(
+    () =>
+      assertSourceBackedZooCatalogIntegrity([
+        animalA,
+        duplicateAnimal,
+      ]),
+    /Duplicate animal source binding/,
+  );
+
+  const skyfari = sourceBackedRecordById("sdz-skyfari");
+  assert.ok(skyfari);
+  if (!skyfari || skyfari.kind !== "transport") {
+    throw new Error("expected transport");
+  }
+
+  const missingHours = {
+    ...skyfari,
+    id: "missing-hours",
+    evidence: {
+      identity: skyfari.evidence.identity,
+    },
+  } as unknown as SourceBackedZooRecord;
+
+  assert.throws(
+    () =>
+      assertSourceBackedZooCatalogIntegrity([
+        missingHours,
+      ]),
+    /missing hours evidence/,
+  );
 });
