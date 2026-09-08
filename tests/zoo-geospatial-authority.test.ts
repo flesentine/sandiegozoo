@@ -6,6 +6,7 @@ import {
   assessFeatureGeospatialAuthority,
   assessGuestNavigationPointAuthority,
   assertIndependentGeospatialAuthorityIntegrity,
+  classifyFeatureObservationAgreement,
   geospatialObservationsForTarget,
   type GeospatialTarget,
   type IndependentGeospatialObservation,
@@ -328,16 +329,25 @@ test("divergent independent observations are reported as conflicting rather than
     ),
   );
 
-  const original =
-    INDEPENDENT_GEOSPATIAL_OBSERVATIONS;
-
-  assert.ok(original.length > 0);
-
-  const distanceLatitude =
-    Math.abs(
-      observations[0].lat - observations[1].lat,
+  const assessment =
+    classifyFeatureObservationAgreement(
+      target.id,
+      observations,
     );
-  assert.ok(distanceLatitude > 0.001);
+
+  assert.equal(
+    assessment.status,
+    "conflicting-feature-location",
+  );
+  if (
+    assessment.status !==
+    "conflicting-feature-location"
+  ) {
+    throw new Error("expected conflict");
+  }
+  assert.ok(
+    assessment.maximumSourceSeparationMeters > 25,
+  );
 });
 
 test("unknown feature target is explicit", () => {
@@ -349,5 +359,43 @@ test("unknown feature target is explicit", () => {
       status: "unknown-target",
       targetId: "unknown-target",
     },
+  );
+});
+
+
+test("geospatial targets cannot exist without observations", () => {
+  const target = INDEPENDENT_GEOSPATIAL_TARGETS[0];
+
+  assert.throws(
+    () =>
+      assertIndependentGeospatialAuthorityIntegrity(
+        [target],
+        [],
+      ),
+    /has no observations/,
+  );
+});
+
+test("official context URLs are restricted to official government or Zoo authority", () => {
+  const target: GeospatialTarget = {
+    ...INDEPENDENT_GEOSPATIAL_TARGETS[1],
+    id: "bad-context",
+    officialContextUrl:
+      "https://example.com/not-official",
+  };
+  const observation: IndependentGeospatialObservation = {
+    ...INDEPENDENT_GEOSPATIAL_OBSERVATIONS[2],
+    id: "bad-context-observation",
+    targetId: target.id,
+    sourceObjectId: "999999999",
+  };
+
+  assert.throws(
+    () =>
+      assertIndependentGeospatialAuthorityIntegrity(
+        [target],
+        [observation],
+      ),
+    /invalid official context URL/,
   );
 });
