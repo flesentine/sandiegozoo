@@ -310,7 +310,7 @@ test("divergent independent observations are reported as conflicting rather than
 
   const observations: IndependentGeospatialObservation[] = [
     {
-      ...INDEPENDENT_GEOSPATIAL_OBSERVATIONS[0],
+      ...INDEPENDENT_GEOSPATIAL_OBSERVATIONS[1],
       id: "conflict-a",
       targetId: target.id,
     },
