@@ -30,6 +30,7 @@ Planner 16 therefore treats generic one-way tagging as insufficient pedestrian a
 
 Current frozen direction snapshot:
 
+- observed at `2026-09-07T23:05:00-07:00`, pinned to Planner 13 ingress-way authority
 - generic `oneway=yes`
 - no `oneway:foot`
 - customer turnstile context from Planner 12
@@ -44,6 +45,7 @@ The turnstile is retained as access-control context, but it is not promoted into
 
 Current frozen direction snapshot:
 
+- observed at `2026-09-07T23:05:00-07:00`, pinned to Planner 13 ingress-way authority
 - no generic one-way tag
 - no `oneway:foot`
 
@@ -94,6 +96,7 @@ Planner 16 fails closed if:
 
 - a current source way disappears
 - source way URL / target identity drifts
+- snapshot observation time diverges from the qualified Planner 13 ingress way
 - the controlled passage loses its current generic `oneway=yes` snapshot
 - a current `oneway:foot` tag is invented
 - turnstile context moves to the wrong way
