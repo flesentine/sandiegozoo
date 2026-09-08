@@ -6,6 +6,9 @@ import {
 import {
   ENTRANCE_ACCESS_CONTROL_OBSERVATIONS,
 } from "./zooGuestNavigationAuthority.ts";
+import {
+  routeNodeForSourceObjectId,
+} from "./zooIngressRouteNodeAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -16,7 +19,6 @@ export type SupportedFieldAuthority<T> = {
 export type BlockedFieldAuthority = {
   status: "blocked";
   reason:
-    | "PLANNER_ROUTE_NODES_NOT_MATERIALIZED"
     | "DURATION_POLICY_NOT_SOURCED"
     | "DIFFICULTY_NOT_SOURCED"
     | "STAIRS_NOT_EXPLICITLY_SOURCED"
@@ -33,7 +35,12 @@ export type RouteEdgeSemanticAudit = {
   sourceWayId: string;
   sourceUrl: string;
   sourceTags: Readonly<Record<string, string>>;
-  routeNodesAuthority: BlockedFieldAuthority;
+  routeNodesAuthority: SupportedFieldAuthority<
+    Readonly<{
+      fromNodeId: string;
+      toNodeId: string;
+    }>
+  >;
   modeAuthority: SupportedFieldAuthority<"walk">;
   distanceAuthority: SupportedFieldAuthority<number>;
   durationAuthority: BlockedFieldAuthority;
@@ -56,9 +63,12 @@ export type IngressRouteEdgeReadiness =
       status: "partial-route-edge-authority";
       targetId: string;
       auditIds: string[];
-      supportedFields: readonly ["mode", "distance"];
-      blockedFields: readonly [
+      supportedFields: readonly [
         "routeNodes",
+        "mode",
+        "distance",
+      ];
+      blockedFields: readonly [
         "duration",
         "difficulty",
         "stairs",
@@ -181,6 +191,19 @@ function buildAudit(
     );
   }
 
+  const fromRouteNode =
+    routeNodeForSourceObjectId(way.nodeIds[0]);
+  const toRouteNode =
+    routeNodeForSourceObjectId(
+      way.nodeIds[way.nodeIds.length - 1],
+    );
+
+  if (!fromRouteNode || !toRouteNode) {
+    throw new Error(
+      `Ingress way ${sourceWayId} is missing qualified Planner 15 endpoint route nodes.`,
+    );
+  }
+
   const genericOneway =
     "oneway" in sourceTags &&
     sourceTags.oneway === "yes";
@@ -191,9 +214,15 @@ function buildAudit(
     sourceWayId,
     sourceUrl: way.sourceUrl,
     sourceTags,
-    routeNodesAuthority: blocked(
-      "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
-    ),
+    routeNodesAuthority: {
+      status: "supported",
+      value: {
+        fromNodeId: fromRouteNode.id,
+        toNodeId: toRouteNode.id,
+      },
+      basis:
+        "Planner 15 route-node materialization from frozen OSM way endpoint nodes",
+    },
     modeAuthority: {
       status: "supported",
       value: "walk",
@@ -307,7 +336,24 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
+    const expectedFromRouteNode =
+      routeNodeForSourceObjectId(way.nodeIds[0]);
+    const expectedToRouteNode =
+      routeNodeForSourceObjectId(
+        way.nodeIds[way.nodeIds.length - 1],
+      );
+
     if (
+      !expectedFromRouteNode ||
+      !expectedToRouteNode ||
+      audit.routeNodesAuthority.status !== "supported" ||
+      JSON.stringify(audit.routeNodesAuthority.value) !==
+        JSON.stringify({
+          fromNodeId: expectedFromRouteNode.id,
+          toNodeId: expectedToRouteNode.id,
+        }) ||
+      audit.routeNodesAuthority.basis !==
+        "Planner 15 route-node materialization from frozen OSM way endpoint nodes" ||
       audit.modeAuthority.status !== "supported" ||
       audit.modeAuthority.value !== "walk" ||
       audit.modeAuthority.basis !== "OSM highway=pedestrian" ||
@@ -329,10 +375,6 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
 
     const expectedBlockedReasons = [
-      [
-        audit.routeNodesAuthority,
-        "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
-      ],
       [
         audit.durationAuthority,
         "DURATION_POLICY_NOT_SOURCED",
@@ -418,9 +460,12 @@ export function assessIngressRouteEdgeReadiness(
     status: "partial-route-edge-authority",
     targetId,
     auditIds: audits.map((audit) => audit.id),
-    supportedFields: ["mode", "distance"],
-    blockedFields: [
+    supportedFields: [
       "routeNodes",
+      "mode",
+      "distance",
+    ],
+    blockedFields: [
       "duration",
       "difficulty",
       "stairs",
