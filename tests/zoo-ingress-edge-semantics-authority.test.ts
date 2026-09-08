@@ -282,7 +282,7 @@ test("integrity rejects generic OSM oneway being promoted to pedestrian directio
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /improperly promoted an unsupported field/,
+    /changed blocked-field authority/,
   );
 });
 
@@ -323,5 +323,55 @@ test("integrity rejects tampered frozen source tags", () => {
         badAudits,
       ),
     /does not match its source authority/,
+  );
+});
+
+
+test("integrity rejects semantic-reason drift while fields remain blocked", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              durationAuthority: {
+                status: "blocked",
+                reason:
+                  "WHEELCHAIR_ACCESS_NOT_SOURCED",
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed blocked-field authority/,
+  );
+});
+
+test("integrity rejects supported-field basis drift", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              modeAuthority: {
+                ...audit.modeAuthority,
+                basis: "guessed from map appearance",
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed its supported fields/,
   );
 });
