@@ -1,0 +1,418 @@
+import {
+  DERIVED_INGRESS_DISTANCES,
+  INGRESS_GEOMETRY_WAYS,
+} from "./zooIngressDistanceAuthority.ts";
+import {
+  ENTRANCE_ACCESS_CONTROL_OBSERVATIONS,
+} from "./zooGuestNavigationAuthority.ts";
+
+export type SupportedFieldAuthority<T> = {
+  status: "supported";
+  value: T;
+  basis: string;
+};
+
+export type BlockedFieldAuthority = {
+  status: "blocked";
+  reason:
+    | "PLANNER_ROUTE_NODES_NOT_MATERIALIZED"
+    | "DURATION_POLICY_NOT_SOURCED"
+    | "DIFFICULTY_NOT_SOURCED"
+    | "STAIRS_NOT_EXPLICITLY_SOURCED"
+    | "WHEELCHAIR_ACCESS_NOT_SOURCED"
+    | "STROLLER_ACCESS_NOT_SOURCED"
+    | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
+    | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
+    | "EDGE_STATUS_NOT_SOURCED";
+};
+
+export type RouteEdgeSemanticAudit = {
+  id: string;
+  targetId: string;
+  sourceWayId: string;
+  sourceUrl: string;
+  sourceTags: Readonly<Record<string, string>>;
+  routeNodes: BlockedFieldAuthority;
+  mode: SupportedFieldAuthority<"walk">;
+  distance: SupportedFieldAuthority<number>;
+  duration: BlockedFieldAuthority;
+  difficulty: BlockedFieldAuthority;
+  stairs: BlockedFieldAuthority;
+  accessible: BlockedFieldAuthority;
+  stroller: BlockedFieldAuthority;
+  oneWay: BlockedFieldAuthority;
+  edgeStatus: BlockedFieldAuthority;
+  plannerMaterialization: "route-edge-audit-only";
+};
+
+export type IngressRouteEdgeReadiness =
+  | {
+      status: "blocked";
+      reason: "TARGET_UNKNOWN" | "NO_DISTANCE_SEGMENTS";
+      targetId: string;
+    }
+  | {
+      status: "partial-route-edge-authority";
+      targetId: string;
+      auditIds: string[];
+      supportedFields: readonly ["mode", "distance"];
+      blockedFields: readonly [
+        "routeNodes",
+        "duration",
+        "difficulty",
+        "stairs",
+        "accessible",
+        "stroller",
+        "oneWay",
+        "status",
+      ];
+      routeEdgeMaterialization: {
+        status: "blocked";
+        reason: "ROUTE_EDGE_CONTRACT_INCOMPLETE";
+      };
+    };
+
+export const OSM_PEDESTRIAN_SEMANTIC_REFERENCES =
+  Object.freeze([
+    "https://wiki.openstreetmap.org/wiki/Guidelines_for_pedestrian_navigation",
+    "https://wiki.openstreetmap.org/wiki/Key:oneway:foot",
+    "https://wiki.openstreetmap.org/wiki/Key:barrier",
+  ] as const);
+
+const FORBIDDEN_DIRECT_ROUTE_EDGE_FIELDS = [
+  "fromNodeId",
+  "toNodeId",
+  "mode",
+  "distanceMeters",
+  "durationMinutes",
+  "difficulty",
+  "stairs",
+  "accessible",
+  "stroller",
+  "oneWay",
+  "status",
+] as const;
+
+function deepFreeze<T>(value: T): T {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Object.isFrozen(value)
+  ) {
+    for (const child of Object.values(
+      value as Record<string, unknown>,
+    )) {
+      deepFreeze(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function assertNoDirectRouteEdgeShape(
+  value: object,
+  label: string,
+) {
+  for (const field of FORBIDDEN_DIRECT_ROUTE_EDGE_FIELDS) {
+    if (field in value) {
+      throw new Error(
+        `${label} cannot directly materialize Planner RouteEdge field ${field}.`,
+      );
+    }
+  }
+}
+
+function validOsmWayUrl(value: string, wayId: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "www.openstreetmap.org" &&
+      url.pathname === `/way/${wayId}`
+    );
+  } catch {
+    return false;
+  }
+}
+
+const SOURCE_TAGS_BY_WAY = deepFreeze({
+  "755054695": {
+    highway: "pedestrian",
+    oneway: "yes",
+    tunnel: "building_passage",
+  },
+  "755054694": {
+    highway: "pedestrian",
+  },
+} as const);
+
+function blocked(
+  reason: BlockedFieldAuthority["reason"],
+): BlockedFieldAuthority {
+  return { status: "blocked", reason };
+}
+
+function buildAudit(
+  sourceWayId: string,
+): RouteEdgeSemanticAudit {
+  const way = INGRESS_GEOMETRY_WAYS.find(
+    (candidate) =>
+      candidate.sourceObjectId === sourceWayId,
+  );
+  const distance = DERIVED_INGRESS_DISTANCES.find(
+    (candidate) =>
+      candidate.sourceWayId === sourceWayId,
+  );
+
+  if (!way || !distance) {
+    throw new Error(
+      `Cannot audit unknown ingress way ${sourceWayId}.`,
+    );
+  }
+
+  const sourceTags =
+    SOURCE_TAGS_BY_WAY[
+      sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
+    ];
+  if (!sourceTags) {
+    throw new Error(
+      `Ingress way ${sourceWayId} has no frozen semantic source tags.`,
+    );
+  }
+
+  const genericOneway =
+    "oneway" in sourceTags &&
+    sourceTags.oneway === "yes";
+
+  return {
+    id: `${way.id}-route-edge-audit`,
+    targetId: way.targetId,
+    sourceWayId,
+    sourceUrl: way.sourceUrl,
+    sourceTags,
+    routeNodes: blocked(
+      "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
+    ),
+    mode: {
+      status: "supported",
+      value: "walk",
+      basis: "OSM highway=pedestrian",
+    },
+    distance: {
+      status: "supported",
+      value: distance.distanceMeters,
+      basis:
+        "Planner 13 Haversine sum over frozen OSM way node sequence",
+    },
+    duration: blocked("DURATION_POLICY_NOT_SOURCED"),
+    difficulty: blocked("DIFFICULTY_NOT_SOURCED"),
+    stairs: blocked("STAIRS_NOT_EXPLICITLY_SOURCED"),
+    accessible: blocked(
+      "WHEELCHAIR_ACCESS_NOT_SOURCED",
+    ),
+    stroller: blocked("STROLLER_ACCESS_NOT_SOURCED"),
+    oneWay: blocked(
+      genericOneway
+        ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
+        : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+    ),
+    edgeStatus: blocked("EDGE_STATUS_NOT_SOURCED"),
+    plannerMaterialization: "route-edge-audit-only",
+  };
+}
+
+const RAW_AUDITS = [
+  buildAudit("755054695"),
+  buildAudit("755054694"),
+];
+
+export function assertIngressRouteEdgeSemanticAuditIntegrity(
+  audits: readonly RouteEdgeSemanticAudit[],
+) {
+  const distanceByWay = new Map(
+    DERIVED_INGRESS_DISTANCES.map((distance) => [
+      distance.sourceWayId,
+      distance,
+    ]),
+  );
+  const wayById = new Map(
+    INGRESS_GEOMETRY_WAYS.map((way) => [
+      way.sourceObjectId,
+      way,
+    ]),
+  );
+  const accessControl =
+    ENTRANCE_ACCESS_CONTROL_OBSERVATIONS.find(
+      (observation) =>
+        observation.targetId === "sdz-geo-main-entrance",
+    );
+
+  if (
+    !accessControl ||
+    accessControl.barrier !== "turnstile" ||
+    accessControl.access !== "customers"
+  ) {
+    throw new Error(
+      "Planner 14 requires qualified customer-turnstile authority from Planner 12.",
+    );
+  }
+
+  const ids = new Set<string>();
+  const auditedWayIds = new Set<string>();
+
+  for (const audit of audits) {
+    assertNoDirectRouteEdgeShape(
+      audit,
+      `Route-edge semantic audit ${audit.id}`,
+    );
+
+    if (
+      typeof audit.id !== "string" ||
+      audit.id.trim() === "" ||
+      audit.id !== audit.id.trim() ||
+      ids.has(audit.id)
+    ) {
+      throw new Error(
+        `Invalid or duplicate route-edge semantic audit ID: ${audit.id}`,
+      );
+    }
+    ids.add(audit.id);
+
+    const way = wayById.get(audit.sourceWayId);
+    const distance = distanceByWay.get(audit.sourceWayId);
+    const sourceTags =
+      SOURCE_TAGS_BY_WAY[
+        audit.sourceWayId as keyof typeof SOURCE_TAGS_BY_WAY
+      ];
+
+    if (
+      !way ||
+      !distance ||
+      !sourceTags ||
+      auditedWayIds.has(audit.sourceWayId) ||
+      audit.targetId !== way.targetId ||
+      audit.sourceUrl !== way.sourceUrl ||
+      !validOsmWayUrl(
+        audit.sourceUrl,
+        audit.sourceWayId,
+      ) ||
+      JSON.stringify(audit.sourceTags) !==
+        JSON.stringify(sourceTags) ||
+      audit.plannerMaterialization !==
+        "route-edge-audit-only"
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} does not match its source authority.`,
+      );
+    }
+
+    if (
+      audit.mode.status !== "supported" ||
+      audit.mode.value !== "walk" ||
+      audit.distance.status !== "supported" ||
+      audit.distance.value !== distance.distanceMeters
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} changed its supported fields.`,
+      );
+    }
+
+    const blockedFields = [
+      audit.routeNodes,
+      audit.duration,
+      audit.difficulty,
+      audit.stairs,
+      audit.accessible,
+      audit.stroller,
+      audit.oneWay,
+      audit.edgeStatus,
+    ];
+    if (
+      blockedFields.some(
+        (field) => field.status !== "blocked",
+      )
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} improperly promoted an unsupported field.`,
+      );
+    }
+
+    const genericOneway =
+      "oneway" in sourceTags &&
+      sourceTags.oneway === "yes";
+    const expectedDirectionReason = genericOneway
+      ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
+      : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
+    if (
+      audit.oneWay.reason !== expectedDirectionReason
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} misclassified pedestrian direction authority.`,
+      );
+    }
+
+    auditedWayIds.add(audit.sourceWayId);
+  }
+
+  if (auditedWayIds.size !== INGRESS_GEOMETRY_WAYS.length) {
+    throw new Error(
+      "Every ingress distance way requires exactly one route-edge semantic audit.",
+    );
+  }
+}
+
+assertIngressRouteEdgeSemanticAuditIntegrity(RAW_AUDITS);
+
+export const INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS:
+  readonly RouteEdgeSemanticAudit[] =
+  deepFreeze(RAW_AUDITS);
+
+export function assessIngressRouteEdgeReadiness(
+  targetId: string,
+): IngressRouteEdgeReadiness {
+  const knownTarget =
+    targetId === "sdz-geo-main-entrance" ||
+    targetId === "sdz-geo-wegeforth-bowl";
+
+  if (!knownTarget) {
+    return {
+      status: "blocked",
+      reason: "TARGET_UNKNOWN",
+      targetId,
+    };
+  }
+
+  const audits =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.filter(
+      (audit) => audit.targetId === targetId,
+    );
+
+  if (audits.length === 0) {
+    return {
+      status: "blocked",
+      reason: "NO_DISTANCE_SEGMENTS",
+      targetId,
+    };
+  }
+
+  return {
+    status: "partial-route-edge-authority",
+    targetId,
+    auditIds: audits.map((audit) => audit.id),
+    supportedFields: ["mode", "distance"],
+    blockedFields: [
+      "routeNodes",
+      "duration",
+      "difficulty",
+      "stairs",
+      "accessible",
+      "stroller",
+      "oneWay",
+      "status",
+    ],
+    routeEdgeMaterialization: {
+      status: "blocked",
+      reason: "ROUTE_EDGE_CONTRACT_INCOMPLETE",
+    },
+  };
+}
