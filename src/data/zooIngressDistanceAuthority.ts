@@ -1,3 +1,4 @@
+import { INDEPENDENT_GEOSPATIAL_TARGETS } from "./zooGeospatialAuthority.ts";
 import {
   ENTRANCE_ACCESS_CONTROL_OBSERVATIONS,
   ENTRANCE_PEDESTRIAN_TOPOLOGY,
@@ -627,21 +628,14 @@ export function assessIngressDistanceAuthority(
   targetId: string,
 ): IngressDistanceAuthorityAssessment {
   const knownTarget =
-    EXPLICIT_GUEST_ENTRANCE_OBSERVATIONS.some(
-      (entrance) => entrance.targetId === targetId,
-    ) ||
-    ENTRANCE_PEDESTRIAN_TOPOLOGY.some(
-      (record) => record.targetId === targetId,
+    INDEPENDENT_GEOSPATIAL_TARGETS.some(
+      (target) => target.id === targetId,
     );
 
   if (!knownTarget) {
-    const isKnownPlanner12Target =
-      targetId === "sdz-geo-wegeforth-bowl";
     return {
       status: "blocked",
-      reason: isKnownPlanner12Target
-        ? "INGRESS_GEOMETRY_NOT_SOURCED"
-        : "TARGET_UNKNOWN",
+      reason: "TARGET_UNKNOWN",
       targetId,
     };
   }
