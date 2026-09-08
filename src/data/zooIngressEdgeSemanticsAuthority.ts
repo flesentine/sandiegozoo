@@ -13,6 +13,9 @@ import {
   assessPedestrianDirectionAuthority,
   pedestrianDirectionSourceForWay,
 } from "./zooIngressPedestrianDirectionAuthority.ts";
+import {
+  assessIngressMobilityAuthority,
+} from "./zooIngressMobilityAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -28,6 +31,9 @@ export type BlockedFieldAuthority = {
     | "STAIRS_NOT_EXPLICITLY_SOURCED"
     | "WHEELCHAIR_ACCESS_NOT_SOURCED"
     | "STROLLER_ACCESS_NOT_SOURCED"
+    | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
+    | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY"
+    | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY"
     | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
     | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
     | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED"
@@ -39,6 +45,23 @@ export type PedestrianOneWayFieldAuthority =
     basis: "Planner 16 pedestrian-direction authority";
     sourceSnapshotId: string;
   };
+
+export type AccessibilityFieldAuthority = {
+  status: "blocked";
+  reason:
+    | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
+    | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY";
+  basis: "Planner 17 accessibility authority";
+  corridorEvidenceId?: string;
+};
+
+export type StrollerFieldAuthority = {
+  status: "blocked";
+  reason:
+    "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY";
+  basis: "Planner 17 stroller authority";
+  policyEvidenceId: string;
+};
 
 export type RouteEdgeSemanticAudit = {
   id: string;
@@ -57,8 +80,8 @@ export type RouteEdgeSemanticAudit = {
   durationAuthority: BlockedFieldAuthority;
   difficultyAuthority: BlockedFieldAuthority;
   stairsAuthority: BlockedFieldAuthority;
-  accessibleAuthority: BlockedFieldAuthority;
-  strollerAuthority: BlockedFieldAuthority;
+  accessibleAuthority: AccessibilityFieldAuthority;
+  strollerAuthority: StrollerFieldAuthority;
   oneWayAuthority: PedestrianOneWayFieldAuthority;
   edgeStatusAuthority: BlockedFieldAuthority;
   plannerMaterialization: "route-edge-audit-only";
@@ -205,8 +228,11 @@ function buildAudit(
 
   const directionAuthority =
     assessPedestrianDirectionAuthority(sourceWayId);
+  const mobilityAuthority =
+    assessIngressMobilityAuthority(sourceWayId);
 
   if (
+    "status" in mobilityAuthority ||
     directionAuthority.status !== "blocked" ||
     directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
     !directionAuthority.sourceSnapshotId
@@ -245,10 +271,10 @@ function buildAudit(
     durationAuthority: blocked("DURATION_POLICY_NOT_SOURCED"),
     difficultyAuthority: blocked("DIFFICULTY_NOT_SOURCED"),
     stairsAuthority: blocked("STAIRS_NOT_EXPLICITLY_SOURCED"),
-    accessibleAuthority: blocked(
-      "WHEELCHAIR_ACCESS_NOT_SOURCED",
-    ),
-    strollerAuthority: blocked("STROLLER_ACCESS_NOT_SOURCED"),
+    accessibleAuthority:
+      mobilityAuthority.accessibilityAuthority,
+    strollerAuthority:
+      mobilityAuthority.strollerAuthority,
     oneWayAuthority: {
       status: "blocked",
       reason: directionAuthority.reason,
@@ -379,6 +405,26 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
+    const mobilityAuthority =
+      assessIngressMobilityAuthority(
+        audit.sourceWayId,
+      );
+    if (
+      "status" in mobilityAuthority ||
+      JSON.stringify(audit.accessibleAuthority) !==
+        JSON.stringify(
+          mobilityAuthority.accessibilityAuthority,
+        ) ||
+      JSON.stringify(audit.strollerAuthority) !==
+        JSON.stringify(
+          mobilityAuthority.strollerAuthority,
+        )
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} changed Planner 17 mobility linkage.`,
+      );
+    }
+
     const directionAuthority =
       assessPedestrianDirectionAuthority(
         audit.sourceWayId,
@@ -414,11 +460,11 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       ],
       [
         audit.accessibleAuthority,
-        "WHEELCHAIR_ACCESS_NOT_SOURCED",
+        mobilityAuthority.accessibilityAuthority.reason,
       ],
       [
         audit.strollerAuthority,
-        "STROLLER_ACCESS_NOT_SOURCED",
+        mobilityAuthority.strollerAuthority.reason,
       ],
       [audit.oneWayAuthority, expectedDirectionReason],
       [audit.edgeStatusAuthority, "EDGE_STATUS_NOT_SOURCED"],
