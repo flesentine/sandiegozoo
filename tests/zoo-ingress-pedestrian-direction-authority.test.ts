@@ -152,6 +152,27 @@ test("explicit oneway:foot=no maps to bidirectional foot travel", () => {
   );
 });
 
+test("unsupported explicit oneway:foot value fails closed", () => {
+  const snapshot: PedestrianDirectionSourceSnapshot = {
+    ...syntheticSnapshot("absent"),
+    sourceTags: {
+      highway: "pedestrian",
+      "oneway:foot": "reverse",
+    },
+  };
+
+  assert.deepEqual(
+    classifyPedestrianDirectionSnapshot(snapshot),
+    {
+      status: "blocked",
+      reason:
+        "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED",
+      sourceWayId: "synthetic-way",
+      sourceSnapshotId: "synthetic-absent",
+    },
+  );
+});
+
 test("generic oneway cannot override absent oneway:foot", () => {
   const snapshot = {
     ...syntheticSnapshot("absent"),
