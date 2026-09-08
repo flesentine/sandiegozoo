@@ -158,7 +158,7 @@ if (!explicitMainEntrance) {
 }
 
 const EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID =
-  EXPLICIT_MAIN_ENTRANCE_SOURCE_OBJECT_ID;
+  explicitMainEntrance.sourceObjectId;
 
 const RAW_BINDINGS: IngressRouteNodeBinding[] =
   INGRESS_GEOMETRY_NODES.map((sourceNode) => {
