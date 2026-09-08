@@ -10,9 +10,7 @@ export type PedestrianDirectionSourceSnapshot = {
   targetId: string;
   sourceWayId: string;
   sourceUrl: string;
-  highwayTag: "pedestrian";
-  genericOnewayTag: "yes" | "absent";
-  onewayFootTag: "yes" | "no" | "-1" | "absent";
+  sourceTags: Readonly<Record<string, string>>;
   accessControlObservationId?: string;
   plannerMaterialization:
     "pedestrian-direction-authority-only";
@@ -104,6 +102,17 @@ function validSemanticReference(value: string) {
   }
 }
 
+const EXPECTED_SOURCE_TAGS_BY_WAY = deepFreeze({
+  "755054695": {
+    highway: "pedestrian",
+    oneway: "yes",
+    tunnel: "building_passage",
+  },
+  "755054694": {
+    highway: "pedestrian",
+  },
+} as const);
+
 const RAW_DIRECTION_SNAPSHOTS:
   PedestrianDirectionSourceSnapshot[] = [
   {
@@ -112,9 +121,8 @@ const RAW_DIRECTION_SNAPSHOTS:
     sourceWayId: "755054695",
     sourceUrl:
       "https://www.openstreetmap.org/way/755054695",
-    highwayTag: "pedestrian",
-    genericOnewayTag: "yes",
-    onewayFootTag: "absent",
+    sourceTags:
+      EXPECTED_SOURCE_TAGS_BY_WAY["755054695"],
     accessControlObservationId:
       "sdz-guest-entrance-turnstile-osm-node-7053320517",
     plannerMaterialization:
@@ -126,9 +134,8 @@ const RAW_DIRECTION_SNAPSHOTS:
     sourceWayId: "755054694",
     sourceUrl:
       "https://www.openstreetmap.org/way/755054694",
-    highwayTag: "pedestrian",
-    genericOnewayTag: "absent",
-    onewayFootTag: "absent",
+    sourceTags:
+      EXPECTED_SOURCE_TAGS_BY_WAY["755054694"],
     plannerMaterialization:
       "pedestrian-direction-authority-only",
   },
@@ -193,8 +200,15 @@ export function assertPedestrianDirectionAuthorityIntegrity(
     ids.add(snapshot.id);
 
     const way = wayById.get(snapshot.sourceWayId);
+    const expectedTags =
+      EXPECTED_SOURCE_TAGS_BY_WAY[
+        snapshot.sourceWayId as
+          keyof typeof EXPECTED_SOURCE_TAGS_BY_WAY
+      ];
+
     if (
       !way ||
+      !expectedTags ||
       wayIds.has(snapshot.sourceWayId) ||
       snapshot.targetId !== way.targetId ||
       snapshot.sourceUrl !== way.sourceUrl ||
@@ -202,32 +216,14 @@ export function assertPedestrianDirectionAuthorityIntegrity(
         snapshot.sourceUrl,
         snapshot.sourceWayId,
       ) ||
-      snapshot.highwayTag !== "pedestrian" ||
+      JSON.stringify(snapshot.sourceTags) !==
+        JSON.stringify(expectedTags) ||
+      snapshot.sourceTags.highway !== "pedestrian" ||
       snapshot.plannerMaterialization !==
         "pedestrian-direction-authority-only"
     ) {
       throw new Error(
-        `Pedestrian-direction snapshot ${snapshot.id} does not match ingress source authority.`,
-      );
-    }
-
-    if (
-      snapshot.genericOnewayTag !== "yes" &&
-      snapshot.genericOnewayTag !== "absent"
-    ) {
-      throw new Error(
-        `Pedestrian-direction snapshot ${snapshot.id} has unsupported generic oneway authority.`,
-      );
-    }
-
-    if (
-      snapshot.onewayFootTag !== "yes" &&
-      snapshot.onewayFootTag !== "no" &&
-      snapshot.onewayFootTag !== "-1" &&
-      snapshot.onewayFootTag !== "absent"
-    ) {
-      throw new Error(
-        `Pedestrian-direction snapshot ${snapshot.id} has unsupported oneway:foot authority.`,
+        `Pedestrian-direction snapshot ${snapshot.id} does not match ingress source/tag authority.`,
       );
     }
 
@@ -249,26 +245,6 @@ export function assertPedestrianDirectionAuthorityIntegrity(
     ) {
       throw new Error(
         `Pedestrian-direction snapshot ${snapshot.id} claims unrelated access-control context.`,
-      );
-    }
-
-    if (
-      snapshot.sourceWayId === "755054695" &&
-      (snapshot.genericOnewayTag !== "yes" ||
-        snapshot.onewayFootTag !== "absent")
-    ) {
-      throw new Error(
-        "Controlled entrance passage direction tags drifted from the qualified source snapshot.",
-      );
-    }
-
-    if (
-      snapshot.sourceWayId === "755054694" &&
-      (snapshot.genericOnewayTag !== "absent" ||
-        snapshot.onewayFootTag !== "absent")
-    ) {
-      throw new Error(
-        "Interior Front Street connection direction tags drifted from the qualified source snapshot.",
       );
     }
 
@@ -308,7 +284,12 @@ export function classifyPedestrianDirectionSnapshot(
     reason: "SOURCE_WAY_UNKNOWN";
   }
 > {
-  if (snapshot.onewayFootTag === "yes") {
+  const onewayFootTag =
+    snapshot.sourceTags["oneway:foot"];
+  const genericOnewayTag =
+    snapshot.sourceTags.oneway;
+
+  if (onewayFootTag === "yes") {
     return {
       status: "supported",
       sourceWayId: snapshot.sourceWayId,
@@ -319,7 +300,7 @@ export function classifyPedestrianDirectionSnapshot(
     };
   }
 
-  if (snapshot.onewayFootTag === "-1") {
+  if (onewayFootTag === "-1") {
     return {
       status: "supported",
       sourceWayId: snapshot.sourceWayId,
@@ -330,7 +311,7 @@ export function classifyPedestrianDirectionSnapshot(
     };
   }
 
-  if (snapshot.onewayFootTag === "no") {
+  if (onewayFootTag === "no") {
     return {
       status: "supported",
       sourceWayId: snapshot.sourceWayId,
@@ -341,7 +322,7 @@ export function classifyPedestrianDirectionSnapshot(
     };
   }
 
-  if (snapshot.genericOnewayTag === "yes") {
+  if (genericOnewayTag === "yes") {
     return {
       status: "blocked",
       reason:
