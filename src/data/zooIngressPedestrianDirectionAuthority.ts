@@ -299,6 +299,67 @@ export function pedestrianDirectionSourceForWay(
   );
 }
 
+export function classifyPedestrianDirectionSnapshot(
+  snapshot: PedestrianDirectionSourceSnapshot,
+): Exclude<
+  PedestrianDirectionAssessment,
+  {
+    status: "blocked";
+    reason: "SOURCE_WAY_UNKNOWN";
+  }
+> {
+  if (snapshot.onewayFootTag === "yes") {
+    return {
+      status: "supported",
+      sourceWayId: snapshot.sourceWayId,
+      sourceSnapshotId: snapshot.id,
+      oneWay: true,
+      direction: "with-source-way-order",
+      basis: "OSM oneway:foot=yes",
+    };
+  }
+
+  if (snapshot.onewayFootTag === "-1") {
+    return {
+      status: "supported",
+      sourceWayId: snapshot.sourceWayId,
+      sourceSnapshotId: snapshot.id,
+      oneWay: true,
+      direction: "against-source-way-order",
+      basis: "OSM oneway:foot=-1",
+    };
+  }
+
+  if (snapshot.onewayFootTag === "no") {
+    return {
+      status: "supported",
+      sourceWayId: snapshot.sourceWayId,
+      sourceSnapshotId: snapshot.id,
+      oneWay: false,
+      direction: "bidirectional",
+      basis: "OSM oneway:foot=no",
+    };
+  }
+
+  if (snapshot.genericOnewayTag === "yes") {
+    return {
+      status: "blocked",
+      reason:
+        "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT",
+      sourceWayId: snapshot.sourceWayId,
+      sourceSnapshotId: snapshot.id,
+    };
+  }
+
+  return {
+    status: "blocked",
+    reason:
+      "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+    sourceWayId: snapshot.sourceWayId,
+    sourceSnapshotId: snapshot.id,
+  };
+}
+
 export function assessPedestrianDirectionAuthority(
   sourceWayId: string,
 ): PedestrianDirectionAssessment {
@@ -313,54 +374,5 @@ export function assessPedestrianDirectionAuthority(
     };
   }
 
-  if (snapshot.onewayFootTag === "yes") {
-    return {
-      status: "supported",
-      sourceWayId,
-      sourceSnapshotId: snapshot.id,
-      oneWay: true,
-      direction: "with-source-way-order",
-      basis: "OSM oneway:foot=yes",
-    };
-  }
-
-  if (snapshot.onewayFootTag === "-1") {
-    return {
-      status: "supported",
-      sourceWayId,
-      sourceSnapshotId: snapshot.id,
-      oneWay: true,
-      direction: "against-source-way-order",
-      basis: "OSM oneway:foot=-1",
-    };
-  }
-
-  if (snapshot.onewayFootTag === "no") {
-    return {
-      status: "supported",
-      sourceWayId,
-      sourceSnapshotId: snapshot.id,
-      oneWay: false,
-      direction: "bidirectional",
-      basis: "OSM oneway:foot=no",
-    };
-  }
-
-  if (snapshot.genericOnewayTag === "yes") {
-    return {
-      status: "blocked",
-      reason:
-        "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT",
-      sourceWayId,
-      sourceSnapshotId: snapshot.id,
-    };
-  }
-
-  return {
-    status: "blocked",
-    reason:
-      "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
-    sourceWayId,
-    sourceSnapshotId: snapshot.id,
-  };
+  return classifyPedestrianDirectionSnapshot(snapshot);
 }
