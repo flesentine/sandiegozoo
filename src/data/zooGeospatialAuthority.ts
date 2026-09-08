@@ -268,6 +268,16 @@ export function assertIndependentGeospatialAuthorityIntegrity(
       );
     }
 
+    if (
+      (target.targetKind !== "source-record" &&
+        target.targetKind !== "map-anchor") ||
+      target.plannerMaterialization !== "feature-geometry-only"
+    ) {
+      throw new Error(
+        `Geospatial target ${target.id} has unsupported authority semantics.`,
+      );
+    }
+
     if (!mapAnchorIds.has(target.mapAnchorId)) {
       throw new Error(
         `Geospatial target ${target.id} references unknown map anchor ${target.mapAnchorId}.`,
@@ -376,11 +386,38 @@ export function assertIndependentGeospatialAuthorityIntegrity(
     );
 
     if (
+      observation.provider !== "OpenStreetMap" &&
+      observation.provider !== "GeoNames"
+    ) {
+      throw new Error(
+        `Geospatial observation ${observation.id} has unsupported provider authority.`,
+      );
+    }
+
+    if (
+      observation.sourceObjectType !== "way" &&
+      observation.sourceObjectType !== "feature"
+    ) {
+      throw new Error(
+        `Geospatial observation ${observation.id} has unsupported source object type.`,
+      );
+    }
+
+    if (
       observation.coordinateSemantics !==
       "mapped-feature-representative-point"
     ) {
       throw new Error(
         `Geospatial observation ${observation.id} has unsupported coordinate semantics.`,
+      );
+    }
+
+    if (
+      observation.featureClass !== "theatre-building" &&
+      observation.featureClass !== "entrance-building"
+    ) {
+      throw new Error(
+        `Geospatial observation ${observation.id} has unsupported feature class.`,
       );
     }
   }
@@ -428,11 +465,29 @@ export function classifyFeatureObservationAgreement(
   FeatureAuthorityAssessment,
   { status: "unknown-target" }
 > {
+  if (observations.length === 0) {
+    throw new Error(
+      `Feature observation agreement for ${targetId} requires at least one observation.`,
+    );
+  }
+
+  const mismatchedObservation = observations.find(
+    (observation) => observation.targetId !== targetId,
+  );
+  if (mismatchedObservation) {
+    throw new Error(
+      `Geospatial observation ${mismatchedObservation.id} does not belong to target ${targetId}.`,
+    );
+  }
+
   const ordered = [...observations].sort((a, b) =>
     compareText(a.id, b.id),
   );
+  const providerCount = new Set(
+    ordered.map((observation) => observation.provider),
+  ).size;
 
-  if (ordered.length < 2) {
+  if (providerCount < 2) {
     return {
       status: "single-source-feature-location",
       targetId,
