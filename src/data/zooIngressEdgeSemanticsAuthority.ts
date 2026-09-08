@@ -33,16 +33,16 @@ export type RouteEdgeSemanticAudit = {
   sourceWayId: string;
   sourceUrl: string;
   sourceTags: Readonly<Record<string, string>>;
-  routeNodes: BlockedFieldAuthority;
-  mode: SupportedFieldAuthority<"walk">;
-  distance: SupportedFieldAuthority<number>;
-  duration: BlockedFieldAuthority;
-  difficulty: BlockedFieldAuthority;
-  stairs: BlockedFieldAuthority;
-  accessible: BlockedFieldAuthority;
-  stroller: BlockedFieldAuthority;
-  oneWay: BlockedFieldAuthority;
-  edgeStatus: BlockedFieldAuthority;
+  routeNodesAuthority: BlockedFieldAuthority;
+  modeAuthority: SupportedFieldAuthority<"walk">;
+  distanceAuthority: SupportedFieldAuthority<number>;
+  durationAuthority: BlockedFieldAuthority;
+  difficultyAuthority: BlockedFieldAuthority;
+  stairsAuthority: BlockedFieldAuthority;
+  accessibleAuthority: BlockedFieldAuthority;
+  strollerAuthority: BlockedFieldAuthority;
+  oneWayAuthority: BlockedFieldAuthority;
+  edgeStatusAuthority: BlockedFieldAuthority;
   plannerMaterialization: "route-edge-audit-only";
 };
 
@@ -191,33 +191,33 @@ function buildAudit(
     sourceWayId,
     sourceUrl: way.sourceUrl,
     sourceTags,
-    routeNodes: blocked(
+    routeNodesAuthority: blocked(
       "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
     ),
-    mode: {
+    modeAuthority: {
       status: "supported",
       value: "walk",
       basis: "OSM highway=pedestrian",
     },
-    distance: {
+    distanceAuthority: {
       status: "supported",
       value: distance.distanceMeters,
       basis:
         "Planner 13 Haversine sum over frozen OSM way node sequence",
     },
-    duration: blocked("DURATION_POLICY_NOT_SOURCED"),
-    difficulty: blocked("DIFFICULTY_NOT_SOURCED"),
-    stairs: blocked("STAIRS_NOT_EXPLICITLY_SOURCED"),
-    accessible: blocked(
+    durationAuthority: blocked("DURATION_POLICY_NOT_SOURCED"),
+    difficultyAuthority: blocked("DIFFICULTY_NOT_SOURCED"),
+    stairsAuthority: blocked("STAIRS_NOT_EXPLICITLY_SOURCED"),
+    accessibleAuthority: blocked(
       "WHEELCHAIR_ACCESS_NOT_SOURCED",
     ),
-    stroller: blocked("STROLLER_ACCESS_NOT_SOURCED"),
-    oneWay: blocked(
+    strollerAuthority: blocked("STROLLER_ACCESS_NOT_SOURCED"),
+    oneWayAuthority: blocked(
       genericOneway
         ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
         : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
     ),
-    edgeStatus: blocked("EDGE_STATUS_NOT_SOURCED"),
+    edgeStatusAuthority: blocked("EDGE_STATUS_NOT_SOURCED"),
     plannerMaterialization: "route-edge-audit-only",
   };
 }
@@ -308,10 +308,10 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     }
 
     if (
-      audit.mode.status !== "supported" ||
-      audit.mode.value !== "walk" ||
-      audit.distance.status !== "supported" ||
-      audit.distance.value !== distance.distanceMeters
+      audit.modeAuthority.status !== "supported" ||
+      audit.modeAuthority.value !== "walk" ||
+      audit.distanceAuthority.status !== "supported" ||
+      audit.distanceAuthority.value !== distance.distanceMeters
     ) {
       throw new Error(
         `Route-edge semantic audit ${audit.id} changed its supported fields.`,
@@ -319,14 +319,14 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     }
 
     const blockedFields = [
-      audit.routeNodes,
-      audit.duration,
-      audit.difficulty,
-      audit.stairs,
-      audit.accessible,
-      audit.stroller,
-      audit.oneWay,
-      audit.edgeStatus,
+      audit.routeNodesAuthority,
+      audit.durationAuthority,
+      audit.difficultyAuthority,
+      audit.stairsAuthority,
+      audit.accessibleAuthority,
+      audit.strollerAuthority,
+      audit.oneWayAuthority,
+      audit.edgeStatusAuthority,
     ];
     if (
       blockedFields.some(
@@ -345,7 +345,7 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
       : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
     if (
-      audit.oneWay.reason !== expectedDirectionReason
+      audit.oneWayAuthority.reason !== expectedDirectionReason
     ) {
       throw new Error(
         `Route-edge semantic audit ${audit.id} misclassified pedestrian direction authority.`,
