@@ -12,7 +12,7 @@
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview",
     "validate:data": "node --experimental-strip-types --test tests/planner-data.test.ts",
-    "test:planner": "node --experimental-strip-types --test tests/planner-data.test.ts tests/planner-routing.test.ts tests/planner-scheduling.test.ts tests/planner-scoring.test.ts tests/planner-optimizer.test.ts tests/planner-optimizer-scalable.test.ts tests/planner-qualification.test.ts tests/planner-integration.test.ts tests/source-backed-zoo.test.ts tests/zoo-map-authority.test.ts tests/zoo-geospatial-authority.test.ts tests/zoo-guest-navigation-authority.test.ts"
+    "test:planner": "node --experimental-strip-types --test tests/planner-data.test.ts tests/planner-routing.test.ts tests/planner-scheduling.test.ts tests/planner-scoring.test.ts tests/planner-optimizer.test.ts tests/planner-optimizer-scalable.test.ts tests/planner-qualification.test.ts tests/planner-integration.test.ts tests/source-backed-zoo.test.ts tests/zoo-map-authority.test.ts tests/zoo-geospatial-authority.test.ts tests/zoo-guest-navigation-authority.test.ts tests/zoo-ingress-distance-authority.test.ts"
   },
   "dependencies": {
     "react": "19.2.8",
