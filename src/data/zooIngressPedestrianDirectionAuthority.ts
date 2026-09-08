@@ -10,6 +10,7 @@ export type PedestrianDirectionSourceSnapshot = {
   targetId: string;
   sourceWayId: string;
   sourceUrl: string;
+  observedAt: string;
   sourceTags: Readonly<Record<string, string>>;
   accessControlObservationId?: string;
   plannerMaterialization:
@@ -122,6 +123,7 @@ const RAW_DIRECTION_SNAPSHOTS:
     sourceWayId: "755054695",
     sourceUrl:
       "https://www.openstreetmap.org/way/755054695",
+    observedAt: "2026-09-07T23:05:00-07:00",
     sourceTags:
       EXPECTED_SOURCE_TAGS_BY_WAY["755054695"],
     accessControlObservationId:
@@ -135,6 +137,7 @@ const RAW_DIRECTION_SNAPSHOTS:
     sourceWayId: "755054694",
     sourceUrl:
       "https://www.openstreetmap.org/way/755054694",
+    observedAt: "2026-09-07T23:05:00-07:00",
     sourceTags:
       EXPECTED_SOURCE_TAGS_BY_WAY["755054694"],
     plannerMaterialization:
@@ -213,6 +216,7 @@ export function assertPedestrianDirectionAuthorityIntegrity(
       wayIds.has(snapshot.sourceWayId) ||
       snapshot.targetId !== way.targetId ||
       snapshot.sourceUrl !== way.sourceUrl ||
+      snapshot.observedAt !== way.observedAt ||
       !validOsmWayUrl(
         snapshot.sourceUrl,
         snapshot.sourceWayId,
