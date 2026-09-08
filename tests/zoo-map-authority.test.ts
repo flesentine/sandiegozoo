@@ -78,12 +78,6 @@ test("official map anchors cover the first source-backed navigation slice", () =
         "destination",
       ],
       [
-        "sdz-map-anchor-tiger-trail",
-        "TIGER TRAIL",
-        "sdz-tiger-trail",
-        "destination",
-      ],
-      [
         "sdz-map-anchor-wegeforth-bowl",
         "WEGEFORTH BOWL",
         "sdz-wildlife-wonders",
@@ -206,16 +200,16 @@ test("direct corridor authority can be queried without pretending it is an exact
     ]),
     [
       [
-        "sdz-corridor-treetops-way",
-        7,
-        undefined,
-        undefined,
-      ],
-      [
         "sdz-corridor-tiger-trail",
         20,
         "Entrance",
         "Tigers",
+      ],
+      [
+        "sdz-corridor-treetops-way",
+        7,
+        undefined,
+        undefined,
       ],
     ],
   );
@@ -270,6 +264,18 @@ test("planner navigation materialization stays blocked until coordinates are ind
 
   assert.deepEqual(
     assessPlannerNavigationMaterialization(
+      "sdz-tiger-trail",
+    ),
+    {
+      status: "blocked",
+      reason: "SOURCE_RECORD_HAS_NO_MAP_ANCHOR",
+      sourceRecordId: "sdz-tiger-trail",
+      mapAnchorIds: [],
+    },
+  );
+
+  assert.deepEqual(
+    assessPlannerNavigationMaterialization(
       "sdz-skyfari",
     ),
     {
@@ -291,6 +297,18 @@ test("planner navigation materialization stays blocked until coordinates are ind
       status: "blocked",
       reason: "SOURCE_RECORD_HAS_NO_MAP_ANCHOR",
       sourceRecordId: "sdz-gorilla-tropics",
+      mapAnchorIds: [],
+    },
+  );
+
+  assert.deepEqual(
+    assessPlannerNavigationMaterialization(
+      "not-a-source-record",
+    ),
+    {
+      status: "blocked",
+      reason: "SOURCE_RECORD_UNKNOWN",
+      sourceRecordId: "not-a-source-record",
       mapAnchorIds: [],
     },
   );
@@ -383,5 +401,207 @@ test("walking corridor integrity rejects synthetic exactness and malformed minut
         [invalid],
       ),
     /positive integer publishedWalkMinutes/,
+  );
+});
+
+
+test("Tiger Trail route legend is corridor authority, not a physical map anchor", () => {
+  assert.deepEqual(
+    officialMapAnchorsForSourceRecord(
+      "sdz-tiger-trail",
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    publishedWalkingCorridorsForSourceRecord(
+      "sdz-tiger-trail",
+    ).map((corridor) => [
+      corridor.id,
+      corridor.sourceRecordRelations,
+    ]),
+    [
+      [
+        "sdz-corridor-tiger-trail",
+        [
+          {
+            sourceRecordId: "sdz-tiger-trail",
+            relation: "endpoint",
+          },
+        ],
+      ],
+      [
+        "sdz-corridor-treetops-way",
+        [
+          {
+            sourceRecordId: "sdz-tiger-trail",
+            relation: "access",
+          },
+        ],
+      ],
+    ],
+  );
+});
+
+test("corridor relations distinguish access from endpoint authority", () => {
+  const parkWay = PUBLISHED_WALKING_CORRIDORS.find(
+    (corridor) =>
+      corridor.id === "sdz-corridor-park-way",
+  );
+  const monkeyTrail = PUBLISHED_WALKING_CORRIDORS.find(
+    (corridor) =>
+      corridor.id === "sdz-corridor-monkey-trail",
+  );
+
+  assert.deepEqual(parkWay?.sourceRecordRelations, [
+    {
+      sourceRecordId: "sdz-panda-ridge",
+      relation: "access",
+    },
+  ]);
+  assert.deepEqual(monkeyTrail?.sourceRecordRelations, [
+    {
+      sourceRecordId: "sdz-gorilla-tropics",
+      relation: "endpoint",
+    },
+  ]);
+});
+
+test("map artifact integrity rejects impossible dates, timestamps, and future revisions", () => {
+  const base = OFFICIAL_ZOO_MAP_ARTIFACTS[0];
+
+  for (const artifact of [
+    {
+      ...base,
+      id: "bad-date",
+      revisionDate: "2026-02-31",
+    },
+    {
+      ...base,
+      id: "bad-observed",
+      observedAt: "not-a-time",
+    },
+    {
+      ...base,
+      id: "future-revision",
+      revisionDate: "2026-09-08",
+      observedAt: "2026-09-07T21:53:00-07:00",
+    },
+  ]) {
+    assert.throws(
+      () =>
+        assertOfficialMapAuthorityIntegrity(
+          [artifact],
+          [],
+          [],
+        ),
+      /map artifact .* is malformed/,
+    );
+  }
+});
+
+test("map anchors enforce source-record role compatibility and reject duplicate semantic mappings", () => {
+  const artifact: OfficialZooMapArtifact = {
+    ...OFFICIAL_ZOO_MAP_ARTIFACTS[0],
+    id: "test-map-role",
+  };
+
+  const wrongRole: OfficialMapAnchor = {
+    id: "wrong-role",
+    mapLabel: "PANDA RIDGE",
+    artifactId: artifact.id,
+    sourceRecordId: "sdz-panda-ridge",
+    role: "transport-station",
+    plannerMaterialization: "map-anchor-only",
+  };
+
+  assert.throws(
+    () =>
+      assertOfficialMapAuthorityIntegrity(
+        [artifact],
+        [wrongRole],
+        [],
+      ),
+    /role .* is incompatible/,
+  );
+
+  const anchorA: OfficialMapAnchor = {
+    id: "anchor-a",
+    mapLabel: "PANDA RIDGE",
+    artifactId: artifact.id,
+    sourceRecordId: "sdz-panda-ridge",
+    role: "destination",
+    plannerMaterialization: "map-anchor-only",
+  };
+  const anchorB: OfficialMapAnchor = {
+    ...anchorA,
+    id: "anchor-b",
+  };
+
+  assert.throws(
+    () =>
+      assertOfficialMapAuthorityIntegrity(
+        [artifact],
+        [anchorA, anchorB],
+        [],
+      ),
+    /Duplicate source-record map anchor mapping/,
+  );
+});
+
+test("corridor source-record relationships fail closed when semantics are underspecified", () => {
+  const artifact: OfficialZooMapArtifact = {
+    ...OFFICIAL_ZOO_MAP_ARTIFACTS[0],
+    id: "test-map-relations",
+  };
+
+  const accessWithoutLabels: PublishedWalkingCorridor = {
+    id: "access-without-labels",
+    name: "Test Access",
+    artifactId: artifact.id,
+    publishedWalkMinutes: 5,
+    terrain: "mild",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-panda-ridge",
+        relation: "access",
+      },
+    ],
+    plannerMaterialization: "corridor-authority-only",
+  };
+
+  assert.throws(
+    () =>
+      assertOfficialMapAuthorityIntegrity(
+        [artifact],
+        [],
+        [accessWithoutLabels],
+      ),
+    /requires accessLabels/,
+  );
+
+  const endpointWithoutDescriptors: PublishedWalkingCorridor = {
+    id: "endpoint-without-descriptors",
+    name: "Test Endpoint",
+    artifactId: artifact.id,
+    publishedWalkMinutes: 5,
+    terrain: "mild",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-gorilla-tropics",
+        relation: "endpoint",
+      },
+    ],
+    plannerMaterialization: "corridor-authority-only",
+  };
+
+  assert.throws(
+    () =>
+      assertOfficialMapAuthorityIntegrity(
+        [artifact],
+        [],
+        [endpointWithoutDescriptors],
+      ),
+    /requires from\/to descriptors/,
   );
 });
