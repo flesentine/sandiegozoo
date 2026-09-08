@@ -112,3 +112,76 @@ Planner 10 does not yet:
 - use third-party map geometry as verified route authority
 
 The next clean phase is an independent **geospatial authority** slice for one or two destinations, with explicit source provenance and a strict distinction between building/area centroid and actual guest-facing entrance point.
+
+
+## Final map/topology authority review
+
+A focused pre-merge review rechecked the current code against both pages of the official accessibility PDF and found three authority-model issues.
+
+### Route legend is not a physical map anchor
+
+The accessibility PDF's second page lists `TIGER TRAIL` under **Walking the Zoo** as:
+
+- 20-minute walk
+- Entrance to Tigers
+- Mild to Steep Terrain
+
+That is strong corridor/endpoint authority.
+
+It is not the same thing as the first-page illustrated map visibly labeling a physical guest-facing anchor named `TIGER TRAIL`.
+
+Planner 10 therefore removes the Tiger Trail `map-anchor-only` record.
+
+Tiger Trail remains source-backed through:
+- the 20-minute Entrance → Tigers endpoint corridor
+- Treetops Way's published access to `Tiger`
+
+Navigation materialization for Tiger Trail now correctly remains `SOURCE_RECORD_HAS_NO_MAP_ANCHOR`.
+
+### Corridor relationship semantics
+
+The old `targetSourceRecordId` field was too strong.
+
+For example:
+- Park Way says it provides **access to** Panda Ridge
+- Treetops Way says it provides **access to** Tiger
+- Monkey Trail explicitly says **Entrance to Gorillas**
+- Tiger Trail explicitly says **Entrance to Tigers**
+
+Planner 10 now models source-record relationships as:
+
+- `relation: "access"`
+- `relation: "endpoint"`
+
+Access relationships require published access labels.
+Endpoint relationships require published from/to descriptors.
+
+This prevents an access corridor from being mistaken for an exact route endpoint.
+
+### Unknown materialization requests fail closed
+
+`assessPlannerNavigationMaterialization(...)` previously returned `SOURCE_RECORD_HAS_NO_MAP_ANCHOR` even for a completely unknown source-record ID.
+
+It now returns:
+
+`SOURCE_RECORD_UNKNOWN`
+
+An unknown identity can no longer masquerade as a known destination that merely lacks coordinates.
+
+### Artifact and mapping integrity
+
+The final review also hardens:
+
+- real calendar-date validation for map revision dates
+- timezone-bearing observation timestamp validation
+- official Zoo HTTPS PDF URL validation
+- revision date cannot be later than observation date
+- source-record/map-anchor role compatibility
+- duplicate semantic source-record anchor mappings
+- duplicate/blank corridor access labels
+- duplicate source-record corridor relationships
+- deterministic lookup ordering
+
+The accessibility map's wheelchair symbols remain source imagery only.
+
+Planner 10 still does **not** convert them into Planner 2 `accessible` or `stroller` booleans, because the corridor records are not exact route edges.
