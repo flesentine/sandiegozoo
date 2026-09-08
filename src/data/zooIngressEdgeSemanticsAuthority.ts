@@ -310,31 +310,14 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     if (
       audit.modeAuthority.status !== "supported" ||
       audit.modeAuthority.value !== "walk" ||
+      audit.modeAuthority.basis !== "OSM highway=pedestrian" ||
       audit.distanceAuthority.status !== "supported" ||
-      audit.distanceAuthority.value !== distance.distanceMeters
+      audit.distanceAuthority.value !== distance.distanceMeters ||
+      audit.distanceAuthority.basis !==
+        "Planner 13 Haversine sum over frozen OSM way node sequence"
     ) {
       throw new Error(
         `Route-edge semantic audit ${audit.id} changed its supported fields.`,
-      );
-    }
-
-    const blockedFields = [
-      audit.routeNodesAuthority,
-      audit.durationAuthority,
-      audit.difficultyAuthority,
-      audit.stairsAuthority,
-      audit.accessibleAuthority,
-      audit.strollerAuthority,
-      audit.oneWayAuthority,
-      audit.edgeStatusAuthority,
-    ];
-    if (
-      blockedFields.some(
-        (field) => field.status !== "blocked",
-      )
-    ) {
-      throw new Error(
-        `Route-edge semantic audit ${audit.id} improperly promoted an unsupported field.`,
       );
     }
 
@@ -344,11 +327,45 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     const expectedDirectionReason = genericOneway
       ? "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
       : "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED";
+
+    const expectedBlockedReasons = [
+      [
+        audit.routeNodesAuthority,
+        "PLANNER_ROUTE_NODES_NOT_MATERIALIZED",
+      ],
+      [
+        audit.durationAuthority,
+        "DURATION_POLICY_NOT_SOURCED",
+      ],
+      [
+        audit.difficultyAuthority,
+        "DIFFICULTY_NOT_SOURCED",
+      ],
+      [
+        audit.stairsAuthority,
+        "STAIRS_NOT_EXPLICITLY_SOURCED",
+      ],
+      [
+        audit.accessibleAuthority,
+        "WHEELCHAIR_ACCESS_NOT_SOURCED",
+      ],
+      [
+        audit.strollerAuthority,
+        "STROLLER_ACCESS_NOT_SOURCED",
+      ],
+      [audit.oneWayAuthority, expectedDirectionReason],
+      [audit.edgeStatusAuthority, "EDGE_STATUS_NOT_SOURCED"],
+    ] as const;
+
     if (
-      audit.oneWayAuthority.reason !== expectedDirectionReason
+      expectedBlockedReasons.some(
+        ([field, reason]) =>
+          field.status !== "blocked" ||
+          field.reason !== reason,
+      )
     ) {
       throw new Error(
-        `Route-edge semantic audit ${audit.id} misclassified pedestrian direction authority.`,
+        `Route-edge semantic audit ${audit.id} changed blocked-field authority.`,
       );
     }
 
