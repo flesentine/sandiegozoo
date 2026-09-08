@@ -26,6 +26,11 @@ export type OfficialMapAnchor = {
   plannerMaterialization: "map-anchor-only";
 };
 
+export type CorridorSourceRecordRelation = {
+  sourceRecordId: string;
+  relation: "access" | "endpoint";
+};
+
 export type PublishedWalkingCorridor = {
   id: string;
   name: string;
@@ -39,7 +44,7 @@ export type PublishedWalkingCorridor = {
   fromDescriptor?: string;
   toDescriptor?: string;
   accessLabels?: readonly string[];
-  targetSourceRecordId?: string;
+  sourceRecordRelations?: readonly CorridorSourceRecordRelation[];
   plannerMaterialization: "corridor-authority-only";
 };
 
@@ -47,12 +52,16 @@ export type PlannerNavigationMaterializationBlock = {
   status: "blocked";
   reason:
     | "COORDINATES_NOT_SOURCED"
-    | "SOURCE_RECORD_HAS_NO_MAP_ANCHOR";
+    | "SOURCE_RECORD_HAS_NO_MAP_ANCHOR"
+    | "SOURCE_RECORD_UNKNOWN";
   sourceRecordId: string;
   mapAnchorIds: string[];
 };
 
 const OBSERVED_AT = "2026-09-07T21:53:00-07:00";
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIMESTAMP_RE =
+  /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
 
 function deepFreeze<T>(value: T): T {
   if (
@@ -112,14 +121,6 @@ const RAW_MAP_ANCHORS: OfficialMapAnchor[] = [
     mapLabel: "PANDA RIDGE",
     artifactId: CLASSIC_MAP,
     sourceRecordId: "sdz-panda-ridge",
-    role: "destination",
-    plannerMaterialization: "map-anchor-only",
-  },
-  {
-    id: "sdz-map-anchor-tiger-trail",
-    mapLabel: "TIGER TRAIL",
-    artifactId: ACCESSIBILITY_MAP,
-    sourceRecordId: "sdz-tiger-trail",
     role: "destination",
     plannerMaterialization: "map-anchor-only",
   },
@@ -200,7 +201,12 @@ const RAW_WALKING_CORRIDORS: PublishedWalkingCorridor[] = [
       "Northern Frontier",
       "Elephant Odyssey",
     ],
-    targetSourceRecordId: "sdz-panda-ridge",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-panda-ridge",
+        relation: "access",
+      },
+    ],
     plannerMaterialization: "corridor-authority-only",
   },
   {
@@ -225,7 +231,12 @@ const RAW_WALKING_CORRIDORS: PublishedWalkingCorridor[] = [
       "Hippo",
       "Monkey Trails",
     ],
-    targetSourceRecordId: "sdz-tiger-trail",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-tiger-trail",
+        relation: "access",
+      },
+    ],
     plannerMaterialization: "corridor-authority-only",
   },
   {
@@ -246,7 +257,12 @@ const RAW_WALKING_CORRIDORS: PublishedWalkingCorridor[] = [
     terrain: "mild",
     fromDescriptor: "Entrance",
     toDescriptor: "Gorillas",
-    targetSourceRecordId: "sdz-gorilla-tropics",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-gorilla-tropics",
+        relation: "endpoint",
+      },
+    ],
     plannerMaterialization: "corridor-authority-only",
   },
   {
@@ -257,7 +273,12 @@ const RAW_WALKING_CORRIDORS: PublishedWalkingCorridor[] = [
     terrain: "mild-to-steep",
     fromDescriptor: "Entrance",
     toDescriptor: "Tigers",
-    targetSourceRecordId: "sdz-tiger-trail",
+    sourceRecordRelations: [
+      {
+        sourceRecordId: "sdz-tiger-trail",
+        relation: "endpoint",
+      },
+    ],
     plannerMaterialization: "corridor-authority-only",
   },
 ];
@@ -268,6 +289,40 @@ function stableId(value: unknown): value is string {
     value.trim().length > 0 &&
     value === value.trim()
   );
+}
+
+function compareText(a: string, b: string) {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function validDate(value: string) {
+  if (!DATE_RE.test(value)) return false;
+
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
+}
+
+function validTimestamp(value: string) {
+  return (
+    ISO_TIMESTAMP_RE.test(value) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function validZooPdfUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "zoo.sandiegozoo.org" &&
+      url.pathname.toLowerCase().endsWith(".pdf")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function assertUniqueIds(
@@ -293,6 +348,22 @@ function assertUniqueIds(
   }
 }
 
+function expectedAnchorRole(
+  sourceRecordId: string,
+) {
+  const record = sourceBackedRecordById(sourceRecordId);
+  if (!record) return null;
+
+  switch (record.kind) {
+    case "animal-destination":
+      return "destination" as const;
+    case "presentation":
+      return "presentation-venue" as const;
+    case "transport":
+      return "transport-station" as const;
+  }
+}
+
 export function assertOfficialMapAuthorityIntegrity(
   artifacts: readonly OfficialZooMapArtifact[],
   anchors: readonly OfficialMapAnchor[],
@@ -309,17 +380,17 @@ export function assertOfficialMapAuthorityIntegrity(
     string,
     string[]
   >();
+  const sourceAnchorKeys = new Set<string>();
 
   for (const artifact of artifacts) {
     if (
       artifact.authority !== "official" ||
       !stableId(artifact.sourceLabel) ||
-      !/^https:\/\/zoo\.sandiegozoo\.org\//.test(
-        artifact.sourceUrl,
-      ) ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(
-        artifact.revisionDate,
-      )
+      !validZooPdfUrl(artifact.sourceUrl) ||
+      !validDate(artifact.revisionDate) ||
+      !validTimestamp(artifact.observedAt) ||
+      artifact.revisionDate >
+        artifact.observedAt.slice(0, 10)
     ) {
       throw new Error(
         `Official map artifact ${artifact.id} is malformed.`,
@@ -341,11 +412,34 @@ export function assertOfficialMapAuthorityIntegrity(
     }
 
     if (anchor.sourceRecordId) {
-      if (!sourceBackedRecordById(anchor.sourceRecordId)) {
+      const expectedRole = expectedAnchorRole(
+        anchor.sourceRecordId,
+      );
+
+      if (!expectedRole) {
         throw new Error(
           `Map anchor ${anchor.id} references unknown source record ${anchor.sourceRecordId}.`,
         );
       }
+
+      if (anchor.role !== expectedRole) {
+        throw new Error(
+          `Map anchor ${anchor.id} role ${anchor.role} is incompatible with source record ${anchor.sourceRecordId}.`,
+        );
+      }
+
+      const sourceAnchorKey = JSON.stringify([
+        anchor.sourceRecordId,
+        anchor.mapLabel,
+        anchor.role,
+      ]);
+
+      if (sourceAnchorKeys.has(sourceAnchorKey)) {
+        throw new Error(
+          `Duplicate source-record map anchor mapping for ${anchor.sourceRecordId}: ${anchor.mapLabel}.`,
+        );
+      }
+      sourceAnchorKeys.add(sourceAnchorKey);
 
       const ids =
         sourceRecordToAnchorIds.get(
@@ -366,6 +460,12 @@ export function assertOfficialMapAuthorityIntegrity(
       );
     }
 
+    if (!stableId(corridor.name)) {
+      throw new Error(
+        `Walking corridor ${corridor.id} requires a stable name.`,
+      );
+    }
+
     if (
       !Number.isSafeInteger(
         corridor.publishedWalkMinutes,
@@ -378,15 +478,78 @@ export function assertOfficialMapAuthorityIntegrity(
     }
 
     if (
-      corridor.targetSourceRecordId &&
-      !sourceBackedRecordById(
-        corridor.targetSourceRecordId,
-      )
+      corridor.accessLabels !== undefined &&
+      (corridor.accessLabels.length === 0 ||
+        new Set(corridor.accessLabels).size !==
+          corridor.accessLabels.length ||
+        corridor.accessLabels.some(
+          (label) => !stableId(label),
+        ))
     ) {
       throw new Error(
-        `Walking corridor ${corridor.id} references unknown source record ${corridor.targetSourceRecordId}.`,
+        `Walking corridor ${corridor.id} has invalid access labels.`,
       );
     }
+
+    const relationKeys = new Set<string>();
+
+    for (const relation of
+      corridor.sourceRecordRelations ?? []) {
+      if (!sourceBackedRecordById(relation.sourceRecordId)) {
+        throw new Error(
+          `Walking corridor ${corridor.id} references unknown source record ${relation.sourceRecordId}.`,
+        );
+      }
+
+      if (
+        relation.relation !== "access" &&
+        relation.relation !== "endpoint"
+      ) {
+        throw new Error(
+          `Walking corridor ${corridor.id} has invalid source-record relation.`,
+        );
+      }
+
+      const relationKey = JSON.stringify([
+        relation.sourceRecordId,
+        relation.relation,
+      ]);
+      if (relationKeys.has(relationKey)) {
+        throw new Error(
+          `Walking corridor ${corridor.id} has a duplicate source-record relation.`,
+        );
+      }
+      relationKeys.add(relationKey);
+
+      if (
+        relation.relation === "access" &&
+        (!corridor.accessLabels ||
+          corridor.accessLabels.length === 0)
+      ) {
+        throw new Error(
+          `Walking corridor ${corridor.id} requires accessLabels for an access relation.`,
+        );
+      }
+
+      if (
+        relation.relation === "endpoint" &&
+        (!stableId(corridor.fromDescriptor) ||
+          !stableId(corridor.toDescriptor))
+      ) {
+        throw new Error(
+          `Walking corridor ${corridor.id} requires from/to descriptors for an endpoint relation.`,
+        );
+      }
+    }
+  }
+
+  for (const [sourceRecordId, ids] of
+    sourceRecordToAnchorIds) {
+    ids.sort(compareText);
+    sourceRecordToAnchorIds.set(
+      sourceRecordId,
+      ids,
+    );
   }
 
   return sourceRecordToAnchorIds;
@@ -422,7 +585,7 @@ export function officialMapAnchorsForSourceRecord(
 
   return OFFICIAL_MAP_ANCHORS.filter((anchor) =>
     idSet.has(anchor.id),
-  );
+  ).sort((a, b) => compareText(a.id, b.id));
 }
 
 export function publishedWalkingCorridorsForSourceRecord(
@@ -430,14 +593,25 @@ export function publishedWalkingCorridorsForSourceRecord(
 ) {
   return PUBLISHED_WALKING_CORRIDORS.filter(
     (corridor) =>
-      corridor.targetSourceRecordId ===
-      sourceRecordId,
-  );
+      corridor.sourceRecordRelations?.some(
+        (relation) =>
+          relation.sourceRecordId === sourceRecordId,
+      ) === true,
+  ).sort((a, b) => compareText(a.id, b.id));
 }
 
 export function assessPlannerNavigationMaterialization(
   sourceRecordId: string,
 ): PlannerNavigationMaterializationBlock {
+  if (!sourceBackedRecordById(sourceRecordId)) {
+    return {
+      status: "blocked",
+      reason: "SOURCE_RECORD_UNKNOWN",
+      sourceRecordId,
+      mapAnchorIds: [],
+    };
+  }
+
   const anchors =
     officialMapAnchorsForSourceRecord(
       sourceRecordId,
@@ -450,8 +624,8 @@ export function assessPlannerNavigationMaterialization(
         ? "COORDINATES_NOT_SOURCED"
         : "SOURCE_RECORD_HAS_NO_MAP_ANCHOR",
     sourceRecordId,
-    mapAnchorIds: anchors
-      .map((anchor) => anchor.id)
-      .sort(),
+    mapAnchorIds: anchors.map(
+      (anchor) => anchor.id,
+    ),
   };
 }
