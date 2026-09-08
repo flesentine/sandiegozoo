@@ -5,6 +5,9 @@ import {
 import {
   INGRESS_GEOMETRY_WAYS,
 } from "./zooIngressDistanceAuthority.ts";
+import {
+  entrancePedestrianTopologyForTarget,
+} from "./zooGuestNavigationAuthority.ts";
 
 export type AccessibilityCorridorEvidence = {
   id: string;
@@ -289,15 +292,27 @@ export function assessIngressMobilityAuthority(
     accessibilityCorridorEvidenceForId(
       FRONT_STREET_CORRIDOR_ID,
     );
+  const topology =
+    entrancePedestrianTopologyForTarget(
+      way.targetId,
+    );
 
-  if (!frontStreetEvidence) {
+  if (!frontStreetEvidence || !topology) {
     throw new Error(
       "Planner 17 qualified Front Street accessibility evidence is unavailable.",
     );
   }
 
   const touchesFrontStreet =
-    sourceWayId === "755054694";
+    way.geometryRole ===
+      "interior-front-street-connection" &&
+    sourceWayId ===
+      topology.interiorContinuationWayId &&
+    way.nodeIds[
+      way.nodeIds.length - 1
+    ] === topology.frontStreetConnectionNodeId &&
+    topology.connectsToDescriptor ===
+      "Front Street";
 
   return {
     sourceWayId,
