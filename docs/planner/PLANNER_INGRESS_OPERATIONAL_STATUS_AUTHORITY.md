@@ -33,10 +33,13 @@ This matches the existing routing contract, where conditional edges are traversa
 
 ## Runtime activation requirements
 
-A Planner 20 ingress edge may only be enabled after both conditions are satisfied:
+A Planner 20 ingress edge may only be enabled after **all three** conditions are satisfied:
 
 1. `VISIT_WITHIN_CURRENT_ZOO_HOURS`
 2. `NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT`
+3. `AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY`
+
+The third condition is bound to the edge's exact OSM source way ID. Facility hours and the absence of a closure notice are not sufficient by themselves.
 
 Planner 20 does not hard-code a yearly hours table.
 
@@ -98,7 +101,7 @@ and excludes conditional edges unless their IDs are explicitly provided through:
 
 Planner 20 deliberately uses that existing mechanism rather than introducing a second operational bypass.
 
-A later production integration phase must resolve the two runtime activation requirements and then enable the exact edge IDs.
+A later production integration phase must resolve all three runtime activation requirements—including affirmative current availability of that **specific exact edge**—and only then enable the exact edge IDs.
 
 ## Integrity rules
 
@@ -111,7 +114,8 @@ Planner 20 fails closed if:
 - without-notice closure semantics are removed
 - the daily closure-advisement location changes
 - `conditional` is promoted to `open`
-- either runtime activation requirement is removed
+- any runtime activation requirement is removed
+- the exact-edge activation binding is changed to another source way
 - current ingress ways lose one-to-one operational status coverage
 - Planner 14 stops matching Planner 20 status authority
 
@@ -123,6 +127,7 @@ Planner 20 does **not** claim:
 
 - an exact ingress path is currently open
 - absence of online closure information proves a path is open
+- facility-level operating evidence proves an exact edge is currently traversable
 - Zoo opening hours never change
 - a scheduled-open facility guarantees every internal path is available
 - a conditional edge should be enabled automatically
