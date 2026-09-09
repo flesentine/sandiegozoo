@@ -149,10 +149,13 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "sdz-stroller-facility-policy-2026-09-08",
     );
 
-    assert.equal(audit.edgeStatusAuthority.status, "blocked");
     assert.equal(
-      audit.edgeStatusAuthority.reason,
-      "EDGE_STATUS_NOT_SOURCED",
+      audit.edgeStatusAuthority.status,
+      "supported",
+    );
+    assert.equal(
+      audit.edgeStatusAuthority.value,
+      "conditional",
     );
 
     assert.equal(
@@ -789,15 +792,11 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
         index === 0
           ? {
               ...audit,
-              difficultyAuthority: {
-                status: "blocked",
+              oneWayAuthority: {
+                ...audit.oneWayAuthority,
                 reason:
-                  "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
-                basis:
-                  "Planner 18 difficulty authority",
-                sourceSnapshotId:
-                  audit.difficultyAuthority.sourceSnapshotId,
-              } as unknown as RouteEdgeSemanticAudit["difficultyAuthority"],
+                  "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+              },
             }
           : { ...audit },
     );
