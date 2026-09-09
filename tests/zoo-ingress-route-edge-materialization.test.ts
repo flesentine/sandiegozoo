@@ -4,6 +4,7 @@ import {
   INGRESS_ROUTE_EDGE_BINDINGS,
   INGRESS_ROUTE_EDGES,
   INGRESS_ROUTE_GRAPH_DATA,
+  INGRESS_ROUTE_GRAPH_NODES,
   assertIngressRouteEdgeMaterializationIntegrity,
   ingressRouteEdgeForSourceWay,
 } from "../src/data/zooIngressRouteEdgeMaterialization.ts";
@@ -116,6 +117,16 @@ test("Planner 23 ingress graph is runtime-valid WildRoute data", () => {
     ),
     [],
   );
+  assert.deepEqual(
+    INGRESS_ROUTE_GRAPH_NODES.map(
+      (node) => node.id,
+    ),
+    [
+      "sdz-ingress-node-main-entrance-route-node",
+      "sdz-ingress-node-interior-route-node",
+      "sdz-ingress-node-front-street-route-node",
+    ],
+  );
   assert.doesNotThrow(() =>
     assertValidWildRouteData(
       INGRESS_ROUTE_GRAPH_DATA,
@@ -137,9 +148,16 @@ test("conditional ingress edges are unavailable by default", () => {
     },
   );
 
-  assert.equal(
-    route.status,
-    "unreachable",
+  assert.deepEqual(
+    route,
+    {
+      status: "not-found",
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+      reason: "NO_ROUTE",
+    },
   );
 });
 
@@ -182,11 +200,11 @@ test("enabling both conditional ingress edges produces the first real entrance-t
     ],
   );
   assert.equal(
-    route.totalDistanceMeters,
+    route.distanceMeters,
     42.212,
   );
   assert.equal(
-    route.totalDurationMinutes,
+    route.durationMinutes,
     0.586,
   );
 });
@@ -252,9 +270,16 @@ test("unknown accessibility fails closed when an accessible route is required", 
     },
   );
 
-  assert.equal(
-    route.status,
-    "unreachable",
+  assert.deepEqual(
+    route,
+    {
+      status: "not-found",
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+      reason: "NO_ROUTE",
+    },
   );
 });
 
@@ -279,9 +304,16 @@ test("unknown stroller suitability fails closed when a stroller route is require
     },
   );
 
-  assert.equal(
-    route.status,
-    "unreachable",
+  assert.deepEqual(
+    route,
+    {
+      status: "not-found",
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+      reason: "NO_ROUTE",
+    },
   );
 });
 
