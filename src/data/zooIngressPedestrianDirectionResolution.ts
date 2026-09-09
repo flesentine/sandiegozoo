@@ -209,8 +209,9 @@ export function resolveIngressPedestrianDirection(
   if (
     !way ||
     !snapshot ||
-    planner16.reason ===
-      "SOURCE_WAY_UNKNOWN"
+    (planner16.status === "blocked" &&
+      planner16.reason ===
+        "SOURCE_WAY_UNKNOWN")
   ) {
     return {
       status: "blocked",
