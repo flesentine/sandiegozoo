@@ -1,6 +1,3 @@
-import type {
-  RouteDifficulty,
-} from "../planner/contracts.ts";
 import {
   OFFICIAL_ZOO_MAP_ARTIFACTS,
   PUBLISHED_WALKING_CORRIDORS,
@@ -410,16 +407,14 @@ export function assessIngressTerrainAuthority(
   };
 }
 
-export function plannerDifficultyForPublishedTerrain(
+export function assessPlannerDifficultyForPublishedTerrain(
   _terrain:
     PublishedWalkingCorridor["terrain"],
-):
-  | RouteDifficulty
-  | {
-      status: "blocked";
-      reason:
-        "DIFFICULTY_POLICY_NOT_DEFINED";
-    } {
+): {
+  status: "blocked";
+  reason:
+    "DIFFICULTY_POLICY_NOT_DEFINED";
+} {
   return {
     status: "blocked",
     reason:
