@@ -290,7 +290,11 @@ export function easierPathPenaltyPoints(
       penalty += edge.durationMinutes;
     }
 
-    if (edge.mode === "walk" && edge.difficulty !== "easy") {
+    if (
+      edge.mode === "walk" &&
+      (edge.difficulty === "moderate" ||
+        edge.difficulty === "steep")
+    ) {
       penalty += 0.5;
     }
   }
