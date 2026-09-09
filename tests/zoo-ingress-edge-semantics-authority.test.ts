@@ -149,15 +149,48 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "sdz-stroller-facility-policy-2026-09-08",
     );
 
-    assert.equal(audit.edgeStatusAuthority.status, "blocked");
     assert.equal(
-      audit.edgeStatusAuthority.reason,
-      "EDGE_STATUS_NOT_SOURCED",
+      audit.edgeStatusAuthority.status,
+      "supported",
+    );
+    assert.equal(
+      audit.edgeStatusAuthority.value,
+      "conditional",
     );
 
     assert.equal(
       audit.plannerMaterialization,
       "route-edge-audit-only",
+    );
+  }
+});
+
+test("Planner 20 status linkage promotes conditional rather than always-open ingress edges", () => {
+  for (
+    const audit of
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS
+  ) {
+    assert.deepEqual(
+      audit.edgeStatusAuthority,
+      {
+        status: "supported",
+        value: "conditional",
+        basis:
+          "Planner 20 operational-status policy",
+        policyEvidenceId:
+          "sdz-operational-policy-2026-09-08",
+        activation: {
+          status:
+            "runtime-check-required",
+          exactEdgeSourceWayId:
+            audit.sourceWayId,
+          requirements: [
+            "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+            "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+            "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
+          ],
+        },
+      },
     );
   }
 });
@@ -306,6 +339,7 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "mode",
         "distance",
         "duration",
+        "status",
       ],
       blockedFields: [
         "difficulty",
@@ -313,7 +347,6 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "accessible",
         "stroller",
         "oneWay",
-        "status",
       ],
       routeEdgeMaterialization: {
         status: "blocked",
@@ -461,6 +494,91 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
         badAudits,
       ),
     /changed its supported fields/,
+  );
+});
+
+test("integrity rejects always-open promotion beyond Planner 20 runtime-check policy", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                value: "open",
+              } as unknown as RouteEdgeSemanticAudit["edgeStatusAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
+  );
+});
+
+test("integrity rejects exact-edge activation being rebound to another ingress way", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                activation: {
+                  ...audit.edgeStatusAuthority.activation,
+                  exactEdgeSourceWayId:
+                    "755054694",
+                },
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
+  );
+});
+
+test("integrity rejects removal of Planner 20 runtime activation requirements", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                activation: {
+                  status:
+                    "runtime-check-required",
+                  exactEdgeSourceWayId:
+                    audit.sourceWayId,
+                  requirements: [
+                    "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+                    "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+                  ],
+                },
+              } as unknown as RouteEdgeSemanticAudit["edgeStatusAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
   );
 });
 
@@ -708,10 +826,10 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
         index === 0
           ? {
               ...audit,
-              edgeStatusAuthority: {
-                status: "blocked",
+              oneWayAuthority: {
+                ...audit.oneWayAuthority,
                 reason:
-                  "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
+                  "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
               },
             }
           : { ...audit },
