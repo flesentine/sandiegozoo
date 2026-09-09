@@ -481,6 +481,11 @@ export function assertIngressConditionalEdgeActivationIntegrity(
       INGRESS_ROUTE_EDGE_BINDINGS.length ||
     decisionEdgeIds.size !==
       result.decisions.length ||
+    new Set(
+      result.enabledConditionalEdgeIds,
+    ).size !==
+      result.enabledConditionalEdgeIds
+        .length ||
     result.enabledConditionalEdgeIds.some(
       (edgeId) =>
         !expectedEdgeIds.has(edgeId),
