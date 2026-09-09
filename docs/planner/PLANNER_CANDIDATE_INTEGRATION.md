@@ -73,17 +73,25 @@ This preserves Must-See authority without pretending optional data gaps are succ
 
 Planner 8 compiles an ephemeral routing package.
 
-Any route edge is planner-disabled when:
+By default, any route edge is planner-disabled when:
 - its provenance is not verified, or
 - either endpoint route node is not verified
 
 The source record is not rewritten or claimed to be operationally closed.
 
-The integration result reports the exact disabled edge IDs under:
+Planner 24 adds one narrow exception for **provisional conditional edges** that have already passed a qualified runtime operational-activation resolver for the same visit date. Such an edge may survive the integration provenance gate only when:
+- its source status is still `conditional`
+- its base provenance is `provisional`, not `unknown`
+- both endpoint RouteNodes remain verified and effective
+- the same edge ID is present in a dated `conditionalEdgeRuntimeTrust` envelope
 
-`routingGate.disabledUnverifiedEdgeIds`
+This exception does **not** open the edge. The route policy must separately include that exact ID in `enabledConditionalEdgeIds`.
 
-and emits a `ROUTING_DATA_GATED` warning.
+The integration result reports:
+- ordinary gated edge IDs under `routingGate.disabledUnverifiedEdgeIds`
+- provisional conditional edges admitted by runtime trust under `routingGate.runtimeTrustedConditionalEdgeIds`
+
+A `ROUTING_DATA_GATED` warning is emitted only for edges that remain disabled.
 
 ## Preference mapping
 
@@ -161,7 +169,7 @@ Planner 8 does not yet:
 - infer reservation destination from free text
 - invent animal dwell durations
 - invent show duration when neither endTime nor configured dwell exists
-- trust provisional geography/routing data
+- trust provisional geography/routing data **without** a qualified same-date runtime conditional-edge trust decision
 - generate meals/rest stops
 - change the current UI to show integration issues
 - execute live replanning
@@ -195,9 +203,13 @@ Every requested `enabledConditionalEdgeId` must:
 
 - exist
 - actually have source status `conditional`
-- survive the verified/effective routing gate
+- survive the verified/effective routing gate or the Planner 24 runtime-trust exception
 
 Unknown, open/closed, or untrusted conditional-edge IDs block integration rather than being silently ignored.
+
+For provisional conditional edges, Planner 24 requires an independent same-date runtime trust envelope. Trust and enablement are separate gates:
+- runtime trust alone does not enable traversal
+- enabled IDs alone cannot bypass provisional provenance gating
 
 Validated IDs are code-unit sorted before entering route policy, so input order cannot affect the request.
 
