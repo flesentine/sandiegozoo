@@ -91,6 +91,8 @@ is accepted.
 
 This means the new unknown semantics do not weaken accessibility or stroller safety.
 
+For the separate soft `preferEasyPaths` preference, `difficulty=unknown` is neutral: only explicit `moderate` or `steep` difficulty earns an easier-path penalty. Unknown is not silently treated as “not easy.”
+
 ## Unrestricted routing behavior
 
 If a request does not require accessibility or stroller suitability, an edge with unknown capability may still participate in ordinary routing.
@@ -179,6 +181,7 @@ Planner 22 fails if:
 - current ingress completion is missing or duplicated
 - the shared RouteEdge audit stops matching the Planner 22 completion authority
 - accessibility/stroller routing starts accepting unknown capability under hard requirements
+- easier-path scoring penalizes `difficulty=unknown` as though a harder difficulty were established
 
 ## Schema compatibility
 
