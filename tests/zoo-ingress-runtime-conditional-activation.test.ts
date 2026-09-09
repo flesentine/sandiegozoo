@@ -3,6 +3,9 @@ import test from "node:test";
 import {
   resolveIngressConditionalEdgeActivation,
   assertIngressConditionalEdgeActivationIntegrity,
+  type ZooHoursRuntimeObservation,
+  type IngressClosureRuntimeObservation,
+  type ExactEdgeAvailabilityRuntimeObservation,
 } from "../src/data/zooIngressRuntimeConditionalActivation.ts";
 import {
   INGRESS_ROUTE_GRAPH_DATA,
@@ -15,7 +18,17 @@ import {
 const CURRENT_AT =
   "2026-09-09T12:22:00-07:00";
 
-function validInput() {
+type MutableActivationInput = {
+  zooHours:
+    ZooHoursRuntimeObservation;
+  closureAdvisement:
+    IngressClosureRuntimeObservation;
+  exactEdgeAvailability:
+    ExactEdgeAvailabilityRuntimeObservation[];
+};
+
+function validInput():
+  MutableActivationInput {
   return {
     zooHours: {
       requirement:
