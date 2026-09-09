@@ -182,9 +182,12 @@ test("Planner 20 status linkage promotes conditional rather than always-open ing
         activation: {
           status:
             "runtime-check-required",
+          exactEdgeSourceWayId:
+            audit.sourceWayId,
           requirements: [
             "VISIT_WITHIN_CURRENT_ZOO_HOURS",
             "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+            "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
           ],
         },
       },
@@ -518,6 +521,34 @@ test("integrity rejects always-open promotion beyond Planner 20 runtime-check po
   );
 });
 
+test("integrity rejects exact-edge activation being rebound to another ingress way", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                activation: {
+                  ...audit.edgeStatusAuthority.activation,
+                  exactEdgeSourceWayId:
+                    "755054694",
+                },
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
+  );
+});
+
 test("integrity rejects removal of Planner 20 runtime activation requirements", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
@@ -530,8 +561,11 @@ test("integrity rejects removal of Planner 20 runtime activation requirements", 
                 activation: {
                   status:
                     "runtime-check-required",
+                  exactEdgeSourceWayId:
+                    audit.sourceWayId,
                   requirements: [
                     "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+                    "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
                   ],
                 },
               } as unknown as RouteEdgeSemanticAudit["edgeStatusAuthority"],
