@@ -102,6 +102,23 @@ test("walking-duration derivation has no fake one-minute floor", () => {
   );
 });
 
+test("walking-duration derivation rejects positive distances that round to zero", () => {
+  assert.throws(
+    () =>
+      deriveWalkingDurationMinutes(
+        0.01,
+      ),
+    /below the policy's positive representable resolution/,
+  );
+
+  assert.equal(
+    deriveWalkingDurationMinutes(
+      0.04,
+    ),
+    0.001,
+  );
+});
+
 test("walking-duration derivation rejects non-positive and non-finite distances", () => {
   for (const value of [
     0,
