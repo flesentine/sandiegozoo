@@ -198,6 +198,22 @@ test("easier paths preference adds deterministic soft route penalties", () => {
   assert.equal(easierPathPenaltyPoints(route, true), 5);
 });
 
+test("unknown difficulty is neutral for easier-path preference", () => {
+  const route = routeFor([
+    edge("unknown-1", "a", "b", 4, "unknown"),
+    edge("unknown-2", "b", "c", 3, "unknown"),
+  ]);
+
+  assert.equal(
+    easierPathPenaltyPoints(route, false),
+    0,
+  );
+  assert.equal(
+    easierPathPenaltyPoints(route, true),
+    0,
+  );
+});
+
 test("easy-path penalty never turns into a hard route rejection", () => {
   const route = routeFor([
     edge("a-b", "a", "b", 2, "steep"),
