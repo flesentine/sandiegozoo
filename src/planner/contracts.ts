@@ -66,7 +66,14 @@ export type RouteMode =
   | "elevator"
   | "ada-shuttle";
 
-export type RouteDifficulty = "easy" | "moderate" | "steep";
+export type RouteDifficulty =
+  | "easy"
+  | "moderate"
+  | "steep"
+  | "unknown";
+export type RouteEdgeCapability =
+  | boolean
+  | "unknown";
 export type RouteStatus = "open" | "closed" | "conditional";
 
 export type RouteEdge = {
@@ -77,9 +84,9 @@ export type RouteEdge = {
   distanceMeters: number;
   durationMinutes: number;
   difficulty: RouteDifficulty;
-  stairs: boolean;
-  accessible: boolean;
-  stroller: boolean;
+  stairs: RouteEdgeCapability;
+  accessible: RouteEdgeCapability;
+  stroller: RouteEdgeCapability;
   oneWay: boolean;
   status: RouteStatus;
   provenance: SourceProvenance;
