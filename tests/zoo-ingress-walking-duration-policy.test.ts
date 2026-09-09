@@ -201,6 +201,23 @@ test("Planner 19 policy and duration exports are deeply immutable", () => {
   );
 });
 
+test("integrity rejects adoption-timestamp drift", () => {
+  const badPolicy = {
+    ...INGRESS_WALKING_DURATION_POLICY,
+    adoptedAt:
+      "2026-09-08T18:12:00-07:00",
+  } as WalkingDurationPolicy;
+
+  assert.throws(
+    () =>
+      assertIngressWalkingDurationPolicyIntegrity(
+        badPolicy,
+        DERIVED_INGRESS_WALKING_DURATIONS,
+      ),
+    /policy drifted from the prospective freeze/,
+  );
+});
+
 test("integrity rejects walking-speed drift", () => {
   const badPolicy = {
     ...INGRESS_WALKING_DURATION_POLICY,
@@ -280,6 +297,30 @@ test("integrity rejects duration drift from the frozen distance formula", () => 
               durationMinutes:
                 duration.durationMinutes +
                 0.001,
+            }
+          : { ...duration },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressWalkingDurationPolicyIntegrity(
+        INGRESS_WALKING_DURATION_POLICY,
+        badDurations,
+      ),
+    /does not match its frozen distance\/policy authority/,
+  );
+});
+
+test("integrity rejects duration detached from a qualified pedestrian source way", () => {
+  const badDurations:
+    DerivedIngressWalkingDuration[] =
+    DERIVED_INGRESS_WALKING_DURATIONS.map(
+      (duration, index) =>
+        index === 0
+          ? {
+              ...duration,
+              sourceWayId:
+                "not-a-qualified-walk-way",
             }
           : { ...duration },
     );
