@@ -429,6 +429,26 @@ test("activation result is deeply immutable", () => {
   );
 });
 
+test("activation integrity rejects duplicate enabled conditional IDs", () => {
+  const result = structuredClone(
+    resolveIngressConditionalEdgeActivation(
+      validInput(),
+    ),
+  );
+  result.enabledConditionalEdgeIds = [
+    ...result.enabledConditionalEdgeIds,
+    result.enabledConditionalEdgeIds[0],
+  ];
+
+  assert.throws(
+    () =>
+      assertIngressConditionalEdgeActivationIntegrity(
+        result,
+      ),
+    /does not match current conditional ingress bindings/,
+  );
+});
+
 test("activation integrity rejects an enabled edge whose requirement is blocked", () => {
   const result = structuredClone(
     resolveIngressConditionalEdgeActivation(
