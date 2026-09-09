@@ -105,10 +105,13 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "supported",
     );
 
-    assert.equal(audit.durationAuthority.status, "blocked");
     assert.equal(
-      audit.durationAuthority.reason,
-      "DURATION_POLICY_NOT_SOURCED",
+      audit.durationAuthority.status,
+      "supported",
+    );
+    assert.equal(
+      audit.durationAuthority.basis,
+      "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
     );
 
     assert.equal(audit.difficultyAuthority.status, "blocked");
@@ -157,6 +160,40 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "route-edge-audit-only",
     );
   }
+});
+
+test("Planner 19 duration linkage promotes exact policy-derived free-flow durations", () => {
+  const controlled =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054695",
+    );
+  const frontStreet =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054694",
+    );
+  assert.ok(controlled);
+  assert.ok(frontStreet);
+
+  assert.deepEqual(
+    controlled.durationAuthority,
+    {
+      status: "supported",
+      value: 0.234,
+      basis:
+        "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
+    },
+  );
+  assert.deepEqual(
+    frontStreet.durationAuthority,
+    {
+      status: "supported",
+      value: 0.352,
+      basis:
+        "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
+    },
+  );
 });
 
 test("Planner 18 terrain linkage preserves exact edge-specific blocked reasons", () => {
@@ -268,9 +305,9 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "routeNodes",
         "mode",
         "distance",
+        "duration",
       ],
       blockedFields: [
-        "duration",
         "difficulty",
         "stairs",
         "accessible",
@@ -413,6 +450,57 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
               distanceAuthority: {
                 ...audit.distanceAuthority,
                 value: audit.distanceAuthority.value + 1,
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed its supported fields/,
+  );
+});
+
+test("integrity rejects duration drift from Planner 19 policy", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              durationAuthority: {
+                ...audit.durationAuthority,
+                value:
+                  audit.durationAuthority.value +
+                  0.001,
+              },
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed its supported fields/,
+  );
+});
+
+test("integrity rejects duration-basis drift from Planner 19 policy", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              durationAuthority: {
+                ...audit.durationAuthority,
+                basis:
+                  "guessed walking time",
               },
             }
           : { ...audit },
