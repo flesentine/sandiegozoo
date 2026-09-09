@@ -200,6 +200,28 @@ const RAW_BINDINGS =
       materialization.binding,
   );
 
+const RAW_GRAPH_NODE_IDS = new Set(
+  RAW_ROUTE_EDGES.flatMap((edge) => [
+    edge.fromNodeId,
+    edge.toNodeId,
+  ]),
+);
+
+const RAW_GRAPH_ROUTE_NODES =
+  INGRESS_ROUTE_NODES.filter(
+    (node) =>
+      RAW_GRAPH_NODE_IDS.has(node.id),
+  );
+
+if (
+  RAW_GRAPH_ROUTE_NODES.length !==
+    RAW_GRAPH_NODE_IDS.size
+) {
+  throw new Error(
+    "Planner 23 ingress graph is missing a materialized RouteEdge endpoint node.",
+  );
+}
+
 export function assertIngressRouteEdgeMaterializationIntegrity(
   edges: readonly RouteEdge[],
   bindings:
@@ -302,13 +324,17 @@ export const INGRESS_ROUTE_EDGE_BINDINGS:
   readonly IngressRouteEdgeBinding[] =
   deepFreeze(RAW_BINDINGS);
 
+export const INGRESS_ROUTE_GRAPH_NODES =
+  deepFreeze(RAW_GRAPH_ROUTE_NODES);
+
 export const INGRESS_ROUTE_GRAPH_DATA:
   WildRouteDataPackage =
   deepFreeze({
     schemaVersion: "1",
     zones: [...INGRESS_ROUTE_ZONES],
     places: [],
-    routeNodes: [...INGRESS_ROUTE_NODES],
+    routeNodes:
+      [...INGRESS_ROUTE_GRAPH_NODES],
     routeEdges: [...INGRESS_ROUTE_EDGES],
     scheduleEvents: [],
   });
