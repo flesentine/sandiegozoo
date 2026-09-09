@@ -191,12 +191,6 @@ function validOsmWayUrl(value: string, wayId: string) {
   }
 }
 
-function blocked(
-  reason: BlockedFieldAuthority["reason"],
-): BlockedFieldAuthority {
-  return { status: "blocked", reason };
-}
-
 function buildAudit(
   sourceWayId: string,
 ): RouteEdgeSemanticAudit {
