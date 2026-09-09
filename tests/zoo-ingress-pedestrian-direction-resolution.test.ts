@@ -179,6 +179,55 @@ test("explicit Planner 16 direction cannot expand Planner 21 beyond highway=pede
   });
 });
 
+test("generic oneway=no does not block pedestrian bidirectionality inside Planner 21 scope", () => {
+  const resolved =
+    resolvePedestrianDirectionWithPolicy(
+      "pedestrian",
+      {
+        id: "synthetic-generic-no",
+        targetId:
+          "sdz-geo-main-entrance",
+        sourceWayId:
+          "synthetic-generic-no-way",
+        sourceUrl:
+          "https://www.openstreetmap.org/way/synthetic-generic-no-way",
+        observedAt:
+          "2026-09-09T09:04:00-07:00",
+        sourceTags: {
+          highway: "pedestrian",
+          oneway: "no",
+        },
+        plannerMaterialization:
+          "pedestrian-direction-authority-only",
+      },
+      {
+        status: "blocked",
+        reason:
+          "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+        sourceWayId:
+          "synthetic-generic-no-way",
+        sourceSnapshotId:
+          "synthetic-generic-no",
+      },
+    );
+
+  assert.deepEqual(resolved, {
+    status: "supported",
+    sourceWayId:
+      "synthetic-generic-no-way",
+    sourceSnapshotId:
+      "synthetic-generic-no",
+    oneWay: false,
+    direction: "bidirectional",
+    basis:
+      "Planner 21 default pedestrian bidirectionality absent explicit restriction",
+    policyId:
+      "sdz-pedestrian-direction-resolution-policy-v1",
+    resolutionCase:
+      "no-explicit-pedestrian-restriction",
+  });
+});
+
 test("unknown ingress way still fails closed", () => {
   assert.deepEqual(
     resolveIngressPedestrianDirection(
