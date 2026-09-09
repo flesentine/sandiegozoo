@@ -258,9 +258,7 @@ export function resolvePedestrianDirectionWithPolicy(
 
   if (
     planner16.reason ===
-      "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED" &&
-    snapshot.sourceTags.oneway ===
-      undefined
+      "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
   ) {
     return {
       status: "supported",
