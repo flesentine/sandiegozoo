@@ -1,5 +1,6 @@
 import {
   DERIVED_INGRESS_DISTANCES,
+  INGRESS_GEOMETRY_WAYS,
 } from "./zooIngressDistanceAuthority.ts";
 import {
   INDEPENDENT_GEOSPATIAL_TARGETS,
@@ -183,6 +184,7 @@ export function assertIngressWalkingDurationPolicyIntegrity(
       "sdz-walking-duration-policy-v1" ||
     policy.policyVersion !== "1" ||
     !validTimestamp(policy.adoptedAt) ||
+    policy.adoptedAt !== ADOPTED_AT ||
     policy.scope !==
       "free-flow-walk-edges" ||
     policy.speedMetersPerSecond !==
@@ -227,10 +229,21 @@ export function assertIngressWalkingDurationPolicyIntegrity(
           duration.sourceDistanceId,
       );
 
+    const way =
+      INGRESS_GEOMETRY_WAYS.find(
+        (candidate) =>
+          candidate.sourceObjectId ===
+          duration.sourceWayId,
+      );
+
     if (
       !stableId(duration.id) ||
       ids.has(duration.id) ||
       !distance ||
+      !way ||
+      way.highwayTag !== "pedestrian" ||
+      way.sourceObjectId !==
+        distance.sourceWayId ||
       sourceWayIds.has(
         duration.sourceWayId,
       ) ||
