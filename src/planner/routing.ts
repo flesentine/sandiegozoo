@@ -276,8 +276,18 @@ function traversalAllowed(
   }
 
   if (!allowedModes.has(edge.mode)) return false;
-  if (requireAccessible && !edge.accessible) return false;
-  if (requireStroller && !edge.stroller) return false;
+  if (
+    requireAccessible &&
+    edge.accessible !== true
+  ) {
+    return false;
+  }
+  if (
+    requireStroller &&
+    edge.stroller !== true
+  ) {
+    return false;
+  }
 
   return true;
 }

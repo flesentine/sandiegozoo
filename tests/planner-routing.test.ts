@@ -644,6 +644,72 @@ test("unknown conditional edge IDs are inert", () => {
   );
 });
 
+test("unknown accessibility and stroller capabilities fail closed only when requested", () => {
+  const data = graph(
+    ["a", "b", "c"],
+    [
+      edge("unknown-direct", "a", "c", {
+        durationMinutes: 1,
+        difficulty: "unknown",
+        stairs: "unknown",
+        accessible: "unknown",
+        stroller: "unknown",
+      }),
+      edge("known-1", "a", "b", {
+        durationMinutes: 2,
+        accessible: true,
+        stroller: true,
+      }),
+      edge("known-2", "b", "c", {
+        durationMinutes: 2,
+        accessible: true,
+        stroller: true,
+      }),
+    ],
+  );
+
+  const unrestricted = found(
+    routeData(data, {
+      fromNodeId: "a",
+      toNodeId: "c",
+    }),
+  );
+  assert.deepEqual(
+    unrestricted.edges.map(
+      (item) => item.edgeId,
+    ),
+    ["unknown-direct"],
+  );
+
+  const accessible = found(
+    routeData(data, {
+      fromNodeId: "a",
+      toNodeId: "c",
+      requireAccessible: true,
+    }),
+  );
+  assert.deepEqual(
+    accessible.edges.map(
+      (item) => item.edgeId,
+    ),
+    ["known-1", "known-2"],
+  );
+
+  const stroller = found(
+    routeData(data, {
+      fromNodeId: "a",
+      toNodeId: "c",
+      requireStroller: true,
+    }),
+  );
+  assert.deepEqual(
+    stroller.edges.map(
+      (item) => item.edgeId,
+    ),
+    ["known-1", "known-2"],
+  );
+});
+
 test("accessibility stroller and transport constraints compose as hard filters", () => {
   const data = graph(
     ["a", "b", "c", "d"],

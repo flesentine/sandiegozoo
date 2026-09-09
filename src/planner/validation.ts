@@ -41,7 +41,12 @@ const ROUTE_MODES = [
   "elevator",
   "ada-shuttle",
 ] as const;
-const ROUTE_DIFFICULTIES = ["easy", "moderate", "steep"] as const;
+const ROUTE_DIFFICULTIES = [
+  "easy",
+  "moderate",
+  "steep",
+  "unknown",
+] as const;
 const ROUTE_STATUSES = ["open", "closed", "conditional"] as const;
 
 function push(
@@ -124,6 +129,27 @@ function validateBoolean(
 ) {
   if (typeof value !== "boolean") {
     push(issues, "error", code, path, `${label} must be boolean.`);
+  }
+}
+
+function validateBooleanOrUnknown(
+  issues: ValidationIssue[],
+  value: unknown,
+  code: string,
+  path: string,
+  label: string,
+) {
+  if (
+    typeof value !== "boolean" &&
+    value !== "unknown"
+  ) {
+    push(
+      issues,
+      "error",
+      code,
+      path,
+      `${label} must be boolean or "unknown".`,
+    );
   }
 }
 
@@ -693,21 +719,21 @@ export function validateWildRouteData(value: unknown): ValidationIssue[] {
       );
     }
 
-    validateBoolean(
+    validateBooleanOrUnknown(
       issues,
       rawEdge.stairs,
       "EDGE_STAIRS_INVALID",
       `${path}.stairs`,
       "stairs",
     );
-    validateBoolean(
+    validateBooleanOrUnknown(
       issues,
       rawEdge.accessible,
       "EDGE_ACCESSIBLE_INVALID",
       `${path}.accessible`,
       "accessible",
     );
-    validateBoolean(
+    validateBooleanOrUnknown(
       issues,
       rawEdge.stroller,
       "EDGE_STROLLER_INVALID",
