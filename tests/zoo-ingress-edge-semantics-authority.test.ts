@@ -113,14 +113,18 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
 
     assert.equal(audit.difficultyAuthority.status, "blocked");
     assert.equal(
-      audit.difficultyAuthority.reason,
-      "DIFFICULTY_NOT_SOURCED",
+      audit.difficultyAuthority.basis,
+      "Planner 18 difficulty authority",
     );
 
     assert.equal(audit.stairsAuthority.status, "blocked");
     assert.equal(
       audit.stairsAuthority.reason,
-      "STAIRS_NOT_EXPLICITLY_SOURCED",
+      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
+    );
+    assert.equal(
+      audit.stairsAuthority.basis,
+      "Planner 18 stairs authority",
     );
 
     assert.equal(audit.accessibleAuthority.status, "blocked");
@@ -153,6 +157,63 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       "route-edge-audit-only",
     );
   }
+});
+
+test("Planner 18 terrain linkage preserves exact edge-specific blocked reasons", () => {
+  const controlled =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054695",
+    );
+  const frontStreet =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
+      (audit) =>
+        audit.sourceWayId === "755054694",
+    );
+  assert.ok(controlled);
+  assert.ok(frontStreet);
+
+  assert.deepEqual(controlled.difficultyAuthority, {
+    status: "blocked",
+    reason:
+      "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
+    basis:
+      "Planner 18 difficulty authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054695",
+  });
+  assert.deepEqual(controlled.stairsAuthority, {
+    status: "blocked",
+    reason:
+      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
+    basis:
+      "Planner 18 stairs authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054695",
+  });
+
+  assert.deepEqual(frontStreet.difficultyAuthority, {
+    status: "blocked",
+    reason:
+      "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY",
+    basis:
+      "Planner 18 difficulty authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054694",
+    corridorTerrainEvidenceId:
+      "sdz-corridor-front-street-terrain-evidence",
+  });
+  assert.deepEqual(frontStreet.stairsAuthority, {
+    status: "blocked",
+    reason:
+      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
+    basis:
+      "Planner 18 stairs authority",
+    sourceSnapshotId:
+      "sdz-pedestrian-direction-way-755054694",
+    corridorTerrainEvidenceId:
+      "sdz-corridor-front-street-terrain-evidence",
+  });
 });
 
 test("Planner 17 mobility linkage preserves exact edge-specific blocked reasons", () => {
@@ -366,6 +427,54 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
   );
 });
 
+test("integrity rejects guessed difficulty promotion beyond Planner 18 authority", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit) =>
+        audit.sourceWayId === "755054694"
+          ? {
+              ...audit,
+              difficultyAuthority: {
+                status: "supported",
+                value: "easy",
+              } as unknown as RouteEdgeSemanticAudit["difficultyAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 18 terrain linkage/,
+  );
+});
+
+test("integrity rejects stairs=false inferred from absence of exact steps evidence", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              stairsAuthority: {
+                status: "supported",
+                value: false,
+              } as unknown as RouteEdgeSemanticAudit["stairsAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 18 terrain linkage/,
+  );
+});
+
 test("integrity rejects accessibility promotion beyond Planner 17 exact-edge authority", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
@@ -514,7 +623,7 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
               durationAuthority: {
                 status: "blocked",
                 reason:
-                  "WHEELCHAIR_ACCESS_NOT_SOURCED",
+                  "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
               },
             }
           : { ...audit },
