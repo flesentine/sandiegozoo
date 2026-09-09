@@ -104,7 +104,7 @@ test("interior Front Street connection supports route-node endpoints, walk mode,
   });
 });
 
-test("all current ingress audits keep unsupported RouteEdge semantics blocked", () => {
+test("all current ingress audits expose unresolved semantics explicitly as unknown", () => {
   assert.equal(
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.length,
     2,
@@ -115,50 +115,26 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       audit.routeNodesAuthority.status,
       "supported",
     );
-
     assert.equal(
       audit.durationAuthority.status,
       "supported",
     );
-    assert.equal(
-      audit.durationAuthority.basis,
-      "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
-    );
 
-    assert.equal(audit.difficultyAuthority.status, "blocked");
-    assert.equal(
-      audit.difficultyAuthority.basis,
-      "Planner 18 difficulty authority",
-    );
-
-    assert.equal(audit.stairsAuthority.status, "blocked");
-    assert.equal(
-      audit.stairsAuthority.reason,
-      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
-    );
-    assert.equal(
-      audit.stairsAuthority.basis,
-      "Planner 18 stairs authority",
-    );
-
-    assert.equal(audit.accessibleAuthority.status, "blocked");
-    assert.equal(
-      audit.accessibleAuthority.basis,
-      "Planner 17 accessibility authority",
-    );
-    assert.equal(audit.strollerAuthority.status, "blocked");
-    assert.equal(
-      audit.strollerAuthority.reason,
-      "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY",
-    );
-    assert.equal(
-      audit.strollerAuthority.basis,
-      "Planner 17 stroller authority",
-    );
-    assert.equal(
-      audit.strollerAuthority.policyEvidenceId,
-      "sdz-stroller-facility-policy-2026-09-08",
-    );
+    for (const authority of [
+      audit.difficultyAuthority,
+      audit.stairsAuthority,
+      audit.accessibleAuthority,
+      audit.strollerAuthority,
+    ]) {
+      assert.equal(
+        authority.status,
+        "supported",
+      );
+      assert.equal(
+        authority.value,
+        "unknown",
+      );
+    }
 
     assert.equal(
       audit.edgeStatusAuthority.status,
@@ -168,7 +144,6 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       audit.edgeStatusAuthority.value,
       "conditional",
     );
-
     assert.equal(
       audit.oneWayAuthority.status,
       "supported",
@@ -181,7 +156,6 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
       audit.oneWayAuthority.direction,
       "bidirectional",
     );
-
     assert.equal(
       audit.plannerMaterialization,
       "route-edge-audit-only",
@@ -253,7 +227,7 @@ test("Planner 19 duration linkage promotes exact policy-derived free-flow durati
   );
 });
 
-test("Planner 18 terrain linkage preserves exact edge-specific blocked reasons", () => {
+test("Planner 22 preserves Planner 18 terrain blockers as explicit unknowns", () => {
   const controlled =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
       (audit) =>
@@ -267,50 +241,59 @@ test("Planner 18 terrain linkage preserves exact edge-specific blocked reasons",
   assert.ok(controlled);
   assert.ok(frontStreet);
 
-  assert.deepEqual(controlled.difficultyAuthority, {
-    status: "blocked",
-    reason:
-      "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
-    basis:
-      "Planner 18 difficulty authority",
-    sourceSnapshotId:
-      "sdz-pedestrian-direction-way-755054695",
-  });
-  assert.deepEqual(controlled.stairsAuthority, {
-    status: "blocked",
-    reason:
-      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
-    basis:
-      "Planner 18 stairs authority",
-    sourceSnapshotId:
-      "sdz-pedestrian-direction-way-755054695",
-  });
+  assert.deepEqual(
+    controlled.difficultyAuthority,
+    {
+      status: "supported",
+      value: "unknown",
+      basis:
+        "Planner 22 explicit unknown semantics over unresolved Planner 18 difficulty authority",
+      unresolvedReason:
+        "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
+      sourceSnapshotId:
+        "sdz-pedestrian-direction-way-755054695",
+    },
+  );
+  assert.deepEqual(
+    controlled.stairsAuthority,
+    {
+      status: "supported",
+      value: "unknown",
+      basis:
+        "Planner 22 explicit unknown semantics over unresolved Planner 18 stairs authority",
+      unresolvedReason:
+        "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
+      sourceSnapshotId:
+        "sdz-pedestrian-direction-way-755054695",
+    },
+  );
 
-  assert.deepEqual(frontStreet.difficultyAuthority, {
-    status: "blocked",
-    reason:
-      "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY",
-    basis:
-      "Planner 18 difficulty authority",
-    sourceSnapshotId:
-      "sdz-pedestrian-direction-way-755054694",
-    corridorTerrainEvidenceId:
-      "sdz-corridor-front-street-terrain-evidence",
-  });
-  assert.deepEqual(frontStreet.stairsAuthority, {
-    status: "blocked",
-    reason:
-      "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
-    basis:
-      "Planner 18 stairs authority",
-    sourceSnapshotId:
-      "sdz-pedestrian-direction-way-755054694",
-    corridorTerrainEvidenceId:
-      "sdz-corridor-front-street-terrain-evidence",
-  });
+  assert.equal(
+    frontStreet.difficultyAuthority.value,
+    "unknown",
+  );
+  assert.equal(
+    frontStreet.difficultyAuthority
+      .unresolvedReason,
+    "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY",
+  );
+  assert.equal(
+    frontStreet.difficultyAuthority
+      .corridorTerrainEvidenceId,
+    "sdz-corridor-front-street-terrain-evidence",
+  );
+  assert.equal(
+    frontStreet.stairsAuthority.value,
+    "unknown",
+  );
+  assert.equal(
+    frontStreet.stairsAuthority
+      .corridorTerrainEvidenceId,
+    "sdz-corridor-front-street-terrain-evidence",
+  );
 });
 
-test("Planner 17 mobility linkage preserves exact edge-specific blocked reasons", () => {
+test("Planner 22 preserves Planner 17 mobility blockers as explicit unknowns", () => {
   const controlled =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
       (audit) =>
@@ -324,36 +307,55 @@ test("Planner 17 mobility linkage preserves exact edge-specific blocked reasons"
   assert.ok(controlled);
   assert.ok(frontStreet);
 
-  assert.deepEqual(controlled.accessibleAuthority, {
-    status: "blocked",
-    reason:
-      "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED",
-    basis:
-      "Planner 17 accessibility authority",
-  });
-  assert.deepEqual(frontStreet.accessibleAuthority, {
-    status: "blocked",
-    reason:
-      "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY",
-    basis:
-      "Planner 17 accessibility authority",
-    corridorEvidenceId:
-      "sdz-accessibility-front-street-wheelchair-indicator",
-  });
+  assert.deepEqual(
+    controlled.accessibleAuthority,
+    {
+      status: "supported",
+      value: "unknown",
+      basis:
+        "Planner 22 explicit unknown semantics over unresolved Planner 17 accessibility authority",
+      unresolvedReason:
+        "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED",
+    },
+  );
+  assert.deepEqual(
+    frontStreet.accessibleAuthority,
+    {
+      status: "supported",
+      value: "unknown",
+      basis:
+        "Planner 22 explicit unknown semantics over unresolved Planner 17 accessibility authority",
+      unresolvedReason:
+        "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY",
+      corridorEvidenceId:
+        "sdz-accessibility-front-street-wheelchair-indicator",
+    },
+  );
   assert.deepEqual(
     controlled.strollerAuthority,
     frontStreet.strollerAuthority,
   );
+  assert.equal(
+    controlled.strollerAuthority.value,
+    "unknown",
+  );
+  assert.equal(
+    controlled.strollerAuthority
+      .unresolvedReason,
+    "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY",
+  );
 });
 
-test("route-edge readiness exposes route nodes, mode, and distance as supported", () => {
+test("route-edge readiness is contract-complete with explicit unknown semantics", () => {
   assert.deepEqual(
     assessIngressRouteEdgeReadiness(
       "sdz-geo-main-entrance",
     ),
     {
-      status: "partial-route-edge-authority",
-      targetId: "sdz-geo-main-entrance",
+      status:
+        "route-edge-contract-complete",
+      targetId:
+        "sdz-geo-main-entrance",
       auditIds: [
         "sdz-ingress-way-controlled-passage-route-edge-audit",
         "sdz-ingress-way-front-street-connection-route-edge-audit",
@@ -363,18 +365,18 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "mode",
         "distance",
         "duration",
-        "status",
-        "oneWay",
-      ],
-      blockedFields: [
         "difficulty",
         "stairs",
         "accessible",
         "stroller",
+        "oneWay",
+        "status",
       ],
+      blockedFields: [],
       routeEdgeMaterialization: {
-        status: "blocked",
-        reason: "ROUTE_EDGE_CONTRACT_INCOMPLETE",
+        status: "ready",
+        basis:
+          "Planner 22 explicit unknown RouteEdge semantics",
       },
     },
   );
@@ -391,7 +393,9 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
   );
 
   assert.deepEqual(
-    assessIngressRouteEdgeReadiness("unknown-target"),
+    assessIngressRouteEdgeReadiness(
+      "unknown-target",
+    ),
     {
       status: "blocked",
       reason: "TARGET_UNKNOWN",
@@ -657,7 +661,7 @@ test("integrity rejects duration-basis drift from Planner 19 policy", () => {
   );
 });
 
-test("integrity rejects guessed difficulty promotion beyond Planner 18 authority", () => {
+test("integrity rejects replacing Planner 22 unknown difficulty with a guess", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit) =>
@@ -665,7 +669,7 @@ test("integrity rejects guessed difficulty promotion beyond Planner 18 authority
           ? {
               ...audit,
               difficultyAuthority: {
-                status: "supported",
+                ...audit.difficultyAuthority,
                 value: "easy",
               } as unknown as RouteEdgeSemanticAudit["difficultyAuthority"],
             }
@@ -677,11 +681,11 @@ test("integrity rejects guessed difficulty promotion beyond Planner 18 authority
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 18 terrain linkage/,
+    /changed Planner 22 unknown-semantic completion/,
   );
 });
 
-test("integrity rejects stairs=false inferred from absence of exact steps evidence", () => {
+test("integrity rejects replacing unknown stairs with false", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit, index) =>
@@ -689,7 +693,7 @@ test("integrity rejects stairs=false inferred from absence of exact steps eviden
           ? {
               ...audit,
               stairsAuthority: {
-                status: "supported",
+                ...audit.stairsAuthority,
                 value: false,
               } as unknown as RouteEdgeSemanticAudit["stairsAuthority"],
             }
@@ -701,11 +705,11 @@ test("integrity rejects stairs=false inferred from absence of exact steps eviden
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 18 terrain linkage/,
+    /changed Planner 22 unknown-semantic completion/,
   );
 });
 
-test("integrity rejects accessibility promotion beyond Planner 17 exact-edge authority", () => {
+test("integrity rejects replacing unknown accessibility with true", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit) =>
@@ -713,7 +717,7 @@ test("integrity rejects accessibility promotion beyond Planner 17 exact-edge aut
           ? {
               ...audit,
               accessibleAuthority: {
-                status: "supported",
+                ...audit.accessibleAuthority,
                 value: true,
               } as unknown as RouteEdgeSemanticAudit["accessibleAuthority"],
             }
@@ -725,11 +729,11 @@ test("integrity rejects accessibility promotion beyond Planner 17 exact-edge aut
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 17 mobility linkage/,
+    /changed Planner 22 unknown-semantic completion/,
   );
 });
 
-test("integrity rejects stroller promotion from facility permission", () => {
+test("integrity rejects replacing unknown stroller suitability with facility permission", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit, index) =>
@@ -737,7 +741,7 @@ test("integrity rejects stroller promotion from facility permission", () => {
           ? {
               ...audit,
               strollerAuthority: {
-                status: "supported",
+                ...audit.strollerAuthority,
                 value: true,
               } as unknown as RouteEdgeSemanticAudit["strollerAuthority"],
             }
@@ -749,7 +753,7 @@ test("integrity rejects stroller promotion from facility permission", () => {
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 17 mobility linkage/,
+    /changed Planner 22 unknown-semantic completion/,
   );
 });
 
