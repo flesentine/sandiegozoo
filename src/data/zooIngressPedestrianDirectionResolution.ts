@@ -5,6 +5,7 @@ import {
   assessPedestrianDirectionAuthority,
   pedestrianDirectionSourceForWay,
   type PedestrianDirectionAssessment,
+  type PedestrianDirectionSourceSnapshot,
 } from "./zooIngressPedestrianDirectionAuthority.ts";
 
 export type PedestrianDirectionResolutionPolicy = {
@@ -189,39 +190,21 @@ function supportedFromPlanner16(
   };
 }
 
-export function resolveIngressPedestrianDirection(
-  sourceWayId: string,
+export function resolvePedestrianDirectionWithPolicy(
+  geometryHighwayTag: string,
+  snapshot: PedestrianDirectionSourceSnapshot,
+  planner16: Exclude<
+    PedestrianDirectionAssessment,
+    {
+      status: "blocked";
+      reason: "SOURCE_WAY_UNKNOWN";
+    }
+  >,
 ): ResolvedPedestrianDirectionAuthority {
-  const way = INGRESS_GEOMETRY_WAYS.find(
-    (candidate) =>
-      candidate.sourceObjectId ===
-      sourceWayId,
-  );
-  const snapshot =
-    pedestrianDirectionSourceForWay(
-      sourceWayId,
-    );
-  const planner16 =
-    assessPedestrianDirectionAuthority(
-      sourceWayId,
-    );
+  const sourceWayId = snapshot.sourceWayId;
 
   if (
-    !way ||
-    !snapshot ||
-    (planner16.status === "blocked" &&
-      planner16.reason ===
-        "SOURCE_WAY_UNKNOWN")
-  ) {
-    return {
-      status: "blocked",
-      sourceWayId,
-      reason: "SOURCE_WAY_UNKNOWN",
-    };
-  }
-
-  if (
-    way.highwayTag !== "pedestrian" ||
+    geometryHighwayTag !== "pedestrian" ||
     snapshot.sourceTags.highway !==
       "pedestrian"
   ) {
@@ -301,6 +284,44 @@ export function resolveIngressPedestrianDirection(
       "POLICY_SCOPE_NOT_APPLICABLE",
     sourceSnapshotId: snapshot.id,
   };
+}
+
+export function resolveIngressPedestrianDirection(
+  sourceWayId: string,
+): ResolvedPedestrianDirectionAuthority {
+  const way = INGRESS_GEOMETRY_WAYS.find(
+    (candidate) =>
+      candidate.sourceObjectId ===
+      sourceWayId,
+  );
+  const snapshot =
+    pedestrianDirectionSourceForWay(
+      sourceWayId,
+    );
+  const planner16 =
+    assessPedestrianDirectionAuthority(
+      sourceWayId,
+    );
+
+  if (
+    !way ||
+    !snapshot ||
+    (planner16.status === "blocked" &&
+      planner16.reason ===
+        "SOURCE_WAY_UNKNOWN")
+  ) {
+    return {
+      status: "blocked",
+      sourceWayId,
+      reason: "SOURCE_WAY_UNKNOWN",
+    };
+  }
+
+  return resolvePedestrianDirectionWithPolicy(
+    way.highwayTag,
+    snapshot,
+    planner16,
+  );
 }
 
 export function assertIngressPedestrianDirectionResolutionIntegrity(
