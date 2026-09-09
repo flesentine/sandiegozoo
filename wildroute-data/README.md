@@ -50,3 +50,14 @@ Timed experiences must explicitly model:
 The current JSON under `tests/fixtures/` is deliberately synthetic and uses non-Zoo coordinates. It exists only to prove the validator.
 
 Production Zoo records will be added in later source-verification PRs.
+
+
+## Current production materialization
+
+Planner 23 adds the first source-backed production routing records in TypeScript:
+
+- `src/data/zooIngressRouteEdgeMaterialization.ts`
+- two conditional pedestrian RouteEdges for Main Entrance → interior → Front Street
+- a runtime-valid ingress-only `WildRouteDataPackage`
+
+No full Zoo production JSON package has been published here yet. The TypeScript materialization remains the qualified source until the wider graph, places, and schedules are assembled.
