@@ -56,13 +56,60 @@ test("both current exact ingress ways are conditionally available rather than gu
           activation: {
             status:
               "runtime-check-required",
+            exactEdgeSourceWayId:
+              sourceWayId,
             requirements: [
               "VISIT_WITHIN_CURRENT_ZOO_HOURS",
               "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+              "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
             ],
           },
         },
       },
+    );
+  }
+});
+
+test("conditional activation is scoped to the exact ingress edge and requires affirmative current availability", () => {
+  const controlled =
+    operationalStatusForIngressWay(
+      "755054695",
+    );
+  const frontStreet =
+    operationalStatusForIngressWay(
+      "755054694",
+    );
+
+  assert.ok(
+    !("status" in controlled),
+  );
+  assert.ok(
+    !("status" in frontStreet),
+  );
+
+  assert.equal(
+    controlled.statusAuthority.activation
+      .exactEdgeSourceWayId,
+    "755054695",
+  );
+  assert.equal(
+    frontStreet.statusAuthority.activation
+      .exactEdgeSourceWayId,
+    "755054694",
+  );
+
+  for (const authority of [
+    controlled,
+    frontStreet,
+  ]) {
+    assert.deepEqual(
+      authority.statusAuthority.activation
+        .requirements,
+      [
+        "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+        "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+        "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
+      ],
     );
   }
 });
