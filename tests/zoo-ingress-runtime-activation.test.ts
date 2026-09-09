@@ -223,6 +223,12 @@ test("Planner 24 activation makes the Planner 23 route actually routable through
     [],
   );
   assert.deepEqual(
+    integration.routingGate
+      .runtimeTrustedConditionalEdgeIds,
+    activation
+      .enabledConditionalEdgeIds,
+  );
+  assert.deepEqual(
     integration.request.routePolicy
       ?.enabledConditionalEdgeIds,
     activation
@@ -255,6 +261,80 @@ test("Planner 24 activation makes the Planner 23 route actually routable through
   assert.equal(
     route.durationMinutes,
     0.586,
+  );
+});
+
+test("runtime trust alone never opens an edge and enabled IDs alone cannot bypass provisional gating", () => {
+  const activation =
+    resolveIngressRuntimeActivation(
+      snapshot(),
+    );
+
+  const trustOnly =
+    buildCandidateIntegration(
+      integrationInput(
+        activation,
+        {
+          enabledConditionalEdgeIds: [],
+        },
+      ),
+    );
+
+  assert.equal(
+    trustOnly.status,
+    "ready",
+  );
+  if (
+    trustOnly.status !== "ready"
+  ) {
+    throw new Error(
+      "expected trust-only integration to remain structurally ready",
+    );
+  }
+
+  const trustOnlyRoute =
+    findShortestRoute(
+      trustOnly.request.graph,
+      {
+        fromNodeId:
+          "sdz-ingress-node-main-entrance-route-node",
+        toNodeId:
+          "sdz-ingress-node-front-street-route-node",
+      },
+    );
+  assert.deepEqual(
+    trustOnlyRoute,
+    {
+      status: "not-found",
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+      reason: "NO_ROUTE",
+    },
+  );
+
+  const enabledOnly =
+    buildCandidateIntegration(
+      integrationInput(
+        activation,
+        {
+          conditionalEdgeRuntimeTrust:
+            undefined,
+        },
+      ),
+    );
+
+  assert.equal(
+    enabledOnly.status,
+    "blocked",
+  );
+  assert.ok(
+    enabledOnly.issues.some(
+      (issue) =>
+        issue.code ===
+        "CONDITIONAL_EDGE_UNTRUSTED",
+    ),
   );
 });
 
