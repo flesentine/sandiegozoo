@@ -127,10 +127,12 @@ Planner 23 exports:
 `INGRESS_ROUTE_GRAPH_DATA` is a runtime-valid `WildRouteDataPackage` containing:
 
 - San Diego Zoo zone
-- Planner 15 ingress RouteNodes
+- the three Planner 15 RouteNodes incident to the two materialized RouteEdges
 - Planner 23 ingress RouteEdges
 - no places yet
 - no schedule events yet
+
+The qualified turnstile and interior-junction RouteNodes remain in Planner 15 authority but are intentionally omitted from this minimal package until they have incident RouteEdges, avoiding orphan-node warnings.
 
 This package exists to validate and route the real ingress graph independently before wider Zoo graph integration.
 
