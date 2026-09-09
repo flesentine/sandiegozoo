@@ -74,6 +74,8 @@ The RouteEdge validator already supports any finite positive fractional duration
 
 Planner 19 therefore preserves sub-minute edge durations.
 
+Because the RouteEdge contract still requires a **positive** duration, the derivation fails closed when a positive distance is so small that 3-decimal minute rounding would produce `0`. This is not a duration floor: such a segment is rejected until the policy gains finer precision or another explicit representation.
+
 ## Exact current results
 
 ### Controlled entrance passage — way 755054695
@@ -147,6 +149,7 @@ Planner 19 fails closed if:
 - walking speed changes
 - rounding precision changes
 - a minimum-duration floor appears
+- a positive distance is allowed to round to zero duration
 - pace adjustment is hidden in the base duration
 - terrain/crowd/queue/access-control adjustments are hidden in the base duration
 - a duration detaches from its Planner 13 distance record
