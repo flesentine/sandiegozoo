@@ -16,6 +16,11 @@ import {
 import {
   assessIngressMobilityAuthority,
 } from "./zooIngressMobilityAuthority.ts";
+import {
+  assessIngressTerrainAuthority,
+  type ExactDifficultyAuthority,
+  type ExactStairsAuthority,
+} from "./zooIngressTerrainAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -27,8 +32,9 @@ export type BlockedFieldAuthority = {
   status: "blocked";
   reason:
     | "DURATION_POLICY_NOT_SOURCED"
-    | "DIFFICULTY_NOT_SOURCED"
-    | "STAIRS_NOT_EXPLICITLY_SOURCED"
+    | "EXACT_EDGE_DIFFICULTY_NOT_SOURCED"
+    | "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY"
+    | "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED"
     | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
     | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY"
     | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY"
@@ -76,8 +82,8 @@ export type RouteEdgeSemanticAudit = {
   modeAuthority: SupportedFieldAuthority<"walk">;
   distanceAuthority: SupportedFieldAuthority<number>;
   durationAuthority: BlockedFieldAuthority;
-  difficultyAuthority: BlockedFieldAuthority;
-  stairsAuthority: BlockedFieldAuthority;
+  difficultyAuthority: ExactDifficultyAuthority;
+  stairsAuthority: ExactStairsAuthority;
   accessibleAuthority: AccessibilityFieldAuthority;
   strollerAuthority: StrollerFieldAuthority;
   oneWayAuthority: PedestrianOneWayFieldAuthority;
@@ -228,9 +234,13 @@ function buildAudit(
     assessPedestrianDirectionAuthority(sourceWayId);
   const mobilityAuthority =
     assessIngressMobilityAuthority(sourceWayId);
+  const terrainAuthority =
+    assessIngressTerrainAuthority(sourceWayId);
 
   if (
     "status" in mobilityAuthority ||
+    "status" in terrainAuthority ||
+    terrainAuthority.stairsAuthority.status !== "blocked" ||
     directionAuthority.status !== "blocked" ||
     directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
     !directionAuthority.sourceSnapshotId
@@ -267,8 +277,10 @@ function buildAudit(
         "Planner 13 Haversine sum over frozen OSM way node sequence",
     },
     durationAuthority: blocked("DURATION_POLICY_NOT_SOURCED"),
-    difficultyAuthority: blocked("DIFFICULTY_NOT_SOURCED"),
-    stairsAuthority: blocked("STAIRS_NOT_EXPLICITLY_SOURCED"),
+    difficultyAuthority:
+      terrainAuthority.difficultyAuthority,
+    stairsAuthority:
+      terrainAuthority.stairsAuthority,
     accessibleAuthority:
       mobilityAuthority.accessibilityAuthority,
     strollerAuthority:
@@ -403,6 +415,28 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
+    const terrainAuthority =
+      assessIngressTerrainAuthority(
+        audit.sourceWayId,
+      );
+    if (
+      "status" in terrainAuthority ||
+      terrainAuthority.stairsAuthority.status !==
+        "blocked" ||
+      JSON.stringify(audit.difficultyAuthority) !==
+        JSON.stringify(
+          terrainAuthority.difficultyAuthority,
+        ) ||
+      JSON.stringify(audit.stairsAuthority) !==
+        JSON.stringify(
+          terrainAuthority.stairsAuthority,
+        )
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} changed Planner 18 terrain linkage.`,
+      );
+    }
+
     const mobilityAuthority =
       assessIngressMobilityAuthority(
         audit.sourceWayId,
@@ -450,11 +484,11 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       ],
       [
         audit.difficultyAuthority,
-        "DIFFICULTY_NOT_SOURCED",
+        terrainAuthority.difficultyAuthority.reason,
       ],
       [
         audit.stairsAuthority,
-        "STAIRS_NOT_EXPLICITLY_SOURCED",
+        terrainAuthority.stairsAuthority.reason,
       ],
       [
         audit.accessibleAuthority,
