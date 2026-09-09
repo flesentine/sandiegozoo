@@ -421,6 +421,8 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     if (
       "status" in terrainAuthority ||
+      terrainAuthority.stairsAuthority.status !==
+        "blocked" ||
       JSON.stringify(audit.difficultyAuthority) !==
         JSON.stringify(
           terrainAuthority.difficultyAuthority,
