@@ -24,6 +24,10 @@ import {
 import {
   walkingDurationForSourceWay,
 } from "./zooIngressWalkingDurationPolicy.ts";
+import {
+  operationalStatusForIngressWay,
+  type IngressOperationalStatusAuthority,
+} from "./zooIngressOperationalStatusAuthority.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -42,8 +46,7 @@ export type BlockedFieldAuthority = {
     | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY"
     | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
     | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
-    | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED"
-    | "EDGE_STATUS_NOT_SOURCED";
+    | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED";
 };
 
 export type PedestrianOneWayFieldAuthority =
@@ -90,7 +93,8 @@ export type RouteEdgeSemanticAudit = {
   accessibleAuthority: AccessibilityFieldAuthority;
   strollerAuthority: StrollerFieldAuthority;
   oneWayAuthority: PedestrianOneWayFieldAuthority;
-  edgeStatusAuthority: BlockedFieldAuthority;
+  edgeStatusAuthority:
+    IngressOperationalStatusAuthority["statusAuthority"];
   plannerMaterialization: "route-edge-audit-only";
 };
 
@@ -109,6 +113,7 @@ export type IngressRouteEdgeReadiness =
         "mode",
         "distance",
         "duration",
+        "status",
       ];
       blockedFields: readonly [
         "difficulty",
@@ -116,7 +121,6 @@ export type IngressRouteEdgeReadiness =
         "accessible",
         "stroller",
         "oneWay",
-        "status",
       ];
       routeEdgeMaterialization: {
         status: "blocked";
@@ -243,10 +247,15 @@ function buildAudit(
     assessIngressMobilityAuthority(sourceWayId);
   const terrainAuthority =
     assessIngressTerrainAuthority(sourceWayId);
+  const operationalAuthority =
+    operationalStatusForIngressWay(
+      sourceWayId,
+    );
 
   if (
     "status" in mobilityAuthority ||
     "status" in terrainAuthority ||
+    "status" in operationalAuthority ||
     terrainAuthority.stairsAuthority.status !== "blocked" ||
     directionAuthority.status !== "blocked" ||
     directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
@@ -306,7 +315,8 @@ function buildAudit(
       sourceSnapshotId:
         directionAuthority.sourceSnapshotId,
     },
-    edgeStatusAuthority: blocked("EDGE_STATUS_NOT_SOURCED"),
+    edgeStatusAuthority:
+      operationalAuthority.statusAuthority,
     plannerMaterialization: "route-edge-audit-only",
   };
 }
@@ -481,6 +491,22 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
+    const operationalAuthority =
+      operationalStatusForIngressWay(
+        audit.sourceWayId,
+      );
+    if (
+      "status" in operationalAuthority ||
+      JSON.stringify(audit.edgeStatusAuthority) !==
+        JSON.stringify(
+          operationalAuthority.statusAuthority,
+        )
+    ) {
+      throw new Error(
+        `Route-edge semantic audit ${audit.id} changed Planner 20 operational-status linkage.`,
+      );
+    }
+
     const directionAuthority =
       assessPedestrianDirectionAuthority(
         audit.sourceWayId,
@@ -519,7 +545,6 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
         mobilityAuthority.strollerAuthority.reason,
       ],
       [audit.oneWayAuthority, expectedDirectionReason],
-      [audit.edgeStatusAuthority, "EDGE_STATUS_NOT_SOURCED"],
     ] as const;
 
     if (
@@ -588,6 +613,7 @@ export function assessIngressRouteEdgeReadiness(
       "mode",
       "distance",
       "duration",
+      "status",
     ],
     blockedFields: [
       "difficulty",
@@ -595,7 +621,6 @@ export function assessIngressRouteEdgeReadiness(
       "accessible",
       "stroller",
       "oneWay",
-      "status",
     ],
     routeEdgeMaterialization: {
       status: "blocked",
