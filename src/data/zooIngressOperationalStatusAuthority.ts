@@ -23,7 +23,8 @@ export type ZooOperationalPolicyEvidence = {
 
 export type OperationalActivationRequirement =
   | "VISIT_WITHIN_CURRENT_ZOO_HOURS"
-  | "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT";
+  | "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT"
+  | "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY";
 
 export type IngressOperationalStatusAuthority = {
   sourceWayId: string;
@@ -36,9 +37,11 @@ export type IngressOperationalStatusAuthority = {
       ZooOperationalPolicyEvidence["id"];
     activation: {
       status: "runtime-check-required";
+      exactEdgeSourceWayId: string;
       requirements: readonly [
         "VISIT_WITHIN_CURRENT_ZOO_HOURS",
         "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+        "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
       ];
     };
   };
@@ -163,6 +166,7 @@ const ACTIVATION_REQUIREMENTS =
   Object.freeze([
     "VISIT_WITHIN_CURRENT_ZOO_HOURS",
     "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+    "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
   ] as const satisfies readonly OperationalActivationRequirement[]);
 
 export function operationalStatusForIngressWay(
@@ -196,6 +200,8 @@ export function operationalStatusForIngressWay(
       activation: {
         status:
           "runtime-check-required",
+        exactEdgeSourceWayId:
+          sourceWayId,
         requirements:
           ACTIVATION_REQUIREMENTS,
       },
@@ -236,6 +242,9 @@ export function assertIngressOperationalStatusIntegrity(
       authority.statusAuthority.activation
         .status !==
         "runtime-check-required" ||
+      authority.statusAuthority.activation
+        .exactEdgeSourceWayId !==
+        sourceWayId ||
       JSON.stringify(
         authority.statusAuthority.activation
           .requirements,
