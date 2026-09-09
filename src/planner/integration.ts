@@ -127,6 +127,7 @@ export type CandidateIntegrationIssue = {
 
 export type CandidateIntegrationRoutingGate = {
   disabledUnverifiedEdgeIds: string[];
+  runtimeTrustedConditionalEdgeIds: string[];
 };
 
 export type CandidateIntegrationReady = {
@@ -591,6 +592,8 @@ function trustedRoutingPackage(
     data.routeNodes.map((node) => [node.id, node]),
   );
   const disabledUnverifiedEdgeIds: string[] = [];
+  const runtimeTrustedConditionalEdgeIdsUsed:
+    string[] = [];
 
   const routeEdges = data.routeEdges.map((edge) => {
     const from = nodeById.get(edge.fromNodeId);
@@ -603,17 +606,26 @@ function trustedRoutingPackage(
       nodeVerified(from, date) &&
       nodeVerified(to, date);
 
+    const runtimeTrusted =
+      edge.status === "conditional" &&
+      edge.provenance.confidence ===
+        "provisional" &&
+      runtimeTrustedConditionalEdgeIds.has(
+        edge.id,
+      ) &&
+      baseEvidenceEffective;
+
     const trusted =
       (edge.provenance.confidence ===
         "verified" &&
         baseEvidenceEffective) ||
-      (edge.status === "conditional" &&
-        edge.provenance.confidence ===
-          "provisional" &&
-        runtimeTrustedConditionalEdgeIds.has(
-          edge.id,
-        ) &&
-        baseEvidenceEffective);
+      runtimeTrusted;
+
+    if (runtimeTrusted) {
+      runtimeTrustedConditionalEdgeIdsUsed.push(
+        edge.id,
+      );
+    }
 
     if (trusted) {
       return {
@@ -654,6 +666,10 @@ function trustedRoutingPackage(
     } satisfies WildRouteDataPackage,
     disabledUnverifiedEdgeIds:
       disabledUnverifiedEdgeIds.sort(compareText),
+    runtimeTrustedConditionalEdgeIds:
+      runtimeTrustedConditionalEdgeIdsUsed.sort(
+        compareText,
+      ),
   };
 }
 
@@ -1377,6 +1393,8 @@ export function buildCandidateIntegration(
   const routingGate = {
     disabledUnverifiedEdgeIds:
       gated.disabledUnverifiedEdgeIds,
+    runtimeTrustedConditionalEdgeIds:
+      gated.runtimeTrustedConditionalEdgeIds,
   };
 
   issues.sort((a, b) => {
