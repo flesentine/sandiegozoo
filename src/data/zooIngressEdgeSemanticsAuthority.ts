@@ -21,6 +21,9 @@ import {
   type ExactDifficultyAuthority,
   type ExactStairsAuthority,
 } from "./zooIngressTerrainAuthority.ts";
+import {
+  walkingDurationForSourceWay,
+} from "./zooIngressWalkingDurationPolicy.ts";
 
 export type SupportedFieldAuthority<T> = {
   status: "supported";
@@ -31,7 +34,6 @@ export type SupportedFieldAuthority<T> = {
 export type BlockedFieldAuthority = {
   status: "blocked";
   reason:
-    | "DURATION_POLICY_NOT_SOURCED"
     | "EXACT_EDGE_DIFFICULTY_NOT_SOURCED"
     | "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY"
     | "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED"
@@ -81,7 +83,8 @@ export type RouteEdgeSemanticAudit = {
   >;
   modeAuthority: SupportedFieldAuthority<"walk">;
   distanceAuthority: SupportedFieldAuthority<number>;
-  durationAuthority: BlockedFieldAuthority;
+  durationAuthority:
+    SupportedFieldAuthority<number>;
   difficultyAuthority: ExactDifficultyAuthority;
   stairsAuthority: ExactStairsAuthority;
   accessibleAuthority: AccessibilityFieldAuthority;
@@ -105,9 +108,9 @@ export type IngressRouteEdgeReadiness =
         "routeNodes",
         "mode",
         "distance",
+        "duration",
       ];
       blockedFields: readonly [
-        "duration",
         "difficulty",
         "stairs",
         "accessible",
@@ -201,8 +204,12 @@ function buildAudit(
     (candidate) =>
       candidate.sourceWayId === sourceWayId,
   );
+  const walkingDuration =
+    walkingDurationForSourceWay(
+      sourceWayId,
+    );
 
-  if (!way || !distance) {
+  if (!way || !distance || !walkingDuration) {
     throw new Error(
       `Cannot audit unknown ingress way ${sourceWayId}.`,
     );
@@ -276,7 +283,13 @@ function buildAudit(
       basis:
         "Planner 13 Haversine sum over frozen OSM way node sequence",
     },
-    durationAuthority: blocked("DURATION_POLICY_NOT_SOURCED"),
+    durationAuthority: {
+      status: "supported",
+      value:
+        walkingDuration.durationMinutes,
+      basis:
+        "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
+    },
     difficultyAuthority:
       terrainAuthority.difficultyAuthority,
     stairsAuthority:
@@ -357,6 +370,10 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
 
     const way = wayById.get(audit.sourceWayId);
     const distance = distanceByWay.get(audit.sourceWayId);
+    const walkingDuration =
+      walkingDurationForSourceWay(
+        audit.sourceWayId,
+      );
     const directionSource =
       pedestrianDirectionSourceForWay(
         audit.sourceWayId,
@@ -366,6 +383,7 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     if (
       !way ||
       !distance ||
+      !walkingDuration ||
       !sourceTags ||
       auditedWayIds.has(audit.sourceWayId) ||
       audit.targetId !== way.targetId ||
@@ -408,7 +426,13 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       audit.distanceAuthority.status !== "supported" ||
       audit.distanceAuthority.value !== distance.distanceMeters ||
       audit.distanceAuthority.basis !==
-        "Planner 13 Haversine sum over frozen OSM way node sequence"
+        "Planner 13 Haversine sum over frozen OSM way node sequence" ||
+      audit.durationAuthority.status !==
+        "supported" ||
+      audit.durationAuthority.value !==
+        walkingDuration.durationMinutes ||
+      audit.durationAuthority.basis !==
+        "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance"
     ) {
       throw new Error(
         `Route-edge semantic audit ${audit.id} changed its supported fields.`,
@@ -478,10 +502,6 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       directionAuthority.reason;
 
     const expectedBlockedReasons = [
-      [
-        audit.durationAuthority,
-        "DURATION_POLICY_NOT_SOURCED",
-      ],
       [
         audit.difficultyAuthority,
         terrainAuthority.difficultyAuthority.reason,
@@ -567,9 +587,9 @@ export function assessIngressRouteEdgeReadiness(
       "routeNodes",
       "mode",
       "distance",
+      "duration",
     ],
     blockedFields: [
-      "duration",
       "difficulty",
       "stairs",
       "accessible",
