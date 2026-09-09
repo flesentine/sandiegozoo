@@ -5,6 +5,7 @@ import {
   assertIngressPedestrianDirectionResolutionIntegrity,
   assertPedestrianDirectionResolutionPolicyIntegrity,
   resolveIngressPedestrianDirection,
+  resolvePedestrianDirectionWithPolicy,
   type PedestrianDirectionResolutionPolicy,
 } from "../src/data/zooIngressPedestrianDirectionResolution.ts";
 
@@ -77,6 +78,105 @@ test("current highway=pedestrian continuation without explicit direction resolve
         "no-explicit-pedestrian-restriction",
     },
   );
+});
+
+test("explicit Planner 16 direction remains authoritative inside Planner 21 scope", () => {
+  const resolved =
+    resolvePedestrianDirectionWithPolicy(
+      "pedestrian",
+      {
+        id: "synthetic-explicit",
+        targetId:
+          "sdz-geo-main-entrance",
+        sourceWayId:
+          "synthetic-way",
+        sourceUrl:
+          "https://www.openstreetmap.org/way/synthetic-way",
+        observedAt:
+          "2026-09-09T09:04:00-07:00",
+        sourceTags: {
+          highway: "pedestrian",
+          "oneway:foot": "yes",
+        },
+        plannerMaterialization:
+          "pedestrian-direction-authority-only",
+      },
+      {
+        status: "supported",
+        sourceWayId:
+          "synthetic-way",
+        sourceSnapshotId:
+          "synthetic-explicit",
+        oneWay: true,
+        direction:
+          "with-source-way-order",
+        basis:
+          "OSM oneway:foot=yes",
+      },
+    );
+
+  assert.deepEqual(resolved, {
+    status: "supported",
+    sourceWayId:
+      "synthetic-way",
+    sourceSnapshotId:
+      "synthetic-explicit",
+    oneWay: true,
+    direction:
+      "with-source-way-order",
+    basis:
+      "Planner 16 explicit pedestrian-direction authority",
+    policyId:
+      "sdz-pedestrian-direction-resolution-policy-v1",
+    resolutionCase:
+      "explicit-planner-16",
+  });
+});
+
+test("explicit Planner 16 direction cannot expand Planner 21 beyond highway=pedestrian", () => {
+  const resolved =
+    resolvePedestrianDirectionWithPolicy(
+      "path",
+      {
+        id: "synthetic-path",
+        targetId:
+          "sdz-geo-main-entrance",
+        sourceWayId:
+          "synthetic-path-way",
+        sourceUrl:
+          "https://www.openstreetmap.org/way/synthetic-path-way",
+        observedAt:
+          "2026-09-09T09:04:00-07:00",
+        sourceTags: {
+          highway: "path",
+          "oneway:foot": "yes",
+        },
+        plannerMaterialization:
+          "pedestrian-direction-authority-only",
+      },
+      {
+        status: "supported",
+        sourceWayId:
+          "synthetic-path-way",
+        sourceSnapshotId:
+          "synthetic-path",
+        oneWay: true,
+        direction:
+          "with-source-way-order",
+        basis:
+          "OSM oneway:foot=yes",
+      },
+    );
+
+  assert.deepEqual(resolved, {
+    status: "blocked",
+    sourceWayId:
+      "synthetic-path-way",
+    reason:
+      "POLICY_SCOPE_NOT_APPLICABLE",
+    sourceSnapshotId:
+      "synthetic-path",
+  });
 });
 
 test("unknown ingress way still fails closed", () => {
