@@ -17,13 +17,12 @@ import {
   type ResolvedPedestrianDirectionAuthority,
 } from "./zooIngressPedestrianDirectionResolution.ts";
 import {
-  assessIngressMobilityAuthority,
-} from "./zooIngressMobilityAuthority.ts";
-import {
-  assessIngressTerrainAuthority,
-  type ExactDifficultyAuthority,
-  type ExactStairsAuthority,
-} from "./zooIngressTerrainAuthority.ts";
+  completeIngressRouteEdgeUnknownSemantics,
+  type IngressUnknownAccessibilityAuthority,
+  type IngressUnknownDifficultyAuthority,
+  type IngressUnknownStairsAuthority,
+  type IngressUnknownStrollerAuthority,
+} from "./zooIngressRouteEdgeContractCompletion.ts";
 import {
   walkingDurationForSourceWay,
 } from "./zooIngressWalkingDurationPolicy.ts";
@@ -38,39 +37,11 @@ export type SupportedFieldAuthority<T> = {
   basis: string;
 };
 
-export type BlockedFieldAuthority = {
-  status: "blocked";
-  reason:
-    | "EXACT_EDGE_DIFFICULTY_NOT_SOURCED"
-    | "CORRIDOR_TERRAIN_NOT_EXACT_EDGE_AUTHORITY"
-    | "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED"
-    | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
-    | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY"
-    | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY";
-};
-
 export type PedestrianOneWayFieldAuthority =
   Extract<
     ResolvedPedestrianDirectionAuthority,
     { status: "supported" }
   >;
-
-export type AccessibilityFieldAuthority = {
-  status: "blocked";
-  reason:
-    | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
-    | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY";
-  basis: "Planner 17 accessibility authority";
-  corridorEvidenceId?: string;
-};
-
-export type StrollerFieldAuthority = {
-  status: "blocked";
-  reason:
-    "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY";
-  basis: "Planner 17 stroller authority";
-  policyEvidenceId: string;
-};
 
 export type RouteEdgeSemanticAudit = {
   id: string;
@@ -88,10 +59,14 @@ export type RouteEdgeSemanticAudit = {
   distanceAuthority: SupportedFieldAuthority<number>;
   durationAuthority:
     SupportedFieldAuthority<number>;
-  difficultyAuthority: ExactDifficultyAuthority;
-  stairsAuthority: ExactStairsAuthority;
-  accessibleAuthority: AccessibilityFieldAuthority;
-  strollerAuthority: StrollerFieldAuthority;
+  difficultyAuthority:
+    IngressUnknownDifficultyAuthority;
+  stairsAuthority:
+    IngressUnknownStairsAuthority;
+  accessibleAuthority:
+    IngressUnknownAccessibilityAuthority;
+  strollerAuthority:
+    IngressUnknownStrollerAuthority;
   oneWayAuthority: PedestrianOneWayFieldAuthority;
   edgeStatusAuthority:
     IngressOperationalStatusAuthority["statusAuthority"];
@@ -105,7 +80,7 @@ export type IngressRouteEdgeReadiness =
       targetId: string;
     }
   | {
-      status: "partial-route-edge-authority";
+      status: "route-edge-contract-complete";
       targetId: string;
       auditIds: string[];
       supportedFields: readonly [
@@ -113,18 +88,18 @@ export type IngressRouteEdgeReadiness =
         "mode",
         "distance",
         "duration",
-        "status",
-        "oneWay",
-      ];
-      blockedFields: readonly [
         "difficulty",
         "stairs",
         "accessible",
         "stroller",
+        "oneWay",
+        "status",
       ];
+      blockedFields: readonly [];
       routeEdgeMaterialization: {
-        status: "blocked";
-        reason: "ROUTE_EDGE_CONTRACT_INCOMPLETE";
+        status: "ready";
+        basis:
+          "Planner 22 explicit unknown RouteEdge semantics";
       };
     };
 
@@ -239,25 +214,23 @@ function buildAudit(
     resolveIngressPedestrianDirection(
       sourceWayId,
     );
-  const mobilityAuthority =
-    assessIngressMobilityAuthority(sourceWayId);
-  const terrainAuthority =
-    assessIngressTerrainAuthority(sourceWayId);
+  const contractCompletion =
+    completeIngressRouteEdgeUnknownSemantics(
+      sourceWayId,
+    );
   const operationalAuthority =
     operationalStatusForIngressWay(
       sourceWayId,
     );
 
   if (
-    "status" in mobilityAuthority ||
-    "status" in terrainAuthority ||
+    "status" in contractCompletion ||
     "status" in operationalAuthority ||
-    terrainAuthority.stairsAuthority.status !== "blocked" ||
     directionAuthority.status !== "supported" ||
     !directionAuthority.sourceSnapshotId
   ) {
     throw new Error(
-      `Ingress way ${sourceWayId} does not have the expected blocked Planner 16 pedestrian-direction authority.`,
+      `Ingress way ${sourceWayId} does not have the expected Planner 21 direction / Planner 22 contract-completion authority.`,
     );
   }
 
@@ -295,13 +268,13 @@ function buildAudit(
         "Planner 19 prospective walking-duration policy v1 over Planner 13 derived distance",
     },
     difficultyAuthority:
-      terrainAuthority.difficultyAuthority,
+      contractCompletion.difficultyAuthority,
     stairsAuthority:
-      terrainAuthority.stairsAuthority,
+      contractCompletion.stairsAuthority,
     accessibleAuthority:
-      mobilityAuthority.accessibilityAuthority,
+      contractCompletion.accessibleAuthority,
     strollerAuthority:
-      mobilityAuthority.strollerAuthority,
+      contractCompletion.strollerAuthority,
     oneWayAuthority:
       directionAuthority,
     edgeStatusAuthority:
@@ -438,45 +411,39 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
       );
     }
 
-    const terrainAuthority =
-      assessIngressTerrainAuthority(
+    const contractCompletion =
+      completeIngressRouteEdgeUnknownSemantics(
         audit.sourceWayId,
       );
     if (
-      "status" in terrainAuthority ||
-      terrainAuthority.stairsAuthority.status !==
-        "blocked" ||
-      JSON.stringify(audit.difficultyAuthority) !==
+      "status" in contractCompletion ||
+      JSON.stringify(
+        audit.difficultyAuthority,
+      ) !==
         JSON.stringify(
-          terrainAuthority.difficultyAuthority,
+          contractCompletion.difficultyAuthority,
         ) ||
-      JSON.stringify(audit.stairsAuthority) !==
+      JSON.stringify(
+        audit.stairsAuthority,
+      ) !==
         JSON.stringify(
-          terrainAuthority.stairsAuthority,
+          contractCompletion.stairsAuthority,
+        ) ||
+      JSON.stringify(
+        audit.accessibleAuthority,
+      ) !==
+        JSON.stringify(
+          contractCompletion.accessibleAuthority,
+        ) ||
+      JSON.stringify(
+        audit.strollerAuthority,
+      ) !==
+        JSON.stringify(
+          contractCompletion.strollerAuthority,
         )
     ) {
       throw new Error(
-        `Route-edge semantic audit ${audit.id} changed Planner 18 terrain linkage.`,
-      );
-    }
-
-    const mobilityAuthority =
-      assessIngressMobilityAuthority(
-        audit.sourceWayId,
-      );
-    if (
-      "status" in mobilityAuthority ||
-      JSON.stringify(audit.accessibleAuthority) !==
-        JSON.stringify(
-          mobilityAuthority.accessibilityAuthority,
-        ) ||
-      JSON.stringify(audit.strollerAuthority) !==
-        JSON.stringify(
-          mobilityAuthority.strollerAuthority,
-        )
-    ) {
-      throw new Error(
-        `Route-edge semantic audit ${audit.id} changed Planner 17 mobility linkage.`,
+        `Route-edge semantic audit ${audit.id} changed Planner 22 unknown-semantic completion.`,
       );
     }
 
@@ -512,37 +479,6 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     ) {
       throw new Error(
         `Route-edge semantic audit ${audit.id} changed Planner 21 pedestrian-direction linkage.`,
-      );
-    }
-
-    const expectedBlockedReasons = [
-      [
-        audit.difficultyAuthority,
-        terrainAuthority.difficultyAuthority.reason,
-      ],
-      [
-        audit.stairsAuthority,
-        terrainAuthority.stairsAuthority.reason,
-      ],
-      [
-        audit.accessibleAuthority,
-        mobilityAuthority.accessibilityAuthority.reason,
-      ],
-      [
-        audit.strollerAuthority,
-        mobilityAuthority.strollerAuthority.reason,
-      ],
-    ] as const;
-
-    if (
-      expectedBlockedReasons.some(
-        ([field, reason]) =>
-          field.status !== "blocked" ||
-          field.reason !== reason,
-      )
-    ) {
-      throw new Error(
-        `Route-edge semantic audit ${audit.id} changed blocked-field authority.`,
       );
     }
 
@@ -592,7 +528,7 @@ export function assessIngressRouteEdgeReadiness(
   }
 
   return {
-    status: "partial-route-edge-authority",
+    status: "route-edge-contract-complete",
     targetId,
     auditIds: audits.map((audit) => audit.id),
     supportedFields: [
@@ -600,18 +536,18 @@ export function assessIngressRouteEdgeReadiness(
       "mode",
       "distance",
       "duration",
-      "status",
-      "oneWay",
-    ],
-    blockedFields: [
       "difficulty",
       "stairs",
       "accessible",
       "stroller",
+      "oneWay",
+      "status",
     ],
+    blockedFields: [],
     routeEdgeMaterialization: {
-      status: "blocked",
-      reason: "ROUTE_EDGE_CONTRACT_INCOMPLETE",
+      status: "ready",
+      basis:
+        "Planner 22 explicit unknown RouteEdge semantics",
     },
   };
 }
