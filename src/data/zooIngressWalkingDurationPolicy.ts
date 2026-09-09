@@ -133,11 +133,20 @@ export function deriveWalkingDurationMinutes(
     );
   }
 
-  return roundDuration(
-    distanceMeters /
-      SPEED_METERS_PER_SECOND /
-      60,
-  );
+  const roundedDurationMinutes =
+    roundDuration(
+      distanceMeters /
+        SPEED_METERS_PER_SECOND /
+        60,
+    );
+
+  if (roundedDurationMinutes <= 0) {
+    throw new Error(
+      "Walking duration is below the policy's positive representable resolution.",
+    );
+  }
+
+  return roundedDurationMinutes;
 }
 
 function deriveIngressDurations():
