@@ -46,7 +46,7 @@ The policy freezes three precedence rules:
 
 1. Explicit Planner 16 pedestrian direction remains authoritative.
 2. On `highway=pedestrian`, generic `oneway=yes` is interpreted as vehicle-only unless explicit pedestrian-direction tagging says otherwise.
-3. A pedestrian way with no explicit pedestrian-direction restriction is bidirectional by default.
+3. A pedestrian way with no explicit pedestrian-direction restriction is bidirectional by default, even when a generic vehicle `oneway` tag such as `oneway=no` is present.
 
 Semantic references:
 
@@ -124,6 +124,7 @@ Planner 21 fails closed if:
 - the policy ID/version/timestamp changes silently
 - the policy scope expands beyond `highway=pedestrian`
 - generic oneway is reinterpreted as pedestrian one-way
+- generic vehicle-only oneway tags incorrectly block the pedestrian bidirectional default
 - default pedestrian bidirectionality changes silently
 - Planner 16 explicit direction loses precedence
 - semantic-reference URLs drift
