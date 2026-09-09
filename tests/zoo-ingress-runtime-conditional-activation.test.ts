@@ -6,6 +6,7 @@ import {
   type ZooHoursRuntimeObservation,
   type IngressClosureRuntimeObservation,
   type ExactEdgeAvailabilityRuntimeObservation,
+  type RuntimeRequirementDecision,
 } from "../src/data/zooIngressRuntimeConditionalActivation.ts";
 import {
   INGRESS_ROUTE_GRAPH_DATA,
@@ -434,7 +435,10 @@ test("activation integrity rejects an enabled edge whose requirement is blocked"
       validInput(),
     ),
   );
-  result.decisions[0].requirements[2] = {
+  (
+    result.decisions[0]
+      .requirements as RuntimeRequirementDecision[]
+  )[2] = {
     requirement:
       "AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY",
     status: "blocked",
