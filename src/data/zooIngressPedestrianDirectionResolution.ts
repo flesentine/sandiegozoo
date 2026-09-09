@@ -220,13 +220,8 @@ export function resolveIngressPedestrianDirection(
     };
   }
 
-  if (planner16.status === "supported") {
-    return supportedFromPlanner16(
-      planner16,
-    );
-  }
-
   if (
+    way.highwayTag !== "pedestrian" ||
     snapshot.sourceTags.highway !==
       "pedestrian"
   ) {
@@ -237,6 +232,12 @@ export function resolveIngressPedestrianDirection(
         "POLICY_SCOPE_NOT_APPLICABLE",
       sourceSnapshotId: snapshot.id,
     };
+  }
+
+  if (planner16.status === "supported") {
+    return supportedFromPlanner16(
+      planner16,
+    );
   }
 
   if (
