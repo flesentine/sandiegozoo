@@ -708,7 +708,7 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
         index === 0
           ? {
               ...audit,
-              durationAuthority: {
+              edgeStatusAuthority: {
                 status: "blocked",
                 reason:
                   "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
