@@ -162,6 +162,33 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
   }
 });
 
+test("Planner 20 status linkage promotes conditional rather than always-open ingress edges", () => {
+  for (
+    const audit of
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS
+  ) {
+    assert.deepEqual(
+      audit.edgeStatusAuthority,
+      {
+        status: "supported",
+        value: "conditional",
+        basis:
+          "Planner 20 operational-status policy",
+        policyEvidenceId:
+          "sdz-operational-policy-2026-09-08",
+        activation: {
+          status:
+            "runtime-check-required",
+          requirements: [
+            "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+            "NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT",
+          ],
+        },
+      },
+    );
+  }
+});
+
 test("Planner 19 duration linkage promotes exact policy-derived free-flow durations", () => {
   const controlled =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
@@ -306,6 +333,7 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "mode",
         "distance",
         "duration",
+        "status",
       ],
       blockedFields: [
         "difficulty",
@@ -313,7 +341,6 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "accessible",
         "stroller",
         "oneWay",
-        "status",
       ],
       routeEdgeMaterialization: {
         status: "blocked",
@@ -461,6 +488,60 @@ test("integrity rejects distance drift from Planner 13 authority", () => {
         badAudits,
       ),
     /changed its supported fields/,
+  );
+});
+
+test("integrity rejects always-open promotion beyond Planner 20 runtime-check policy", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                value: "open",
+              } as unknown as RouteEdgeSemanticAudit["edgeStatusAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
+  );
+});
+
+test("integrity rejects removal of Planner 20 runtime activation requirements", () => {
+  const badAudits: RouteEdgeSemanticAudit[] =
+    INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
+      (audit, index) =>
+        index === 0
+          ? {
+              ...audit,
+              edgeStatusAuthority: {
+                ...audit.edgeStatusAuthority,
+                activation: {
+                  status:
+                    "runtime-check-required",
+                  requirements: [
+                    "VISIT_WITHIN_CURRENT_ZOO_HOURS",
+                  ],
+                },
+              } as unknown as RouteEdgeSemanticAudit["edgeStatusAuthority"],
+            }
+          : { ...audit },
+    );
+
+  assert.throws(
+    () =>
+      assertIngressRouteEdgeSemanticAuditIntegrity(
+        badAudits,
+      ),
+    /changed Planner 20 operational-status linkage/,
   );
 });
 
@@ -708,11 +789,15 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
         index === 0
           ? {
               ...audit,
-              edgeStatusAuthority: {
+              difficultyAuthority: {
                 status: "blocked",
                 reason:
-                  "EXACT_EDGE_DIFFICULTY_NOT_SOURCED",
-              },
+                  "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED",
+                basis:
+                  "Planner 18 difficulty authority",
+                sourceSnapshotId:
+                  audit.difficultyAuthority.sourceSnapshotId,
+              } as unknown as RouteEdgeSemanticAudit["difficultyAuthority"],
             }
           : { ...audit },
     );
