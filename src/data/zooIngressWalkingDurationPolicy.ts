@@ -1,6 +1,9 @@
 import {
   DERIVED_INGRESS_DISTANCES,
 } from "./zooIngressDistanceAuthority.ts";
+import {
+  INDEPENDENT_GEOSPATIAL_TARGETS,
+} from "./zooGeospatialAuthority.ts";
 
 export type WalkingDurationPolicy = {
   id: "sdz-walking-duration-policy-v1";
@@ -299,9 +302,9 @@ export function assessIngressWalkingDurationAuthority(
     matchingDistances.length === 0
   ) {
     const knownTarget =
-      DERIVED_INGRESS_DISTANCES.some(
-        (distance) =>
-          distance.targetId === targetId,
+      INDEPENDENT_GEOSPATIAL_TARGETS.some(
+        (target) =>
+          target.id === targetId,
       );
 
     return {
