@@ -111,6 +111,50 @@ test("runtime enum validation rejects values TypeScript cannot protect in JSON",
   assert.ok(result.includes("EDGE_STATUS_INVALID"));
 });
 
+test("explicit unknown RouteEdge semantics validate without inventing facts", async () => {
+  const value = await fixture();
+  value.routeEdges[0].difficulty =
+    "unknown";
+  value.routeEdges[0].stairs =
+    "unknown";
+  value.routeEdges[0].accessible =
+    "unknown";
+  value.routeEdges[0].stroller =
+    "unknown";
+
+  assert.deepEqual(
+    validateWildRouteData(value),
+    [],
+  );
+  assert.doesNotThrow(() =>
+    assertValidWildRouteData(value),
+  );
+});
+
+test("unknown stairs does not create accessibility or stroller contradictions", async () => {
+  const value = await fixture();
+  value.routeEdges[0].stairs =
+    "unknown";
+  value.routeEdges[0].accessible =
+    true;
+  value.routeEdges[0].stroller =
+    true;
+
+  const result = codes(value);
+  assert.equal(
+    result.includes(
+      "EDGE_ACCESSIBILITY_CONFLICT",
+    ),
+    false,
+  );
+  assert.equal(
+    result.includes(
+      "EDGE_STROLLER_CONFLICT",
+    ),
+    false,
+  );
+});
+
 test("runtime boolean validation rejects truthy strings", async () => {
   const value = await fixture();
   const edge = value.routeEdges[0] as unknown as Record<string, unknown>;
