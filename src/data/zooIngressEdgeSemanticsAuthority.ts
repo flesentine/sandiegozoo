@@ -10,9 +10,12 @@ import {
   routeNodeForSourceObjectId,
 } from "./zooIngressRouteNodeAuthority.ts";
 import {
-  assessPedestrianDirectionAuthority,
   pedestrianDirectionSourceForWay,
 } from "./zooIngressPedestrianDirectionAuthority.ts";
+import {
+  resolveIngressPedestrianDirection,
+  type ResolvedPedestrianDirectionAuthority,
+} from "./zooIngressPedestrianDirectionResolution.ts";
 import {
   assessIngressMobilityAuthority,
 } from "./zooIngressMobilityAuthority.ts";
@@ -43,17 +46,14 @@ export type BlockedFieldAuthority = {
     | "EXACT_EDGE_STAIRS_NOT_EXPLICITLY_SOURCED"
     | "EXACT_EDGE_ACCESSIBILITY_NOT_SOURCED"
     | "CORRIDOR_ACCESSIBILITY_NOT_EXACT_EDGE_AUTHORITY"
-    | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY"
-    | "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT"
-    | "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED"
-    | "PEDESTRIAN_DIRECTION_TAG_UNSUPPORTED";
+    | "FACILITY_STROLLER_PERMISSION_NOT_EDGE_SUITABILITY";
 };
 
 export type PedestrianOneWayFieldAuthority =
-  BlockedFieldAuthority & {
-    basis: "Planner 16 pedestrian-direction authority";
-    sourceSnapshotId: string;
-  };
+  Extract<
+    ResolvedPedestrianDirectionAuthority,
+    { status: "supported" }
+  >;
 
 export type AccessibilityFieldAuthority = {
   status: "blocked";
@@ -114,13 +114,13 @@ export type IngressRouteEdgeReadiness =
         "distance",
         "duration",
         "status",
+        "oneWay",
       ];
       blockedFields: readonly [
         "difficulty",
         "stairs",
         "accessible",
         "stroller",
-        "oneWay",
       ];
       routeEdgeMaterialization: {
         status: "blocked";
@@ -236,7 +236,9 @@ function buildAudit(
   }
 
   const directionAuthority =
-    assessPedestrianDirectionAuthority(sourceWayId);
+    resolveIngressPedestrianDirection(
+      sourceWayId,
+    );
   const mobilityAuthority =
     assessIngressMobilityAuthority(sourceWayId);
   const terrainAuthority =
@@ -251,8 +253,7 @@ function buildAudit(
     "status" in terrainAuthority ||
     "status" in operationalAuthority ||
     terrainAuthority.stairsAuthority.status !== "blocked" ||
-    directionAuthority.status !== "blocked" ||
-    directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
+    directionAuthority.status !== "supported" ||
     !directionAuthority.sourceSnapshotId
   ) {
     throw new Error(
@@ -301,14 +302,8 @@ function buildAudit(
       mobilityAuthority.accessibilityAuthority,
     strollerAuthority:
       mobilityAuthority.strollerAuthority,
-    oneWayAuthority: {
-      status: "blocked",
-      reason: directionAuthority.reason,
-      basis:
-        "Planner 16 pedestrian-direction authority",
-      sourceSnapshotId:
-        directionAuthority.sourceSnapshotId,
-    },
+    oneWayAuthority:
+      directionAuthority,
     edgeStatusAuthority:
       operationalAuthority.statusAuthority,
     plannerMaterialization: "route-edge-audit-only",
@@ -502,24 +497,23 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
     }
 
     const directionAuthority =
-      assessPedestrianDirectionAuthority(
+      resolveIngressPedestrianDirection(
         audit.sourceWayId,
       );
     if (
-      directionAuthority.status !== "blocked" ||
-      directionAuthority.reason === "SOURCE_WAY_UNKNOWN" ||
-      !directionAuthority.sourceSnapshotId ||
-      audit.oneWayAuthority.basis !==
-        "Planner 16 pedestrian-direction authority" ||
-      audit.oneWayAuthority.sourceSnapshotId !==
-        directionAuthority.sourceSnapshotId
+      directionAuthority.status !==
+        "supported" ||
+      JSON.stringify(
+        audit.oneWayAuthority,
+      ) !==
+        JSON.stringify(
+          directionAuthority,
+        )
     ) {
       throw new Error(
-        `Route-edge semantic audit ${audit.id} changed Planner 16 pedestrian-direction linkage.`,
+        `Route-edge semantic audit ${audit.id} changed Planner 21 pedestrian-direction linkage.`,
       );
     }
-    const expectedDirectionReason =
-      directionAuthority.reason;
 
     const expectedBlockedReasons = [
       [
@@ -538,7 +532,6 @@ export function assertIngressRouteEdgeSemanticAuditIntegrity(
         audit.strollerAuthority,
         mobilityAuthority.strollerAuthority.reason,
       ],
-      [audit.oneWayAuthority, expectedDirectionReason],
     ] as const;
 
     if (
@@ -608,13 +601,13 @@ export function assessIngressRouteEdgeReadiness(
       "distance",
       "duration",
       "status",
+      "oneWay",
     ],
     blockedFields: [
       "difficulty",
       "stairs",
       "accessible",
       "stroller",
-      "oneWay",
     ],
     routeEdgeMaterialization: {
       status: "blocked",

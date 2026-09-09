@@ -42,16 +42,22 @@ test("controlled entrance passage supports route-node endpoints, walk mode, and 
       "Planner 13 Haversine sum over frozen OSM way node sequence",
   });
   assert.deepEqual(audit.oneWayAuthority, {
-    status: "blocked",
-    reason: "GENERIC_ONEWAY_AMBIGUOUS_FOR_FOOT",
-    basis:
-      "Planner 16 pedestrian-direction authority",
+    status: "supported",
+    sourceWayId: "755054695",
     sourceSnapshotId:
       "sdz-pedestrian-direction-way-755054695",
+    oneWay: false,
+    direction: "bidirectional",
+    basis:
+      "Planner 21 generic oneway on highway=pedestrian is vehicle-only",
+    policyId:
+      "sdz-pedestrian-direction-resolution-policy-v1",
+    resolutionCase:
+      "generic-oneway-vehicle-only",
   });
 });
 
-test("interior Front Street connection supports route-node endpoints, walk mode, and distance while pedestrian direction remains unsourced", () => {
+test("interior Front Street connection supports route-node endpoints, walk mode, distance, and bidirectional pedestrian travel", () => {
   const audit = INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.find(
     (candidate) => candidate.sourceWayId === "755054694",
   );
@@ -83,13 +89,18 @@ test("interior Front Street connection supports route-node endpoints, walk mode,
       "Planner 13 Haversine sum over frozen OSM way node sequence",
   });
   assert.deepEqual(audit.oneWayAuthority, {
-    status: "blocked",
-    reason:
-      "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
-    basis:
-      "Planner 16 pedestrian-direction authority",
+    status: "supported",
+    sourceWayId: "755054694",
     sourceSnapshotId:
       "sdz-pedestrian-direction-way-755054694",
+    oneWay: false,
+    direction: "bidirectional",
+    basis:
+      "Planner 21 default pedestrian bidirectionality absent explicit restriction",
+    policyId:
+      "sdz-pedestrian-direction-resolution-policy-v1",
+    resolutionCase:
+      "no-explicit-pedestrian-restriction",
   });
 });
 
@@ -156,6 +167,19 @@ test("all current ingress audits keep unsupported RouteEdge semantics blocked", 
     assert.equal(
       audit.edgeStatusAuthority.value,
       "conditional",
+    );
+
+    assert.equal(
+      audit.oneWayAuthority.status,
+      "supported",
+    );
+    assert.equal(
+      audit.oneWayAuthority.oneWay,
+      false,
+    );
+    assert.equal(
+      audit.oneWayAuthority.direction,
+      "bidirectional",
     );
 
     assert.equal(
@@ -340,13 +364,13 @@ test("route-edge readiness exposes route nodes, mode, and distance as supported"
         "distance",
         "duration",
         "status",
+        "oneWay",
       ],
       blockedFields: [
         "difficulty",
         "stairs",
         "accessible",
         "stroller",
-        "oneWay",
       ],
       routeEdgeMaterialization: {
         status: "blocked",
@@ -729,7 +753,7 @@ test("integrity rejects stroller promotion from facility permission", () => {
   );
 });
 
-test("integrity rejects generic OSM oneway being promoted to pedestrian direction authority", () => {
+test("integrity rejects generic OSM oneway being promoted to pedestrian one-way against Planner 21 policy", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit) =>
@@ -737,9 +761,11 @@ test("integrity rejects generic OSM oneway being promoted to pedestrian directio
           ? {
               ...audit,
               oneWayAuthority: {
-                status: "supported",
-                value: true,
-              } as unknown as RouteEdgeSemanticAudit["oneWayAuthority"],
+                ...audit.oneWayAuthority,
+                oneWay: true,
+                direction:
+                  "with-source-way-order",
+              } as RouteEdgeSemanticAudit["oneWayAuthority"],
             }
           : { ...audit },
     );
@@ -749,7 +775,7 @@ test("integrity rejects generic OSM oneway being promoted to pedestrian directio
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 16 pedestrian-direction linkage|changed blocked-field authority/,
+    /changed Planner 21 pedestrian-direction linkage/,
   );
 });
 
@@ -774,7 +800,7 @@ test("integrity rejects pedestrian-direction source linkage drift", () => {
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed Planner 16 pedestrian-direction linkage/,
+    /changed Planner 21 pedestrian-direction linkage/,
   );
 });
 
@@ -819,7 +845,7 @@ test("integrity rejects tampered frozen source tags", () => {
 });
 
 
-test("integrity rejects semantic-reason drift while fields remain blocked", () => {
+test("integrity rejects Planner 21 resolution-case drift", () => {
   const badAudits: RouteEdgeSemanticAudit[] =
     INGRESS_ROUTE_EDGE_SEMANTIC_AUDITS.map(
       (audit, index) =>
@@ -828,8 +854,8 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
               ...audit,
               oneWayAuthority: {
                 ...audit.oneWayAuthority,
-                reason:
-                  "PEDESTRIAN_DIRECTION_NOT_EXPLICITLY_SOURCED",
+                resolutionCase:
+                  "no-explicit-pedestrian-restriction",
               },
             }
           : { ...audit },
@@ -840,7 +866,7 @@ test("integrity rejects semantic-reason drift while fields remain blocked", () =
       assertIngressRouteEdgeSemanticAuditIntegrity(
         badAudits,
       ),
-    /changed blocked-field authority/,
+    /changed Planner 21 pedestrian-direction linkage/,
   );
 });
 
