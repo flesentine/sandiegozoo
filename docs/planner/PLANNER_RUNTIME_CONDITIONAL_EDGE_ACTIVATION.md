@@ -1,159 +1,136 @@
 # Planner 24 — Runtime Conditional-Edge Activation
 
-**Status:** first production ingress RouteEdges can now be activated safely at runtime
+**Status:** first production ingress RouteEdges can be evaluated and routed safely from current operational evidence
 
-Planner 24 connects the Planner 20 operational-status contract to the Planner 23 production RouteEdges.
+Planner 24 connects the Planner 20 operational-status requirements to the Planner 23 production RouteEdges.
 
-## Why this phase exists
+## Security boundary
 
-Planner 23 created two real ingress RouteEdges, but both remain:
+Planner 24 does **not** mint or accept a transferable runtime-trust token.
 
-`status: "conditional"`
+The earlier draft used a caller-supplied `conditionalEdgeRuntimeTrust` object. Codex correctly identified two P1 problems with that design:
 
-That is intentional. The planner must not infer that an exact entrance path is usable merely because:
+1. a caller could forge the public trust literal and bypass the underlying evidence checks
+2. genuine trust could be replayed later on the same visit date after its source evidence expired
 
-- the Zoo is generally open
-- the path exists in OpenStreetMap
-- no closure notice was noticed earlier
+That bridge has been removed completely.
 
-Planner 20 required three runtime facts for each exact edge:
+The generic Planner 8 candidate-integration contract is restored unchanged. Provisional RouteEdges remain gated there even when a caller directly supplies their IDs.
 
-1. `VISIT_WITHIN_CURRENT_ZOO_HOURS`
-2. `NO_CURRENT_INGRESS_CLOSURE_ADVISEMENT`
-3. `AFFIRMATIVE_CURRENT_EXACT_EDGE_AVAILABILITY`
+## Live evidence model
 
-Planner 24 evaluates those facts and produces the only RouteEdge IDs that may be placed in `enabledConditionalEdgeIds`.
-
-## Runtime evidence model
-
-Planner 24 consumes a point-in-time operational snapshot containing:
+Planner 24 accepts the underlying operational evidence itself:
 
 - visit date
-- evaluation timestamp
 - Zoo-hours evidence
 - closure-advisement evidence
 - exact-edge availability evidence for each ingress OSM way
 
-Every evidence item carries:
+Each evidence item carries:
 
-- a stable evidence ID
-- a status
-- the visit date it applies to
+- stable evidence ID
+- explicit status
+- visit date it applies to
 - `observedAt`
 - `expiresAt`
 
-Planner 24 does **not** invent a fixed freshness interval such as 30 minutes.
+Planner 24 does not accept an `evaluatedAt` timestamp from the caller.
 
-The evidence producer chooses its validity window. Planner 24 only accepts evidence when the current evaluation timestamp falls inside that explicit window.
+The resolver evaluates evidence against `Date.now()` at the moment the resolver runs.
 
-## Exact-edge activation
+This prevents a caller from replaying stale evidence by claiming an older evaluation time.
 
-A RouteEdge is enabled only when all conditions are true:
+## Activation requirements
+
+For each exact ingress edge, all Planner 20 requirements must be current at the same evaluation instant.
 
 ### Zoo hours
 
-- status is `inside`
-- evidence applies to the same visit date
-- evaluation time is between `observedAt` and `expiresAt`
+Required:
+
+- `status = inside`
+- `validForDate` equals the visit date
+- current time is not before `observedAt`
+- current time is not after `expiresAt`
 
 ### Closure advisement
 
-- status is `clear`
-- evidence applies to the same visit date
-- evaluation time is inside its validity window
+Required:
+
+- `status = clear`
+- `validForDate` equals the visit date
+- current time is inside the evidence window
 
 ### Exact edge availability
 
-- evidence exists for the RouteEdge's exact OSM source way
-- status is `available`
-- evidence applies to the same visit date
-- evaluation time is inside its validity window
+Required:
 
-If any requirement fails, that exact edge remains disabled.
+- evidence exists for that exact OSM source way
+- `status = available`
+- `validForDate` equals the visit date
+- current time is inside the evidence window
 
-## Independent edge decisions
+If any requirement is missing, unknown, unavailable, out of date, expired, or not yet effective, that exact RouteEdge is not enabled.
 
-The two ingress RouteEdges are evaluated independently.
+## Independent edge activation
 
-For example:
+The controlled passage and Front Street connector are evaluated separately.
 
-- way 755054695 may be enabled
-- way 755054694 may remain disabled because its exact-edge evidence is missing or stale
+One edge may be enabled while the other remains disabled.
 
-Planner 24 never turns a global Zoo-hours result into blanket permission for all conditional edges.
+A facility-wide hours result never becomes blanket permission for all conditional edges.
 
-## Runtime activation result
+## Effective expiry
 
-Planner 24 returns:
+Every enabled decision records `effectiveExpiresAt`.
 
-- `enabledConditionalEdgeIds`
-- a dated `conditionalEdgeRuntimeTrust` envelope
-- one explicit decision per ingress edge
+That timestamp is the earliest expiry among:
 
-Each decision records:
+- Zoo-hours evidence
+- closure-advisement evidence
+- exact-edge availability evidence
 
-- source OSM way
-- RouteEdge ID
-- enabled/disabled status
-- reason
-- evidence IDs used
+This records the actual limiting evidence window rather than inventing a fixed freshness interval.
 
-Current decision reasons include:
+The value is diagnostic only; it is not a reusable credential.
 
-- `ENABLED`
-- `HOURS_NOT_CONFIRMED`
-- `HOURS_EVIDENCE_NOT_CURRENT`
-- `CLOSURE_CLEARANCE_NOT_CONFIRMED`
-- `CLOSURE_EVIDENCE_NOT_CURRENT`
-- `EDGE_AVAILABILITY_MISSING`
-- `EDGE_AVAILABILITY_NOT_CONFIRMED`
-- `EDGE_AVAILABILITY_NOT_CURRENT`
+## High-level routing API
 
-## Candidate-integration trust bridge
+Planner 24 exports:
 
-Planner 23 RouteEdges intentionally use:
+`routeIngressWithRuntimeEvidence(snapshot, request)`
 
-`provenance.confidence = "provisional"`
+This function:
 
-because terrain/mobility semantics remain explicitly unknown and operational availability is conditional.
+1. validates the underlying evidence
+2. reevaluates it against the actual current clock
+3. derives `enabledConditionalEdgeIds`
+4. builds the qualified Planner 23 ingress graph
+5. routes immediately using only the derived enabled IDs
 
-Before Planner 24, the generic candidate-integration gate closed every provisional edge before routing. That meant the first production RouteEdges could never be used even after their operational requirements were satisfied.
+The caller cannot provide `enabledConditionalEdgeIds` through this API.
 
-Planner 24 adds a narrow runtime trust channel:
+Even if an untyped caller attempts to smuggle that property into the request object, Planner 24 overwrites it with the resolver-derived IDs after spreading the request.
 
-`conditionalEdgeRuntimeTrust`
+## No transferable capability
 
-This does **not** promote provenance to verified.
+Planner 24 intentionally returns no `conditionalEdgeRuntimeTrust` object.
 
-It only allows an edge through the integration trust gate when:
+There is therefore no public discriminator, nonce, capability object, or same-day token that can be copied and replayed later.
 
-- the edge is still `conditional`
-- base edge provenance is at least provisional
-- endpoint RouteNodes remain verified/effective
-- the runtime trust envelope is for the same visit date
-- the edge ID is explicitly listed by the runtime activation resolver
+A future route attempt must run the evidence evaluation again.
 
-The router must still receive the same edge ID in:
+If the underlying evidence has expired by then, the edge remains disabled.
 
-`enabledConditionalEdgeIds`
+## Candidate integration remains fail-closed
 
-Therefore:
+Planner 8's verified-only routing gate is unchanged.
 
-- runtime trust alone cannot open an edge
-- enabledConditionalEdgeIds alone cannot bypass provisional trust
-- both are required for Planner 23 provisional conditional edges
+Planner 23 ingress edges remain `provisional`, so a caller that invokes `buildCandidateIntegration(...)` directly and supplies the ingress IDs in `enabledConditionalEdgeIds` still receives `CONDITIONAL_EDGE_UNTRUSTED`.
 
-## Base-provenance boundary
+Planner 24 does not weaken that boundary.
 
-Runtime operational evidence is not allowed to repair unknown geometric/source provenance.
-
-If a RouteEdge's base provenance confidence is:
-
-`unknown`
-
-Planner 24 runtime trust cannot pass it through candidate integration.
-
-This keeps operational availability separate from structural/source authority.
+A future production planner-integration phase may generalize the live evidence boundary, but it must validate the underlying evidence at the integration/routing call rather than trusting a transferable assertion.
 
 ## Failure-closed behavior
 
@@ -161,61 +138,76 @@ Planner 24 disables or rejects:
 
 - outside Zoo-hours status
 - unknown Zoo-hours status
-- expired or wrong-date Zoo-hours evidence
-- blocked or unknown closure status
-- expired or wrong-date closure evidence
+- expired Zoo-hours evidence
+- wrong-date Zoo-hours evidence
+- not-yet-effective Zoo-hours evidence
+- blocked closure status
+- unknown closure status
+- expired closure evidence
+- wrong-date closure evidence
 - missing exact-edge evidence
-- unavailable or unknown exact-edge status
-- expired or wrong-date exact-edge evidence
-- duplicate exact-edge evidence for the same OSM way
+- unavailable exact-edge evidence
+- unknown exact-edge status
+- expired exact-edge evidence
+- wrong-date exact-edge evidence
+- duplicate exact-edge evidence for one OSM way
 - exact-edge evidence for an unknown ingress way
-- runtime trust replayed onto another visit date
-- runtime trust targeting an unknown edge
-- runtime trust targeting a non-conditional edge
-- runtime trust trying to override `confidence="unknown"`
+- malformed evidence timestamps
+- inverted evidence windows
 
-## First fully activated real ingress route
+## Replay resistance
 
-With fresh evidence for both exact ingress ways, Planner 24 enables:
+A regression supplies fully expired evidence plus a forged historical `evaluatedAt` field.
 
-- `sdz-ingress-way-controlled-passage-route-edge`
-- `sdz-ingress-way-front-street-connection-route-edge`
+The resolver ignores that extra caller field because evaluation time is owned internally by Planner 24.
 
-Candidate integration then accepts those provisional conditional edges without upgrading their provenance.
+The current clock wins and the edges remain disabled.
 
-The router can find:
+Another regression attempts to smuggle enabled conditional edge IDs into the high-level route request while exact-edge evidence says unavailable.
+
+The high-level function overwrites those IDs with the empty resolver-derived set and routing returns `NO_ROUTE`.
+
+## First live-routable ingress path
+
+When all three evidence requirements are currently satisfied for both exact edges, Planner 24 routes:
 
 `Main Entrance → interior → Front Street`
 
-at:
+with:
 
-- **42.212 m**
-- **0.586 min**
+- distance: **42.212 m**
+- duration: **0.586 min**
 
-If either exact edge loses current availability evidence, the full entrance-to-Front-Street route is no longer available.
+If either exact edge loses current evidence, the complete route is no longer available.
+
+## Mobility safety
+
+Planner 22 mobility uncertainty remains unchanged:
+
+- `accessible = unknown`
+- `stroller = unknown`
+
+Therefore accessibility- or stroller-required routing still fails closed.
+
+Operational evidence cannot upgrade mobility authority.
 
 ## What Planner 24 does not do
 
-Planner 24 does **not**:
+Planner 24 does not:
 
-- scrape Zoo hours itself
-- scrape closure advisements itself
-- claim absence of a notice proves an edge is clear
+- scrape Zoo hours
+- scrape closure advisements
 - manufacture exact-edge availability
-- persist runtime trust as long-lived authority
-- promote provisional edge provenance to verified
+- authenticate an upstream source adapter cryptographically
+- persist runtime authorization
+- promote provisional provenance to verified
+- weaken Planner 8's provenance gate
 - enable accessibility/stroller routing on unknown capability
 
-Operational data acquisition remains a separate adapter/source responsibility.
+Operational data acquisition remains a separate source-adapter responsibility.
 
 ## Next boundary
 
-After Planner 24, the entrance graph is structurally routable and operationally activatable.
+After Planner 24, the first entrance graph has a safe **live routing boundary** that reevaluates current evidence immediately before routing.
 
-The next high-value work is **graph expansion beyond Front Street**:
-
-1. establish source-backed RouteNodes/edges toward the first destination corridor
-2. add Panda Ridge / Wegeforth Bowl / Tiger Trail / nearby major junctions
-3. keep the same authority → semantics → materialization → runtime-activation pattern for new conditional edges
-
-Skyfari, full destination bindings, schedules, live UI planner wiring, and final freeze remain later phases.
+The next major effort is graph expansion beyond Front Street, followed later by a generalized production planner/UI integration that consumes the same underlying-evidence pattern without transferable trust assertions.
