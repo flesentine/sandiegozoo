@@ -9,6 +9,9 @@ import {
   type RouteResult,
 } from "../planner/routing.ts";
 
+export const SAN_DIEGO_ZOO_TIME_ZONE =
+  "America/Los_Angeles" as const;
+
 export type RuntimeEvidenceStatus =
   | "inside"
   | "outside"
@@ -55,6 +58,7 @@ export type IngressRuntimeOperationalSnapshot = {
 
 export type IngressRuntimeActivationReason =
   | "ENABLED"
+  | "VISIT_DATE_NOT_CURRENT_ZOO_DATE"
   | "HOURS_NOT_CONFIRMED"
   | "HOURS_EVIDENCE_NOT_CURRENT"
   | "CLOSURE_CLEARANCE_NOT_CONFIRMED"
@@ -119,6 +123,45 @@ function stableId(value: string) {
     value.trim().length > 0 &&
     value === value.trim()
   );
+}
+
+export function zooOperationalDateAt(
+  nowMs: number,
+) {
+  if (!Number.isFinite(nowMs)) {
+    throw new Error(
+      "Planner 24 Zoo operational date requires a finite timestamp.",
+    );
+  }
+
+  const parts = new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone:
+        SAN_DIEGO_ZOO_TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    },
+  ).formatToParts(new Date(nowMs));
+
+  const values = new Map(
+    parts.map((part) => [
+      part.type,
+      part.value,
+    ]),
+  );
+  const year = values.get("year");
+  const month = values.get("month");
+  const day = values.get("day");
+
+  if (!year || !month || !day) {
+    throw new Error(
+      "Planner 24 could not resolve the San Diego Zoo local calendar date.",
+    );
+  }
+
+  return `${year}-${month}-${day}`;
 }
 
 function assertTimedEvidence(
@@ -291,12 +334,18 @@ export function resolveIngressRuntimeActivation(
 ): IngressRuntimeActivationResult {
   assertSnapshot(snapshot);
 
-  // Planner 24 deliberately owns the live clock.
-  // Callers cannot replay an older `evaluatedAt`
-  // because no evaluation timestamp is accepted as input.
+  // Planner 24 owns both the live instant and the
+  // San Diego Zoo operational calendar date.
+  // Callers cannot replay an older evaluatedAt or
+  // relabel current evidence as a different day.
   const nowMs = Date.now();
   const evaluatedAt =
     new Date(nowMs).toISOString();
+  const currentZooDate =
+    zooOperationalDateAt(nowMs);
+  const visitDateCurrent =
+    snapshot.visitDate ===
+    currentZooDate;
 
   const hoursCurrent =
     evidenceCurrent(
@@ -334,7 +383,10 @@ export function resolveIngressRuntimeActivation(
         let reason:
           IngressRuntimeActivationReason;
 
-        if (
+        if (!visitDateCurrent) {
+          reason =
+            "VISIT_DATE_NOT_CURRENT_ZOO_DATE";
+        } else if (
           snapshot.zooHours.status !==
             "inside"
         ) {
@@ -435,8 +487,8 @@ export function routeIngressWithRuntimeEvidence(
   request: IngressRuntimeRouteRequest,
 ): IngressRuntimeRouteResult {
   // Evidence is re-evaluated here, immediately
-  // before routing, against Date.now(). No
-  // transferable trust token exists.
+  // before routing, against Date.now() and the
+  // America/Los_Angeles operational date.
   const activation =
     resolveIngressRuntimeActivation(
       snapshot,
