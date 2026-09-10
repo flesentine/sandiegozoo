@@ -1,9 +1,13 @@
-import type {
-  ConditionalEdgeRuntimeTrust,
-} from "../planner/integration.ts";
 import {
   INGRESS_ROUTE_EDGE_BINDINGS,
+  INGRESS_ROUTE_GRAPH_DATA,
 } from "./zooIngressRouteEdgeMaterialization.ts";
+import {
+  buildRoutingGraph,
+  findShortestRoute,
+  type RouteRequest,
+  type RouteResult,
+} from "../planner/routing.ts";
 
 export type RuntimeEvidenceStatus =
   | "inside"
@@ -39,7 +43,6 @@ export type ExactEdgeAvailabilityEvidence =
 
 export type IngressRuntimeOperationalSnapshot = {
   visitDate: string;
-  evaluatedAt: string;
   zooHours: TimedRuntimeEvidence<
     RuntimeEvidenceStatus
   >;
@@ -66,6 +69,7 @@ export type IngressRuntimeActivationDecision = {
   status: "enabled" | "disabled";
   reason: IngressRuntimeActivationReason;
   evidenceIds: readonly string[];
+  effectiveExpiresAt?: string;
 };
 
 export type IngressRuntimeActivationResult = {
@@ -73,10 +77,20 @@ export type IngressRuntimeActivationResult = {
   evaluatedAt: string;
   enabledConditionalEdgeIds:
     readonly string[];
-  conditionalEdgeRuntimeTrust:
-    ConditionalEdgeRuntimeTrust;
   decisions:
     readonly IngressRuntimeActivationDecision[];
+};
+
+export type IngressRuntimeRouteRequest =
+  Omit<
+    RouteRequest,
+    "enabledConditionalEdgeIds"
+  >;
+
+export type IngressRuntimeRouteResult = {
+  activation:
+    IngressRuntimeActivationResult;
+  route: RouteResult;
 };
 
 function validDate(value: string) {
@@ -145,11 +159,6 @@ function assertSnapshot(
   if (!validDate(snapshot.visitDate)) {
     throw new Error(
       "Planner 24 visitDate must be a real YYYY-MM-DD date.",
-    );
-  }
-  if (!validTimestamp(snapshot.evaluatedAt)) {
-    throw new Error(
-      "Planner 24 evaluatedAt must be an ISO timestamp with timezone.",
     );
   }
 
@@ -234,21 +243,31 @@ function assertSnapshot(
 function evidenceCurrent(
   evidence: TimedRuntimeEvidence<string>,
   visitDate: string,
-  evaluatedAt: string,
+  nowMs: number,
 ) {
-  const evaluated =
-    Date.parse(evaluatedAt);
   return (
     evidence.validForDate === visitDate &&
     Date.parse(evidence.observedAt) <=
-      evaluated &&
-    evaluated <=
+      nowMs &&
+    nowMs <=
       Date.parse(evidence.expiresAt)
   );
 }
 
 function compareText(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function earliestExpiry(
+  evidence:
+    readonly TimedRuntimeEvidence<string>[],
+) {
+  return evidence
+    .map((item) => item.expiresAt)
+    .sort(
+      (a, b) =>
+        Date.parse(a) - Date.parse(b),
+    )[0];
 }
 
 function deepFreeze<T>(value: T): T {
@@ -272,17 +291,24 @@ export function resolveIngressRuntimeActivation(
 ): IngressRuntimeActivationResult {
   assertSnapshot(snapshot);
 
+  // Planner 24 deliberately owns the live clock.
+  // Callers cannot replay an older `evaluatedAt`
+  // because no evaluation timestamp is accepted as input.
+  const nowMs = Date.now();
+  const evaluatedAt =
+    new Date(nowMs).toISOString();
+
   const hoursCurrent =
     evidenceCurrent(
       snapshot.zooHours,
       snapshot.visitDate,
-      snapshot.evaluatedAt,
+      nowMs,
     );
   const closureCurrent =
     evidenceCurrent(
       snapshot.closureAdvisement,
       snapshot.visitDate,
-      snapshot.evaluatedAt,
+      nowMs,
     );
 
   const availabilityByWay =
@@ -339,7 +365,7 @@ export function resolveIngressRuntimeActivation(
           !evidenceCurrent(
             edgeEvidence,
             snapshot.visitDate,
-            snapshot.evaluatedAt,
+            nowMs,
           )
         ) {
           reason =
@@ -348,13 +374,16 @@ export function resolveIngressRuntimeActivation(
           reason = "ENABLED";
         }
 
+        const enabled =
+          reason === "ENABLED";
+
         return {
           sourceWayId:
             binding.sourceWayId,
           routeEdgeId:
             binding.routeEdgeId,
           status:
-            reason === "ENABLED"
+            enabled
               ? "enabled"
               : "disabled",
           reason,
@@ -366,6 +395,16 @@ export function resolveIngressRuntimeActivation(
               ? [edgeEvidence.evidenceId]
               : []),
           ],
+          ...(enabled && edgeEvidence
+            ? {
+                effectiveExpiresAt:
+                  earliestExpiry([
+                    snapshot.zooHours,
+                    snapshot.closureAdvisement,
+                    edgeEvidence,
+                  ]),
+              }
+            : {}),
         };
       },
     );
@@ -385,19 +424,38 @@ export function resolveIngressRuntimeActivation(
 
   return deepFreeze({
     visitDate: snapshot.visitDate,
-    evaluatedAt:
-      snapshot.evaluatedAt,
+    evaluatedAt,
     enabledConditionalEdgeIds,
-    conditionalEdgeRuntimeTrust: {
-      authority:
-        "qualified-runtime-conditional-edge-activation",
-      visitDate: snapshot.visitDate,
-      evaluatedAt:
-        snapshot.evaluatedAt,
-      edgeIds: [
-        ...enabledConditionalEdgeIds,
-      ],
-    },
     decisions,
+  });
+}
+
+export function routeIngressWithRuntimeEvidence(
+  snapshot: IngressRuntimeOperationalSnapshot,
+  request: IngressRuntimeRouteRequest,
+): IngressRuntimeRouteResult {
+  // Evidence is re-evaluated here, immediately
+  // before routing, against Date.now(). No
+  // transferable trust token exists.
+  const activation =
+    resolveIngressRuntimeActivation(
+      snapshot,
+    );
+  const graph = buildRoutingGraph(
+    INGRESS_ROUTE_GRAPH_DATA,
+  );
+  const route = findShortestRoute(
+    graph,
+    {
+      ...request,
+      enabledConditionalEdgeIds:
+        activation
+          .enabledConditionalEdgeIds,
+    },
+  );
+
+  return deepFreeze({
+    activation,
+    route,
   });
 }
