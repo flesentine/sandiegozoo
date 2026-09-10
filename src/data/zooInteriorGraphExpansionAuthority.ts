@@ -41,6 +41,27 @@ export type InteriorGraphExpansionAssessment = {
   };
 };
 
+const INTERIOR_GRAPH_EXPANSION_SEED_FIELDS = [
+  "id",
+  "provider",
+  "sourceWayId",
+  "sourceUrl",
+  "connectionNodeId",
+  "connectionNodeSourceUrl",
+  "ingressTopologyId",
+  "officialCorridorId",
+  "officialMapArtifactId",
+  "officialPublishedWalkMinutes",
+  "officialCorridorTerrain",
+  "officialCorridorAccessLabels",
+  "sourceState",
+  "plannerMaterialization",
+] as const;
+
+const INTERIOR_GRAPH_EXPANSION_SEED_FIELD_SET = new Set<string>(
+  INTERIOR_GRAPH_EXPANSION_SEED_FIELDS,
+);
+
 const FORBIDDEN_ROUTE_EDGE_FIELDS = [
   "fromNodeId",
   "toNodeId",
@@ -91,10 +112,17 @@ function stableId(value: unknown): value is string {
 }
 
 function validOsmObjectUrl(
-  value: string,
+  value: unknown,
   objectType: "node" | "way",
-  objectId: string,
+  objectId: unknown,
 ) {
+  if (
+    typeof value !== "string" ||
+    typeof objectId !== "string"
+  ) {
+    return false;
+  }
+
   try {
     const url = new URL(value);
     return (
@@ -107,8 +135,40 @@ function validOsmObjectUrl(
   }
 }
 
+function exactOsmSourceUrl(
+  sourceUrls: readonly string[],
+  objectType: "node" | "way",
+  objectId: string,
+) {
+  const matches = sourceUrls.filter((sourceUrl) =>
+    validOsmObjectUrl(sourceUrl, objectType, objectId),
+  );
+
+  if (matches.length !== 1) {
+    throw new Error(
+      `Planner 25 requires exactly one ${objectType} source URL for OSM object ${objectId}.`,
+    );
+  }
+
+  return matches[0];
+}
+
+function assertPlainSeedObject(
+  value: unknown,
+): asserts value is Record<string, unknown> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    throw new Error(
+      "Planner 25 interior graph expansion seed must be a plain object.",
+    );
+  }
+}
+
 function assertNoRouteEdgeMaterialization(
-  value: object,
+  value: Record<string, unknown>,
   label: string,
 ) {
   for (const field of FORBIDDEN_ROUTE_EDGE_FIELDS) {
@@ -117,6 +177,26 @@ function assertNoRouteEdgeMaterialization(
         `${label} cannot materialize Planner RouteEdge field ${field}.`,
       );
     }
+  }
+}
+
+function assertNoUnknownSeedFields(
+  value: Record<string, unknown>,
+  label: string,
+) {
+  const unknownFields = Object.keys(value)
+    .filter(
+      (field) =>
+        !INTERIOR_GRAPH_EXPANSION_SEED_FIELD_SET.has(field),
+    )
+    .sort();
+
+  if (unknownFields.length > 0) {
+    throw new Error(
+      `${label} cannot contain unknown field ${unknownFields.join(
+        ", ",
+      )}.`,
+    );
   }
 }
 
@@ -149,36 +229,18 @@ if (FRONT_STREET_CORRIDORS.length !== 1) {
 
 const FRONT_STREET_CORRIDOR = FRONT_STREET_CORRIDORS[0];
 
-const frontStreetWayIndex = [
-  FRONT_STREET_TOPOLOGY.entryPlazaWayId,
-  FRONT_STREET_TOPOLOGY.controlledPassageWayId,
-  FRONT_STREET_TOPOLOGY.interiorContinuationWayId,
+const FRONT_STREET_SOURCE_URL = exactOsmSourceUrl(
+  FRONT_STREET_TOPOLOGY.waySourceUrls,
+  "way",
   FRONT_STREET_TOPOLOGY.frontStreetWayId,
-].indexOf(FRONT_STREET_TOPOLOGY.frontStreetWayId);
-
-const frontStreetConnectionNodeIndex = [
-  FRONT_STREET_TOPOLOGY.interiorConnectionNodeId,
-  FRONT_STREET_TOPOLOGY.frontStreetConnectionNodeId,
-].indexOf(FRONT_STREET_TOPOLOGY.frontStreetConnectionNodeId);
-
-const FRONT_STREET_SOURCE_URL =
-  FRONT_STREET_TOPOLOGY.waySourceUrls[
-    frontStreetWayIndex
-  ];
+);
 
 const FRONT_STREET_CONNECTION_NODE_SOURCE_URL =
-  FRONT_STREET_TOPOLOGY.connectionNodeSourceUrls[
-    frontStreetConnectionNodeIndex
-  ];
-
-if (
-  !FRONT_STREET_SOURCE_URL ||
-  !FRONT_STREET_CONNECTION_NODE_SOURCE_URL
-) {
-  throw new Error(
-    "Planner 25 could not recover source URLs for the Front Street expansion boundary.",
+  exactOsmSourceUrl(
+    FRONT_STREET_TOPOLOGY.connectionNodeSourceUrls,
+    "node",
+    FRONT_STREET_TOPOLOGY.frontStreetConnectionNodeId,
   );
-}
 
 const RAW_SEEDS: InteriorGraphExpansionSeed[] = [
   {
@@ -215,11 +277,16 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
     );
   }
 
-  const seed = seeds[0];
-  assertNoRouteEdgeMaterialization(
-    seed,
-    `Interior graph expansion seed ${seed.id}`,
-  );
+  const candidate: unknown = seeds[0];
+  assertPlainSeedObject(candidate);
+
+  const label = `Interior graph expansion seed ${String(
+    candidate.id,
+  )}`;
+  assertNoRouteEdgeMaterialization(candidate, label);
+  assertNoUnknownSeedFields(candidate, label);
+
+  const seed = candidate as InteriorGraphExpansionSeed;
 
   if (
     !stableId(seed.id) ||
@@ -229,6 +296,9 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
     seed.connectionNodeId !==
       FRONT_STREET_TOPOLOGY.frontStreetConnectionNodeId ||
     seed.ingressTopologyId !== FRONT_STREET_TOPOLOGY.id ||
+    seed.sourceUrl !== FRONT_STREET_SOURCE_URL ||
+    seed.connectionNodeSourceUrl !==
+      FRONT_STREET_CONNECTION_NODE_SOURCE_URL ||
     !validOsmObjectUrl(
       seed.sourceUrl,
       "way",
