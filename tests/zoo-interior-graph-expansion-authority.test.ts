@@ -238,6 +238,72 @@ test("unknown runtime fields cannot smuggle exact segment authority under aliase
   );
 });
 
+test("prototype and non-enumerable field tricks cannot bypass the runtime schema", () => {
+  const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
+
+  const inherited = Object.create({
+    ...seed,
+    terrain: seed.officialCorridorTerrain,
+  }) as InteriorGraphExpansionSeed;
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        inherited,
+      ]),
+    /must be a plain object with Object\.prototype/,
+  );
+
+  const hiddenAlias = {
+    ...seed,
+  } as InteriorGraphExpansionSeed & {
+    exactSegmentDurationMinutes?: number;
+  };
+  Object.defineProperty(
+    hiddenAlias,
+    "exactSegmentDurationMinutes",
+    {
+      value: seed.officialPublishedWalkMinutes,
+      enumerable: false,
+    },
+  );
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        hiddenAlias,
+      ]),
+    /cannot contain unknown field exactSegmentDurationMinutes/,
+  );
+
+  const hiddenKnownField = { ...seed };
+  Object.defineProperty(hiddenKnownField, "id", {
+    value: seed.id,
+    enumerable: false,
+  });
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        hiddenKnownField,
+      ]),
+    /requires enumerable own data field id/,
+  );
+});
+
+test("the canonical Planner 25 expansion seed ID is part of the integrity contract", () => {
+  const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
+  const renamed = {
+    ...seed,
+    id: "renamed-seed",
+  } as unknown as InteriorGraphExpansionSeed;
+
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        renamed,
+      ]),
+    /drifted from qualified ingress topology/,
+  );
+});
+
 test("malformed runtime seed entries fail closed before field inspection", () => {
   assert.throws(
     () =>
@@ -258,12 +324,12 @@ test("malformed runtime seed entries fail closed before field inspection", () =>
 
 test("authority integrity rejects topology drift", () => {
   const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
-  const drifted: InteriorGraphExpansionSeed = {
+  const drifted = {
     ...seed,
     sourceWayId: "999999999",
     sourceUrl:
       "https://www.openstreetmap.org/way/999999999",
-  };
+  } as InteriorGraphExpansionSeed;
 
   assert.throws(
     () =>
