@@ -59,14 +59,6 @@ export type CandidateIntegrationBindings = {
   reservation?: ReservationCandidateBinding;
 };
 
-export type ConditionalEdgeRuntimeTrust = {
-  authority:
-    "qualified-runtime-conditional-edge-activation";
-  visitDate: string;
-  evaluatedAt: string;
-  edgeIds: readonly string[];
-};
-
 export type CandidateIntegrationInput = {
   data: unknown;
   visit: VisitPreferences;
@@ -76,8 +68,6 @@ export type CandidateIntegrationInput = {
   endNodeId?: string;
   bindings: CandidateIntegrationBindings;
   enabledConditionalEdgeIds?: readonly string[];
-  conditionalEdgeRuntimeTrust?:
-    ConditionalEdgeRuntimeTrust;
 };
 
 export type CandidateIntegrationIssueSeverity = "error" | "warning";
@@ -111,10 +101,6 @@ export type CandidateIntegrationIssueCode =
   | "CONDITIONAL_EDGE_UNKNOWN"
   | "CONDITIONAL_EDGE_NOT_CONDITIONAL"
   | "CONDITIONAL_EDGE_UNTRUSTED"
-  | "CONDITIONAL_EDGE_RUNTIME_TRUST_DATE_MISMATCH"
-  | "CONDITIONAL_EDGE_RUNTIME_TRUST_UNKNOWN"
-  | "CONDITIONAL_EDGE_RUNTIME_TRUST_NOT_CONDITIONAL"
-  | "CONDITIONAL_EDGE_RUNTIME_TRUST_PROVENANCE_UNKNOWN"
   | "ROUTING_DATA_GATED";
 
 export type CandidateIntegrationIssue = {
@@ -127,7 +113,6 @@ export type CandidateIntegrationIssue = {
 
 export type CandidateIntegrationRoutingGate = {
   disabledUnverifiedEdgeIds: string[];
-  runtimeTrustedConditionalEdgeIds: string[];
 };
 
 export type CandidateIntegrationReady = {
@@ -368,79 +353,6 @@ function assertConditionalEdgeIds(value: unknown) {
   }
 }
 
-function validRuntimeTimestamp(value: unknown) {
-  return (
-    typeof value === "string" &&
-    Number.isFinite(Date.parse(value)) &&
-    /(?:Z|[+-]\d{2}:\d{2})$/.test(value)
-  );
-}
-
-function validRuntimeVisitDate(value: unknown) {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}$/.test(value)
-  ) {
-    return false;
-  }
-  const parsed = new Date(
-    `${value}T00:00:00Z`,
-  );
-  return (
-    Number.isFinite(parsed.getTime()) &&
-    parsed.toISOString().slice(0, 10) ===
-      value
-  );
-}
-
-function assertConditionalEdgeRuntimeTrust(
-  value: unknown,
-) {
-  if (value === undefined) return;
-  if (!isRecord(value)) {
-    throw new Error(
-      "conditionalEdgeRuntimeTrust must be an object when provided.",
-    );
-  }
-  if (
-    value.authority !==
-      "qualified-runtime-conditional-edge-activation"
-  ) {
-    throw new Error(
-      "conditionalEdgeRuntimeTrust authority is invalid.",
-    );
-  }
-  if (!validRuntimeVisitDate(value.visitDate)) {
-    throw new Error(
-      "conditionalEdgeRuntimeTrust visitDate must be a real YYYY-MM-DD date.",
-    );
-  }
-  if (!validRuntimeTimestamp(value.evaluatedAt)) {
-    throw new Error(
-      "conditionalEdgeRuntimeTrust evaluatedAt must be an ISO timestamp with timezone.",
-    );
-  }
-  if (!Array.isArray(value.edgeIds)) {
-    throw new Error(
-      "conditionalEdgeRuntimeTrust edgeIds must be an array.",
-    );
-  }
-  const seen = new Set<string>();
-  for (const edgeId of value.edgeIds) {
-    if (!stableId(edgeId)) {
-      throw new Error(
-        "conditionalEdgeRuntimeTrust edgeIds must contain stable non-empty strings.",
-      );
-    }
-    if (seen.has(edgeId)) {
-      throw new Error(
-        "conditionalEdgeRuntimeTrust edgeIds cannot contain duplicates.",
-      );
-    }
-    seen.add(edgeId);
-  }
-}
-
 function assertIntegrationInput(
   input: CandidateIntegrationInput,
 ) {
@@ -480,9 +392,6 @@ function assertIntegrationInput(
 
   assertBindings(input.bindings);
   assertConditionalEdgeIds(input.enabledConditionalEdgeIds);
-  assertConditionalEdgeRuntimeTrust(
-    input.conditionalEdgeRuntimeTrust,
-  );
 }
 
 function provenanceEffectiveOnDate(
@@ -585,47 +494,20 @@ function pushIssue(
 function trustedRoutingPackage(
   data: WildRouteDataPackage,
   date: string,
-  runtimeTrustedConditionalEdgeIds:
-    ReadonlySet<string> = new Set(),
 ) {
   const nodeById = new Map(
     data.routeNodes.map((node) => [node.id, node]),
   );
   const disabledUnverifiedEdgeIds: string[] = [];
-  const runtimeTrustedConditionalEdgeIdsUsed:
-    string[] = [];
 
   const routeEdges = data.routeEdges.map((edge) => {
     const from = nodeById.get(edge.fromNodeId);
     const to = nodeById.get(edge.toNodeId);
-    const baseEvidenceEffective =
-      provenanceEffectiveOnDate(
-        edge.provenance,
-        date,
-      ) &&
+    const trusted =
+      edge.provenance.confidence === "verified" &&
+      provenanceEffectiveOnDate(edge.provenance, date) &&
       nodeVerified(from, date) &&
       nodeVerified(to, date);
-
-    const runtimeTrusted =
-      edge.status === "conditional" &&
-      edge.provenance.confidence ===
-        "provisional" &&
-      runtimeTrustedConditionalEdgeIds.has(
-        edge.id,
-      ) &&
-      baseEvidenceEffective;
-
-    const trusted =
-      (edge.provenance.confidence ===
-        "verified" &&
-        baseEvidenceEffective) ||
-      runtimeTrusted;
-
-    if (runtimeTrusted) {
-      runtimeTrustedConditionalEdgeIdsUsed.push(
-        edge.id,
-      );
-    }
 
     if (trusted) {
       return {
@@ -666,10 +548,6 @@ function trustedRoutingPackage(
     } satisfies WildRouteDataPackage,
     disabledUnverifiedEdgeIds:
       disabledUnverifiedEdgeIds.sort(compareText),
-    runtimeTrustedConditionalEdgeIds:
-      runtimeTrustedConditionalEdgeIdsUsed.sort(
-        compareText,
-      ),
   };
 }
 
@@ -771,70 +649,9 @@ export function buildCandidateIntegration(
   const edgeById = new Map(
     data.routeEdges.map((edge) => [edge.id, edge]),
   );
-
-  const runtimeTrustEdgeIds =
-    new Set<string>();
-  const runtimeTrust =
-    input.conditionalEdgeRuntimeTrust;
-
-  if (
-    runtimeTrust &&
-    runtimeTrust.visitDate !==
-      input.visit.date
-  ) {
-    pushIssue(
-      issues,
-      "error",
-      "CONDITIONAL_EDGE_RUNTIME_TRUST_DATE_MISMATCH",
-      `Runtime conditional-edge trust is for ${runtimeTrust.visitDate}, not visit date ${input.visit.date}.`,
-    );
-  } else if (runtimeTrust) {
-    for (const edgeId of runtimeTrust.edgeIds) {
-      const edge = edgeById.get(edgeId);
-      if (!edge) {
-        pushIssue(
-          issues,
-          "error",
-          "CONDITIONAL_EDGE_RUNTIME_TRUST_UNKNOWN",
-          `Runtime conditional-edge trust references unknown edge ${edgeId}.`,
-          undefined,
-          edgeId,
-        );
-        continue;
-      }
-      if (edge.status !== "conditional") {
-        pushIssue(
-          issues,
-          "error",
-          "CONDITIONAL_EDGE_RUNTIME_TRUST_NOT_CONDITIONAL",
-          `Runtime trust may only target conditional edges; ${edgeId} has status ${edge.status}.`,
-          undefined,
-          edgeId,
-        );
-        continue;
-      }
-      if (
-        edge.provenance.confidence ===
-          "unknown"
-      ) {
-        pushIssue(
-          issues,
-          "error",
-          "CONDITIONAL_EDGE_RUNTIME_TRUST_PROVENANCE_UNKNOWN",
-          `Runtime operational trust cannot override unknown base provenance for conditional edge ${edgeId}.`,
-          undefined,
-          edgeId,
-        );
-        continue;
-      }
-      runtimeTrustEdgeIds.add(edgeId);
-    }
-  }
-
   const gated = trustedRoutingPackage(
     data,
     input.visit.date,
-    runtimeTrustEdgeIds,
   );
   const gatedEdgeIds = new Set(
     gated.disabledUnverifiedEdgeIds,
@@ -1393,8 +1210,6 @@ export function buildCandidateIntegration(
   const routingGate = {
     disabledUnverifiedEdgeIds:
       gated.disabledUnverifiedEdgeIds,
-    runtimeTrustedConditionalEdgeIds:
-      gated.runtimeTrustedConditionalEdgeIds,
   };
 
   issues.sort((a, b) => {
