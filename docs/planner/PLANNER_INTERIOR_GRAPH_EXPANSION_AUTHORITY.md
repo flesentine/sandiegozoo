@@ -18,9 +18,11 @@ Planner 12 already established the ingress topology ending at:
 
 Planner 25 reuses that existing authority rather than creating a second independent topology claim. Source URLs are recovered by exact OSM object identity rather than positional array indexing.
 
-The expansion seed is:
+The canonical expansion seed ID is:
 
 `sdz-interior-expansion-front-street`
+
+That ID is part of both the TypeScript type and runtime integrity contract; renamed runtime records are rejected.
 
 Its source state is intentionally:
 
@@ -76,9 +78,17 @@ Until then, Planner 25 reports:
 
 ## Safety boundary
 
-`InteriorGraphExpansionSeed` deliberately forbids all `RouteEdge` materialization fields. Its runtime validator also rejects unknown seed fields, preventing retired bare corridor fields or aliased exact-segment facts from being smuggled through casts or stale JSON.
+`InteriorGraphExpansionSeed` deliberately forbids all `RouteEdge` materialization fields. Its runtime validator uses an exact own-property schema rather than trusting TypeScript casts or ordinary enumerable-key inspection.
 
-Integrity tests specifically reject attempts to copy the official 20-minute corridor summary into `durationMinutes`, reject retired `terrain` / `accessLabels` fields, reject aliased exact-segment fields, and fail closed on malformed runtime seed entries.
+Accepted records must:
+
+- use the ordinary `Object.prototype` rather than a custom prototype;
+- contain every required schema field as an enumerable own data property;
+- contain no extra string or symbol keys, including non-enumerable aliases;
+- retain the canonical seed ID;
+- remain exactly bound to the qualified OSM way/node sources and official corridor authority.
+
+Integrity tests reject the official 20-minute corridor summary as `durationMinutes`, retired `terrain` / `accessLabels` fields, aliased exact-segment fields, custom-prototype inheritance, non-enumerable aliases, renamed seed IDs, and malformed runtime seed entries.
 
 This preserves the same evidence-first policy used by the ingress work: uncertainty remains explicit instead of being converted into planner precision.
 
