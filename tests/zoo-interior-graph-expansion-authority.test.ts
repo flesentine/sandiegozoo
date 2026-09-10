@@ -94,14 +94,17 @@ test("official Front Street corridor metadata is preserved without becoming exac
     corridor.artifactId,
   );
   assert.equal(seed.officialPublishedWalkMinutes, 20);
-  assert.equal(seed.terrain, "mild");
-  assert.deepEqual(seed.accessLabels, [
+  assert.equal(seed.officialCorridorTerrain, "mild");
+  assert.deepEqual(seed.officialCorridorAccessLabels, [
     "Wildlife Explorers Basecamp",
     "Lost Forest",
     "Outback",
     "Urban Jungle",
     "Africa Rocks",
   ]);
+
+  assert.equal("terrain" in seed, false);
+  assert.equal("accessLabels" in seed, false);
 
   for (const field of ROUTE_EDGE_FIELDS) {
     assert.equal(field in seed, false);
@@ -194,7 +197,8 @@ test("Planner 25 expansion authority is deeply immutable and unknown seeds fail 
   );
   assert.equal(
     Object.isFrozen(
-      INTERIOR_GRAPH_EXPANSION_SEEDS[0].accessLabels,
+      INTERIOR_GRAPH_EXPANSION_SEEDS[0]
+        .officialCorridorAccessLabels,
     ),
     true,
   );
