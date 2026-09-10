@@ -5,8 +5,11 @@ import {
   PUBLISHED_WALKING_CORRIDORS,
 } from "./zooMapAuthority.ts";
 
+const FRONT_STREET_EXPANSION_SEED_ID =
+  "sdz-interior-expansion-front-street" as const;
+
 export type InteriorGraphExpansionSeed = {
-  id: string;
+  id: typeof FRONT_STREET_EXPANSION_SEED_ID;
   provider: "OpenStreetMap";
   sourceWayId: string;
   sourceUrl: string;
@@ -115,14 +118,6 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function stableId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.trim().length > 0 &&
-    value === value.trim()
-  );
-}
-
 function validOsmObjectUrl(
   value: unknown,
   objectType: "node" | "way",
@@ -171,10 +166,11 @@ function assertPlainSeedObject(
   if (
     !value ||
     typeof value !== "object" ||
-    Array.isArray(value)
+    Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype
   ) {
     throw new Error(
-      "Planner 25 interior graph expansion seed must be a plain object.",
+      "Planner 25 interior graph expansion seed must be a plain object with Object.prototype.",
     );
   }
 }
@@ -192,11 +188,23 @@ function assertNoRouteEdgeMaterialization(
   }
 }
 
-function assertNoUnknownSeedFields(
+function assertExactSeedShape(
   value: Record<string, unknown>,
   label: string,
 ) {
-  const unknownFields = Object.keys(value)
+  const ownKeys = Reflect.ownKeys(value);
+  const symbolKeys = ownKeys.filter(
+    (field): field is symbol => typeof field === "symbol",
+  );
+
+  if (symbolKeys.length > 0) {
+    throw new Error(
+      `${label} cannot contain symbol fields.`,
+    );
+  }
+
+  const stringKeys = ownKeys as string[];
+  const unknownFields = stringKeys
     .filter(
       (field) =>
         !INTERIOR_GRAPH_EXPANSION_SEED_FIELD_SET.has(field),
@@ -206,6 +214,37 @@ function assertNoUnknownSeedFields(
   if (unknownFields.length > 0) {
     throw new Error(
       `${label} cannot contain unknown field ${unknownFields.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  const missingFields = INTERIOR_GRAPH_EXPANSION_SEED_FIELDS.filter(
+    (field) => !Object.hasOwn(value, field),
+  );
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `${label} is missing required own field ${missingFields.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  const invalidOwnFields = INTERIOR_GRAPH_EXPANSION_SEED_FIELDS.filter(
+    (field) => {
+      const descriptor = Object.getOwnPropertyDescriptor(value, field);
+      return (
+        !descriptor ||
+        !descriptor.enumerable ||
+        !("value" in descriptor)
+      );
+    },
+  );
+
+  if (invalidOwnFields.length > 0) {
+    throw new Error(
+      `${label} requires enumerable own data field ${invalidOwnFields.join(
         ", ",
       )}.`,
     );
@@ -256,7 +295,7 @@ const FRONT_STREET_CONNECTION_NODE_SOURCE_URL =
 
 const RAW_SEEDS: InteriorGraphExpansionSeed[] = [
   {
-    id: "sdz-interior-expansion-front-street",
+    id: FRONT_STREET_EXPANSION_SEED_ID,
     provider: "OpenStreetMap",
     sourceWayId:
       FRONT_STREET_TOPOLOGY.frontStreetWayId,
@@ -296,12 +335,12 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
     candidate.id,
   )}`;
   assertNoRouteEdgeMaterialization(candidate, label);
-  assertNoUnknownSeedFields(candidate, label);
+  assertExactSeedShape(candidate, label);
 
   const seed = candidate as InteriorGraphExpansionSeed;
 
   if (
-    !stableId(seed.id) ||
+    seed.id !== FRONT_STREET_EXPANSION_SEED_ID ||
     seed.provider !== "OpenStreetMap" ||
     seed.sourceWayId !==
       FRONT_STREET_TOPOLOGY.frontStreetWayId ||
@@ -377,7 +416,7 @@ export function interiorGraphExpansionSeedForWay(
 }
 
 export function assessInteriorGraphExpansion(
-  seedId = "sdz-interior-expansion-front-street",
+  seedId = FRONT_STREET_EXPANSION_SEED_ID,
 ): InteriorGraphExpansionAssessment {
   const seed = INTERIOR_GRAPH_EXPANSION_SEEDS.find(
     (candidate) => candidate.id === seedId,
