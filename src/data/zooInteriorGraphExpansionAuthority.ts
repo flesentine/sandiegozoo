@@ -16,8 +16,8 @@ export type InteriorGraphExpansionSeed = {
   officialCorridorId: string;
   officialMapArtifactId: string;
   officialPublishedWalkMinutes: number;
-  terrain: "mild";
-  accessLabels: readonly string[];
+  officialCorridorTerrain: "mild";
+  officialCorridorAccessLabels: readonly string[];
   sourceState: "way-identified-geometry-not-sourced";
   plannerMaterialization: "graph-expansion-seed-only";
 };
@@ -197,8 +197,8 @@ const RAW_SEEDS: InteriorGraphExpansionSeed[] = [
       FRONT_STREET_CORRIDOR.artifactId,
     officialPublishedWalkMinutes:
       FRONT_STREET_CORRIDOR.publishedWalkMinutes,
-    terrain: "mild",
-    accessLabels: [
+    officialCorridorTerrain: "mild",
+    officialCorridorAccessLabels: [
       ...(FRONT_STREET_CORRIDOR.accessLabels ?? []),
     ],
     sourceState: "way-identified-geometry-not-sourced",
@@ -253,9 +253,10 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
     seed.officialPublishedWalkMinutes !== 20 ||
     seed.officialPublishedWalkMinutes !==
       FRONT_STREET_CORRIDOR.publishedWalkMinutes ||
-    seed.terrain !== "mild" ||
-    seed.terrain !== FRONT_STREET_CORRIDOR.terrain ||
-    JSON.stringify(seed.accessLabels) !==
+    seed.officialCorridorTerrain !== "mild" ||
+    seed.officialCorridorTerrain !==
+      FRONT_STREET_CORRIDOR.terrain ||
+    JSON.stringify(seed.officialCorridorAccessLabels) !==
       JSON.stringify(
         FRONT_STREET_CORRIDOR.accessLabels ?? [],
       )
