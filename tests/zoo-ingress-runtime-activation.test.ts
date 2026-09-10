@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  SAN_DIEGO_ZOO_TIME_ZONE,
   resolveIngressRuntimeActivation,
   routeIngressWithRuntimeEvidence,
+  zooOperationalDateAt,
   type IngressRuntimeOperationalSnapshot,
 } from "../src/data/zooIngressRuntimeActivation.ts";
 import {
@@ -18,9 +20,8 @@ import type { DayPreferences } from "../src/planning/dayPreferences.ts";
 import type { PriorityPreferences } from "../src/planning/priorityPreferences.ts";
 
 const TEST_NOW = Date.now();
-const TEST_DATE = new Date(TEST_NOW)
-  .toISOString()
-  .slice(0, 10);
+const TEST_DATE =
+  zooOperationalDateAt(TEST_NOW);
 
 function isoOffset(minutes: number) {
   return new Date(
@@ -35,8 +36,7 @@ function snapshot(
   return {
     visitDate: TEST_DATE,
     zooHours: {
-      evidenceId:
-        `hours-${TEST_DATE}`,
+      evidenceId: `hours-${TEST_DATE}`,
       status: "inside",
       validForDate: TEST_DATE,
       observedAt: isoOffset(-120),
@@ -54,8 +54,7 @@ function snapshot(
       {
         evidenceId:
           "edge-755054695-availability",
-        sourceWayId:
-          "755054695",
+        sourceWayId: "755054695",
         status: "available",
         validForDate: TEST_DATE,
         observedAt: isoOffset(-10),
@@ -64,8 +63,7 @@ function snapshot(
       {
         evidenceId:
           "edge-755054694-availability",
-        sourceWayId:
-          "755054694",
+        sourceWayId: "755054694",
         status: "available",
         validForDate: TEST_DATE,
         observedAt: isoOffset(-10),
@@ -73,6 +71,33 @@ function snapshot(
       },
     ],
     ...overrides,
+  };
+}
+
+function relabelSnapshot(
+  date: string,
+): IngressRuntimeOperationalSnapshot {
+  const base = snapshot();
+  return {
+    ...base,
+    visitDate: date,
+    zooHours: {
+      ...base.zooHours,
+      evidenceId: `hours-${date}`,
+      validForDate: date,
+    },
+    closureAdvisement: {
+      ...base.closureAdvisement,
+      evidenceId: `closure-${date}`,
+      validForDate: date,
+    },
+    exactEdgeAvailability:
+      base.exactEdgeAvailability.map(
+        (evidence) => ({
+          ...evidence,
+          validForDate: date,
+        }),
+      ),
   };
 }
 
@@ -132,7 +157,66 @@ function integrationInput(
   };
 }
 
-test("fresh current evidence activates both exact Planner 23 ingress edges", () => {
+function assertAllDisabledFor(
+  result: ReturnType<
+    typeof resolveIngressRuntimeActivation
+  >,
+  reason: string,
+) {
+  assert.deepEqual(
+    result.enabledConditionalEdgeIds,
+    [],
+  );
+  assert.ok(
+    result.decisions.every(
+      (decision) =>
+        decision.status === "disabled" &&
+        decision.reason === reason,
+    ),
+  );
+}
+
+test("Planner 24 pins the operational calendar to America/Los_Angeles", () => {
+  assert.equal(
+    SAN_DIEGO_ZOO_TIME_ZONE,
+    "America/Los_Angeles",
+  );
+
+  assert.equal(
+    zooOperationalDateAt(
+      Date.parse(
+        "2026-01-01T07:30:00Z",
+      ),
+    ),
+    "2025-12-31",
+  );
+  assert.equal(
+    zooOperationalDateAt(
+      Date.parse(
+        "2026-01-01T08:30:00Z",
+      ),
+    ),
+    "2026-01-01",
+  );
+  assert.equal(
+    zooOperationalDateAt(
+      Date.parse(
+        "2026-07-01T06:30:00Z",
+      ),
+    ),
+    "2026-06-30",
+  );
+  assert.equal(
+    zooOperationalDateAt(
+      Date.parse(
+        "2026-07-01T07:30:00Z",
+      ),
+    ),
+    "2026-07-01",
+  );
+});
+
+test("fresh current Zoo-local evidence activates both exact Planner 23 ingress edges", () => {
   const before = Date.now();
   const result =
     resolveIngressRuntimeActivation(
@@ -178,6 +262,59 @@ test("fresh current evidence activates both exact Planner 23 ingress edges", () 
         isoOffset(30),
       ],
     ],
+  );
+});
+
+test("future date labels cannot activate current evidence even when every caller label agrees", () => {
+  const result =
+    resolveIngressRuntimeActivation(
+      relabelSnapshot("2099-01-01"),
+    );
+
+  assertAllDisabledFor(
+    result,
+    "VISIT_DATE_NOT_CURRENT_ZOO_DATE",
+  );
+});
+
+test("historical date labels cannot activate current evidence even when every caller label agrees", () => {
+  const result =
+    resolveIngressRuntimeActivation(
+      relabelSnapshot("2000-01-01"),
+    );
+
+  assertAllDisabledFor(
+    result,
+    "VISIT_DATE_NOT_CURRENT_ZOO_DATE",
+  );
+});
+
+test("misdated evidence cannot route through the high-level live boundary", () => {
+  const result =
+    routeIngressWithRuntimeEvidence(
+      relabelSnapshot("2099-01-01"),
+      {
+        fromNodeId:
+          "sdz-ingress-node-main-entrance-route-node",
+        toNodeId:
+          "sdz-ingress-node-front-street-route-node",
+      },
+    );
+
+  assertAllDisabledFor(
+    result.activation,
+    "VISIT_DATE_NOT_CURRENT_ZOO_DATE",
+  );
+  assert.deepEqual(
+    result.route,
+    {
+      status: "not-found",
+      fromNodeId:
+        "sdz-ingress-node-main-entrance-route-node",
+      toNodeId:
+        "sdz-ingress-node-front-street-route-node",
+      reason: "NO_ROUTE",
+    },
   );
 });
 
@@ -248,26 +385,28 @@ test("candidate integration remains fail-closed for provisional ingress edges ev
 });
 
 test("expired evidence cannot be replayed with a caller-supplied old evaluatedAt", () => {
-  const expired = snapshot({
+  const base = snapshot();
+  const expired = {
+    ...base,
     zooHours: {
-      ...snapshot().zooHours,
+      ...base.zooHours,
       observedAt: isoOffset(-120),
       expiresAt: isoOffset(-60),
     },
     closureAdvisement: {
-      ...snapshot().closureAdvisement,
+      ...base.closureAdvisement,
       observedAt: isoOffset(-120),
       expiresAt: isoOffset(-60),
     },
     exactEdgeAvailability:
-      snapshot().exactEdgeAvailability.map(
+      base.exactEdgeAvailability.map(
         (evidence) => ({
           ...evidence,
           observedAt: isoOffset(-120),
           expiresAt: isoOffset(-60),
         }),
       ),
-  });
+  };
 
   const forged = {
     ...expired,
@@ -281,16 +420,9 @@ test("expired evidence cannot be replayed with a caller-supplied old evaluatedAt
       forged,
     );
 
-  assert.deepEqual(
-    result.enabledConditionalEdgeIds,
-    [],
-  );
-  assert.ok(
-    result.decisions.every(
-      (decision) =>
-        decision.reason ===
-        "HOURS_EVIDENCE_NOT_CURRENT",
-    ),
+  assertAllDisabledFor(
+    result,
+    "HOURS_EVIDENCE_NOT_CURRENT",
   );
   assert.ok(
     Date.parse(result.evaluatedAt) >
@@ -395,22 +527,16 @@ test("outside or unknown Zoo-hours status disables every ingress edge", () => {
         },
       });
 
-    assert.deepEqual(
-      result.enabledConditionalEdgeIds,
-      [],
-    );
-    assert.ok(
-      result.decisions.every(
-        (decision) =>
-          decision.reason ===
-          "HOURS_NOT_CONFIRMED",
-      ),
+    assertAllDisabledFor(
+      result,
+      "HOURS_NOT_CONFIRMED",
     );
   }
 });
 
-test("expired or wrong-date Zoo-hours evidence disables every ingress edge", () => {
+test("expired, not-yet-effective, or wrong-date Zoo-hours evidence disables every ingress edge", () => {
   const base = snapshot();
+
   const expired =
     resolveIngressRuntimeActivation({
       ...base,
@@ -420,16 +546,23 @@ test("expired or wrong-date Zoo-hours evidence disables every ingress edge", () 
         expiresAt: isoOffset(-1),
       },
     });
-  assert.deepEqual(
-    expired.enabledConditionalEdgeIds,
-    [],
+  assertAllDisabledFor(
+    expired,
+    "HOURS_EVIDENCE_NOT_CURRENT",
   );
-  assert.ok(
-    expired.decisions.every(
-      (decision) =>
-        decision.reason ===
-        "HOURS_EVIDENCE_NOT_CURRENT",
-    ),
+
+  const future =
+    resolveIngressRuntimeActivation({
+      ...base,
+      zooHours: {
+        ...base.zooHours,
+        observedAt: isoOffset(1),
+        expiresAt: isoOffset(60),
+      },
+    });
+  assertAllDisabledFor(
+    future,
+    "HOURS_EVIDENCE_NOT_CURRENT",
   );
 
   const wrongDate =
@@ -440,12 +573,9 @@ test("expired or wrong-date Zoo-hours evidence disables every ingress edge", () 
         validForDate: "2099-01-01",
       },
     });
-  assert.ok(
-    wrongDate.decisions.every(
-      (decision) =>
-        decision.reason ===
-        "HOURS_EVIDENCE_NOT_CURRENT",
-    ),
+  assertAllDisabledFor(
+    wrongDate,
+    "HOURS_EVIDENCE_NOT_CURRENT",
   );
 });
 
@@ -463,13 +593,9 @@ test("blocked, unknown, expired, or wrong-date closure evidence disables every i
           status,
         },
       });
-
-    assert.ok(
-      result.decisions.every(
-        (decision) =>
-          decision.reason ===
-          "CLOSURE_CLEARANCE_NOT_CONFIRMED",
-      ),
+    assertAllDisabledFor(
+      result,
+      "CLOSURE_CLEARANCE_NOT_CONFIRMED",
     );
   }
 
@@ -483,12 +609,9 @@ test("blocked, unknown, expired, or wrong-date closure evidence disables every i
         expiresAt: isoOffset(-1),
       },
     });
-  assert.ok(
-    expired.decisions.every(
-      (decision) =>
-        decision.reason ===
-        "CLOSURE_EVIDENCE_NOT_CURRENT",
-    ),
+  assertAllDisabledFor(
+    expired,
+    "CLOSURE_EVIDENCE_NOT_CURRENT",
   );
 
   const wrongDate =
@@ -499,12 +622,9 @@ test("blocked, unknown, expired, or wrong-date closure evidence disables every i
         validForDate: "2099-01-01",
       },
     });
-  assert.ok(
-    wrongDate.decisions.every(
-      (decision) =>
-        decision.reason ===
-        "CLOSURE_EVIDENCE_NOT_CURRENT",
-    ),
+  assertAllDisabledFor(
+    wrongDate,
+    "CLOSURE_EVIDENCE_NOT_CURRENT",
   );
 });
 
@@ -547,56 +667,47 @@ test("unavailable or unknown exact-edge evidence disables only that exact edge",
   }
 });
 
-test("expired or wrong-date exact-edge evidence disables only that exact edge", () => {
+test("expired, not-yet-effective, or wrong-date exact-edge evidence disables only that exact edge", () => {
   const base = snapshot();
-  const expired =
-    resolveIngressRuntimeActivation({
-      ...base,
-      exactEdgeAvailability:
-        base.exactEdgeAvailability.map(
-          (evidence) =>
-            evidence.sourceWayId ===
-            "755054695"
-              ? {
-                  ...evidence,
-                  observedAt:
-                    isoOffset(-60),
-                  expiresAt:
-                    isoOffset(-1),
-                }
-              : evidence,
-        ),
-    });
 
-  assert.equal(
-    expired.decisions[0].reason,
-    "EDGE_AVAILABILITY_NOT_CURRENT",
-  );
-  assert.equal(
-    expired.decisions[1].reason,
-    "ENABLED",
-  );
+  for (const patch of [
+    {
+      observedAt: isoOffset(-60),
+      expiresAt: isoOffset(-1),
+    },
+    {
+      observedAt: isoOffset(1),
+      expiresAt: isoOffset(60),
+    },
+    {
+      validForDate: "2099-01-01",
+    },
+  ]) {
+    const result =
+      resolveIngressRuntimeActivation({
+        ...base,
+        exactEdgeAvailability:
+          base.exactEdgeAvailability.map(
+            (evidence) =>
+              evidence.sourceWayId ===
+              "755054695"
+                ? {
+                    ...evidence,
+                    ...patch,
+                  }
+                : evidence,
+          ),
+      });
 
-  const wrongDate =
-    resolveIngressRuntimeActivation({
-      ...base,
-      exactEdgeAvailability:
-        base.exactEdgeAvailability.map(
-          (evidence) =>
-            evidence.sourceWayId ===
-            "755054695"
-              ? {
-                  ...evidence,
-                  validForDate:
-                    "2099-01-01",
-                }
-              : evidence,
-        ),
-    });
-  assert.equal(
-    wrongDate.decisions[0].reason,
-    "EDGE_AVAILABILITY_NOT_CURRENT",
-  );
+    assert.equal(
+      result.decisions[0].reason,
+      "EDGE_AVAILABILITY_NOT_CURRENT",
+    );
+    assert.equal(
+      result.decisions[1].reason,
+      "ENABLED",
+    );
+  }
 });
 
 test("duplicate or unknown source-way evidence is rejected instead of ambiguously merged", () => {
