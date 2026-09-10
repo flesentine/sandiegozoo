@@ -139,7 +139,7 @@ test("Front Street way lookup exposes only the qualified expansion seed", () => 
   );
 });
 
-test("route graph expansion stays explicitly blocked until exact segment evidence exists", () => {
+test("route graph expansion stays explicitly blocked until every independent RouteEdge semantic is sourced", () => {
   assert.deepEqual(
     assessInteriorGraphExpansion(),
     {
@@ -153,10 +153,16 @@ test("route graph expansion stays explicitly blocked until exact segment evidenc
         reasons: [
           "FRONT_STREET_WAY_GEOMETRY_NOT_CAPTURED",
           "EXPANSION_ENDPOINT_NODE_NOT_SOURCED",
+          "EXACT_SEGMENT_MODE_NOT_SOURCED",
           "EXACT_SEGMENT_DISTANCE_NOT_SOURCED",
           "EXACT_SEGMENT_DURATION_NOT_SOURCED",
-          "EXACT_SEGMENT_MOBILITY_NOT_SOURCED",
+          "EXACT_SEGMENT_DIFFICULTY_NOT_SOURCED",
+          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+          "EXACT_SEGMENT_ACCESSIBILITY_NOT_SOURCED",
+          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+          "EXACT_SEGMENT_PEDESTRIAN_DIRECTION_NOT_SOURCED",
           "EXACT_SEGMENT_OPERATIONAL_STATUS_NOT_SOURCED",
+          "EXACT_SEGMENT_PROVENANCE_NOT_COMPLETE",
         ],
       },
     },
@@ -178,6 +184,38 @@ test("the published 20-minute Front Street summary cannot be smuggled in as Rout
         forged,
       ]),
     /cannot materialize Planner RouteEdge field durationMinutes/,
+  );
+});
+
+test("retired bare corridor field names are rejected at the runtime authority boundary", () => {
+  const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
+
+  const staleTerrain = {
+    ...seed,
+    terrain: seed.officialCorridorTerrain,
+  } as InteriorGraphExpansionSeed & {
+    terrain: "mild";
+  };
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        staleTerrain,
+      ]),
+    /cannot contain unknown field terrain/,
+  );
+
+  const staleAccessLabels = {
+    ...seed,
+    accessLabels: seed.officialCorridorAccessLabels,
+  } as InteriorGraphExpansionSeed & {
+    accessLabels: readonly string[];
+  };
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        staleAccessLabels,
+      ]),
+    /cannot contain unknown field accessLabels/,
   );
 });
 
