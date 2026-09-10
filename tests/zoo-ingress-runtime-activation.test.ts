@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   resolveIngressRuntimeActivation,
+  routeIngressWithRuntimeEvidence,
   type IngressRuntimeOperationalSnapshot,
 } from "../src/data/zooIngressRuntimeActivation.ts";
 import {
@@ -12,40 +13,42 @@ import {
   buildCandidateIntegration,
   type CandidateIntegrationInput,
 } from "../src/planner/integration.ts";
-import {
-  findShortestRoute,
-} from "../src/planner/routing.ts";
 import type { VisitPreferences } from "../src/planning/visitPreferences.ts";
 import type { DayPreferences } from "../src/planning/dayPreferences.ts";
 import type { PriorityPreferences } from "../src/planning/priorityPreferences.ts";
+
+const TEST_NOW = Date.now();
+const TEST_DATE = new Date(TEST_NOW)
+  .toISOString()
+  .slice(0, 10);
+
+function isoOffset(minutes: number) {
+  return new Date(
+    TEST_NOW + minutes * 60_000,
+  ).toISOString();
+}
 
 function snapshot(
   overrides:
     Partial<IngressRuntimeOperationalSnapshot> = {},
 ): IngressRuntimeOperationalSnapshot {
   return {
-    visitDate: "2026-09-09",
-    evaluatedAt:
-      "2026-09-09T14:20:00-07:00",
+    visitDate: TEST_DATE,
     zooHours: {
       evidenceId:
-        "hours-2026-09-09",
+        `hours-${TEST_DATE}`,
       status: "inside",
-      validForDate: "2026-09-09",
-      observedAt:
-        "2026-09-09T08:00:00-07:00",
-      expiresAt:
-        "2026-09-09T21:00:00-07:00",
+      validForDate: TEST_DATE,
+      observedAt: isoOffset(-120),
+      expiresAt: isoOffset(240),
     },
     closureAdvisement: {
       evidenceId:
-        "closure-2026-09-09",
+        `closure-${TEST_DATE}`,
       status: "clear",
-      validForDate: "2026-09-09",
-      observedAt:
-        "2026-09-09T14:00:00-07:00",
-      expiresAt:
-        "2026-09-09T15:00:00-07:00",
+      validForDate: TEST_DATE,
+      observedAt: isoOffset(-15),
+      expiresAt: isoOffset(45),
     },
     exactEdgeAvailability: [
       {
@@ -54,12 +57,9 @@ function snapshot(
         sourceWayId:
           "755054695",
         status: "available",
-        validForDate:
-          "2026-09-09",
-        observedAt:
-          "2026-09-09T14:10:00-07:00",
-        expiresAt:
-          "2026-09-09T14:40:00-07:00",
+        validForDate: TEST_DATE,
+        observedAt: isoOffset(-10),
+        expiresAt: isoOffset(30),
       },
       {
         evidenceId:
@@ -67,12 +67,9 @@ function snapshot(
         sourceWayId:
           "755054694",
         status: "available",
-        validForDate:
-          "2026-09-09",
-        observedAt:
-          "2026-09-09T14:10:00-07:00",
-        expiresAt:
-          "2026-09-09T14:40:00-07:00",
+        validForDate: TEST_DATE,
+        observedAt: isoOffset(-10),
+        expiresAt: isoOffset(30),
       },
     ],
     ...overrides,
@@ -81,7 +78,7 @@ function snapshot(
 
 function visit(): VisitPreferences {
   return {
-    date: "2026-09-09",
+    date: TEST_DATE,
     arrival: "09:00",
     departure: "17:00",
     party: {
@@ -115,10 +112,6 @@ function priorities(): PriorityPreferences {
 }
 
 function integrationInput(
-  activation:
-    ReturnType<
-      typeof resolveIngressRuntimeActivation
-    >,
   overrides:
     Partial<CandidateIntegrationInput> = {},
 ): CandidateIntegrationInput {
@@ -135,21 +128,17 @@ function integrationInput(
       animals: {},
       experiences: {},
     },
-    enabledConditionalEdgeIds:
-      activation
-        .enabledConditionalEdgeIds,
-    conditionalEdgeRuntimeTrust:
-      activation
-        .conditionalEdgeRuntimeTrust,
     ...overrides,
   };
 }
 
 test("fresh current evidence activates both exact Planner 23 ingress edges", () => {
+  const before = Date.now();
   const result =
     resolveIngressRuntimeActivation(
       snapshot(),
     );
+  const after = Date.now();
 
   assert.deepEqual(
     result.enabledConditionalEdgeIds,
@@ -158,19 +147,13 @@ test("fresh current evidence activates both exact Planner 23 ingress edges", () 
       "sdz-ingress-way-front-street-connection-route-edge",
     ],
   );
-  assert.deepEqual(
-    result.conditionalEdgeRuntimeTrust,
-    {
-      authority:
-        "qualified-runtime-conditional-edge-activation",
-      visitDate: "2026-09-09",
-      evaluatedAt:
-        "2026-09-09T14:20:00-07:00",
-      edgeIds: [
-        "sdz-ingress-way-controlled-passage-route-edge",
-        "sdz-ingress-way-front-street-connection-route-edge",
-      ],
-    },
+  assert.ok(
+    Date.parse(result.evaluatedAt) >=
+      before,
+  );
+  assert.ok(
+    Date.parse(result.evaluatedAt) <=
+      after,
   );
   assert.deepEqual(
     result.decisions.map(
@@ -178,6 +161,7 @@ test("fresh current evidence activates both exact Planner 23 ingress edges", () 
         decision.sourceWayId,
         decision.status,
         decision.reason,
+        decision.effectiveExpiresAt,
       ],
     ),
     [
@@ -185,116 +169,22 @@ test("fresh current evidence activates both exact Planner 23 ingress edges", () 
         "755054695",
         "enabled",
         "ENABLED",
+        isoOffset(30),
       ],
       [
         "755054694",
         "enabled",
         "ENABLED",
+        isoOffset(30),
       ],
     ],
   );
 });
 
-test("Planner 24 activation makes the Planner 23 route actually routable through candidate integration", () => {
-  const activation =
-    resolveIngressRuntimeActivation(
+test("high-level live route reevaluates evidence immediately before traversal", () => {
+  const result =
+    routeIngressWithRuntimeEvidence(
       snapshot(),
-    );
-  const integration =
-    buildCandidateIntegration(
-      integrationInput(activation),
-    );
-
-  assert.equal(
-    integration.status,
-    "ready",
-  );
-  if (
-    integration.status !== "ready"
-  ) {
-    throw new Error(
-      "expected ready ingress integration",
-    );
-  }
-
-  assert.deepEqual(
-    integration.routingGate
-      .disabledUnverifiedEdgeIds,
-    [],
-  );
-  assert.deepEqual(
-    integration.routingGate
-      .runtimeTrustedConditionalEdgeIds,
-    activation
-      .enabledConditionalEdgeIds,
-  );
-  assert.deepEqual(
-    integration.request.routePolicy
-      ?.enabledConditionalEdgeIds,
-    activation
-      .enabledConditionalEdgeIds,
-  );
-
-  const route = findShortestRoute(
-    integration.request.graph,
-    {
-      fromNodeId:
-        "sdz-ingress-node-main-entrance-route-node",
-      toNodeId:
-        "sdz-ingress-node-front-street-route-node",
-      enabledConditionalEdgeIds:
-        activation
-          .enabledConditionalEdgeIds,
-    },
-  );
-
-  assert.equal(route.status, "found");
-  if (route.status !== "found") {
-    throw new Error(
-      "expected activated ingress route",
-    );
-  }
-  assert.equal(
-    route.distanceMeters,
-    42.212,
-  );
-  assert.equal(
-    route.durationMinutes,
-    0.586,
-  );
-});
-
-test("runtime trust alone never opens an edge and enabled IDs alone cannot bypass provisional gating", () => {
-  const activation =
-    resolveIngressRuntimeActivation(
-      snapshot(),
-    );
-
-  const trustOnly =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        {
-          enabledConditionalEdgeIds: [],
-        },
-      ),
-    );
-
-  assert.equal(
-    trustOnly.status,
-    "ready",
-  );
-  if (
-    trustOnly.status !== "ready"
-  ) {
-    throw new Error(
-      "expected trust-only integration to remain structurally ready",
-    );
-  }
-
-  const trustOnlyRoute =
-    findShortestRoute(
-      trustOnly.request.graph,
       {
         fromNodeId:
           "sdz-ingress-node-main-entrance-route-node",
@@ -302,8 +192,147 @@ test("runtime trust alone never opens an edge and enabled IDs alone cannot bypas
           "sdz-ingress-node-front-street-route-node",
       },
     );
+
   assert.deepEqual(
-    trustOnlyRoute,
+    result.activation
+      .enabledConditionalEdgeIds,
+    [
+      "sdz-ingress-way-controlled-passage-route-edge",
+      "sdz-ingress-way-front-street-connection-route-edge",
+    ],
+  );
+  assert.equal(
+    result.route.status,
+    "found",
+  );
+  if (result.route.status !== "found") {
+    throw new Error(
+      "expected activated ingress route",
+    );
+  }
+  assert.equal(
+    result.route.distanceMeters,
+    42.212,
+  );
+  assert.equal(
+    result.route.durationMinutes,
+    0.586,
+  );
+});
+
+test("candidate integration remains fail-closed for provisional ingress edges even if IDs are asserted directly", () => {
+  const result = buildCandidateIntegration(
+    integrationInput({
+      enabledConditionalEdgeIds:
+        INGRESS_ROUTE_EDGES.map(
+          (edge) => edge.id,
+        ),
+    }),
+  );
+
+  assert.equal(result.status, "blocked");
+  assert.ok(
+    result.issues.some(
+      (issue) =>
+        issue.code ===
+        "CONDITIONAL_EDGE_UNTRUSTED",
+    ),
+  );
+  assert.deepEqual(
+    result.routingGate
+      .disabledUnverifiedEdgeIds,
+    INGRESS_ROUTE_EDGES.map(
+      (edge) => edge.id,
+    ).sort(),
+  );
+});
+
+test("expired evidence cannot be replayed with a caller-supplied old evaluatedAt", () => {
+  const expired = snapshot({
+    zooHours: {
+      ...snapshot().zooHours,
+      observedAt: isoOffset(-120),
+      expiresAt: isoOffset(-60),
+    },
+    closureAdvisement: {
+      ...snapshot().closureAdvisement,
+      observedAt: isoOffset(-120),
+      expiresAt: isoOffset(-60),
+    },
+    exactEdgeAvailability:
+      snapshot().exactEdgeAvailability.map(
+        (evidence) => ({
+          ...evidence,
+          observedAt: isoOffset(-120),
+          expiresAt: isoOffset(-60),
+        }),
+      ),
+  });
+
+  const forged = {
+    ...expired,
+    evaluatedAt: isoOffset(-90),
+  } as IngressRuntimeOperationalSnapshot & {
+    evaluatedAt: string;
+  };
+
+  const result =
+    resolveIngressRuntimeActivation(
+      forged,
+    );
+
+  assert.deepEqual(
+    result.enabledConditionalEdgeIds,
+    [],
+  );
+  assert.ok(
+    result.decisions.every(
+      (decision) =>
+        decision.reason ===
+        "HOURS_EVIDENCE_NOT_CURRENT",
+    ),
+  );
+  assert.ok(
+    Date.parse(result.evaluatedAt) >
+      Date.parse(forged.evaluatedAt),
+  );
+});
+
+test("high-level route cannot be forced open by smuggling enabledConditionalEdgeIds into the request", () => {
+  const base = snapshot();
+  const unavailable = {
+    ...base,
+    exactEdgeAvailability:
+      base.exactEdgeAvailability.map(
+        (evidence) => ({
+          ...evidence,
+          status:
+            "unavailable" as const,
+        })),
+  };
+
+  const result =
+    routeIngressWithRuntimeEvidence(
+      unavailable,
+      {
+        fromNodeId:
+          "sdz-ingress-node-main-entrance-route-node",
+        toNodeId:
+          "sdz-ingress-node-front-street-route-node",
+        enabledConditionalEdgeIds:
+          INGRESS_ROUTE_EDGES.map(
+            (edge) => edge.id,
+          ),
+      } as never,
+    );
+
+  assert.deepEqual(
+    result.activation
+      .enabledConditionalEdgeIds,
+    [],
+  );
+  assert.deepEqual(
+    result.route,
     {
       status: "not-found",
       fromNodeId:
@@ -312,29 +341,6 @@ test("runtime trust alone never opens an edge and enabled IDs alone cannot bypas
         "sdz-ingress-node-front-street-route-node",
       reason: "NO_ROUTE",
     },
-  );
-
-  const enabledOnly =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        {
-          conditionalEdgeRuntimeTrust:
-            undefined,
-        },
-      ),
-    );
-
-  assert.equal(
-    enabledOnly.status,
-    "blocked",
-  );
-  assert.ok(
-    enabledOnly.issues.some(
-      (issue) =>
-        issue.code ===
-        "CONDITIONAL_EDGE_UNTRUSTED",
-    ),
   );
 });
 
@@ -410,8 +416,8 @@ test("expired or wrong-date Zoo-hours evidence disables every ingress edge", () 
       ...base,
       zooHours: {
         ...base.zooHours,
-        expiresAt:
-          "2026-09-09T14:19:59-07:00",
+        observedAt: isoOffset(-60),
+        expiresAt: isoOffset(-1),
       },
     });
   assert.deepEqual(
@@ -431,8 +437,7 @@ test("expired or wrong-date Zoo-hours evidence disables every ingress edge", () 
       ...base,
       zooHours: {
         ...base.zooHours,
-        validForDate:
-          "2026-09-10",
+        validForDate: "2099-01-01",
       },
     });
   assert.ok(
@@ -474,8 +479,8 @@ test("blocked, unknown, expired, or wrong-date closure evidence disables every i
       ...base,
       closureAdvisement: {
         ...base.closureAdvisement,
-        expiresAt:
-          "2026-09-09T14:19:59-07:00",
+        observedAt: isoOffset(-60),
+        expiresAt: isoOffset(-1),
       },
     });
   assert.ok(
@@ -491,8 +496,7 @@ test("blocked, unknown, expired, or wrong-date closure evidence disables every i
       ...base,
       closureAdvisement: {
         ...base.closureAdvisement,
-        validForDate:
-          "2026-09-10",
+        validForDate: "2099-01-01",
       },
     });
   assert.ok(
@@ -555,8 +559,10 @@ test("expired or wrong-date exact-edge evidence disables only that exact edge", 
             "755054695"
               ? {
                   ...evidence,
+                  observedAt:
+                    isoOffset(-60),
                   expiresAt:
-                    "2026-09-09T14:19:59-07:00",
+                    isoOffset(-1),
                 }
               : evidence,
         ),
@@ -582,7 +588,7 @@ test("expired or wrong-date exact-edge evidence disables only that exact edge", 
               ? {
                   ...evidence,
                   validForDate:
-                    "2026-09-10",
+                    "2099-01-01",
                 }
               : evidence,
         ),
@@ -590,128 +596,6 @@ test("expired or wrong-date exact-edge evidence disables only that exact edge", 
   assert.equal(
     wrongDate.decisions[0].reason,
     "EDGE_AVAILABILITY_NOT_CURRENT",
-  );
-});
-
-test("runtime trust is scoped to the visit date and cannot be replayed onto another day", () => {
-  const activation =
-    resolveIngressRuntimeActivation(
-      snapshot(),
-    );
-
-  const result =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        {
-          visit: {
-            ...visit(),
-            date: "2026-09-10",
-          },
-        },
-      ),
-    );
-
-  assert.equal(result.status, "blocked");
-  assert.ok(
-    result.issues.some(
-      (issue) =>
-        issue.code ===
-        "CONDITIONAL_EDGE_RUNTIME_TRUST_DATE_MISMATCH",
-    ),
-  );
-});
-
-test("integration rejects forged runtime trust for unknown or non-conditional edges", () => {
-  const activation =
-    resolveIngressRuntimeActivation(
-      snapshot(),
-    );
-
-  const unknown =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        {
-          conditionalEdgeRuntimeTrust: {
-            ...activation
-              .conditionalEdgeRuntimeTrust,
-            edgeIds: [
-              "missing-edge",
-            ],
-          },
-        },
-      ),
-    );
-  assert.equal(unknown.status, "blocked");
-  assert.ok(
-    unknown.issues.some(
-      (issue) =>
-        issue.code ===
-        "CONDITIONAL_EDGE_RUNTIME_TRUST_UNKNOWN",
-    ),
-  );
-
-  const data = structuredClone(
-    INGRESS_ROUTE_GRAPH_DATA,
-  );
-  data.routeEdges[0].status = "open";
-  const nonConditional =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        {
-          data,
-          enabledConditionalEdgeIds: [],
-          conditionalEdgeRuntimeTrust: {
-            ...activation
-              .conditionalEdgeRuntimeTrust,
-            edgeIds: [
-              data.routeEdges[0].id,
-            ],
-          },
-        },
-      ),
-    );
-  assert.equal(
-    nonConditional.status,
-    "blocked",
-  );
-  assert.ok(
-    nonConditional.issues.some(
-      (issue) =>
-        issue.code ===
-        "CONDITIONAL_EDGE_RUNTIME_TRUST_NOT_CONDITIONAL",
-    ),
-  );
-});
-
-test("runtime operational trust cannot override unknown base provenance", () => {
-  const activation =
-    resolveIngressRuntimeActivation(
-      snapshot(),
-    );
-  const data = structuredClone(
-    INGRESS_ROUTE_GRAPH_DATA,
-  );
-  data.routeEdges[0].provenance
-    .confidence = "unknown";
-
-  const result =
-    buildCandidateIntegration(
-      integrationInput(
-        activation,
-        { data },
-      ),
-    );
-
-  assert.equal(result.status, "blocked");
-  assert.ok(
-    result.issues.some(
-      (issue) =>
-        issue.code ===
-        "CONDITIONAL_EDGE_RUNTIME_TRUST_PROVENANCE_UNKNOWN",
-    ),
   );
 });
 
@@ -777,22 +661,25 @@ test("invalid or inverted evidence windows are rejected", () => {
         ...base,
         closureAdvisement: {
           ...base.closureAdvisement,
-          observedAt:
-            "2026-09-09T15:00:00-07:00",
-          expiresAt:
-            "2026-09-09T14:00:00-07:00",
+          observedAt: isoOffset(10),
+          expiresAt: isoOffset(5),
         },
       }),
     /expiresAt must be later than observedAt/,
   );
 });
 
-test("Planner 24 result and trust envelope are deeply immutable", () => {
+test("Planner 24 result records effective expiry and is deeply immutable", () => {
   const result =
     resolveIngressRuntimeActivation(
       snapshot(),
     );
 
+  assert.equal(
+    result.decisions[0]
+      .effectiveExpiresAt,
+    isoOffset(30),
+  );
   assert.equal(
     Object.isFrozen(result),
     true,
@@ -805,20 +692,13 @@ test("Planner 24 result and trust envelope are deeply immutable", () => {
   );
   assert.equal(
     Object.isFrozen(
-      result.conditionalEdgeRuntimeTrust,
-    ),
-    true,
-  );
-  assert.equal(
-    Object.isFrozen(
-      result.conditionalEdgeRuntimeTrust
-        .edgeIds,
-    ),
-    true,
-  );
-  assert.equal(
-    Object.isFrozen(
       result.decisions,
+    ),
+    true,
+  );
+  assert.equal(
+    Object.isFrozen(
+      result.decisions[0],
     ),
     true,
   );
