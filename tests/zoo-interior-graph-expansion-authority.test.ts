@@ -78,6 +78,19 @@ test("Planner 25 derives the seed from existing qualified ingress topology rathe
     topology.frontStreetConnectionNodeId,
   );
   assert.equal(seed.ingressTopologyId, topology.id);
+  assert.equal(
+    topology.waySourceUrls.filter(
+      (sourceUrl) => sourceUrl === seed.sourceUrl,
+    ).length,
+    1,
+  );
+  assert.equal(
+    topology.connectionNodeSourceUrls.filter(
+      (sourceUrl) =>
+        sourceUrl === seed.connectionNodeSourceUrl,
+    ).length,
+    1,
+  );
 });
 
 test("official Front Street corridor metadata is preserved without becoming exact segment weight authority", () => {
@@ -165,6 +178,43 @@ test("the published 20-minute Front Street summary cannot be smuggled in as Rout
         forged,
       ]),
     /cannot materialize Planner RouteEdge field durationMinutes/,
+  );
+});
+
+test("unknown runtime fields cannot smuggle exact segment authority under aliases", () => {
+  const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
+  const forged = {
+    ...seed,
+    exactSegmentDurationMinutes:
+      seed.officialPublishedWalkMinutes,
+  } as InteriorGraphExpansionSeed & {
+    exactSegmentDurationMinutes: number;
+  };
+
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        forged,
+      ]),
+    /cannot contain unknown field exactSegmentDurationMinutes/,
+  );
+});
+
+test("malformed runtime seed entries fail closed before field inspection", () => {
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        null as unknown as InteriorGraphExpansionSeed,
+      ]),
+    /must be a plain object/,
+  );
+
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        [] as unknown as InteriorGraphExpansionSeed,
+      ]),
+    /must be a plain object/,
   );
 });
 
