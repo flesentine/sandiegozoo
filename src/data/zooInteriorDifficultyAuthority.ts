@@ -20,7 +20,7 @@ const CORRIDOR_ID = "sdz-corridor-front-street" as const;
 const SOURCE_WAY_ID = "1481425058" as const;
 const FROM_NODE_ID = "7053320515" as const;
 const TO_NODE_ID = "1619736626" as const;
-const ADOPTED_AT = "2026-09-11T10:00:00-07:00" as const;
+const ADOPTED_AT = "2026-09-11T09:55:00-07:00" as const;
 
 export type InteriorDifficultyPolicy = {
   id: typeof POLICY_ID;
