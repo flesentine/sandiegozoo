@@ -21,41 +21,49 @@ jobs:
 
           WAY_ID = "1481425058"
           CONNECTION_NODE_ID = "7053320515"
+          ADJACENT_BRANCH_WAY_IDS = ["148910139", "666404421"]
 
           def fetch_xml(url):
               req = urllib.request.Request(url, headers={"User-Agent": "WildRoute-Planner26-source-probe/1.0"})
               with urllib.request.urlopen(req, timeout=30) as response:
                   return ET.fromstring(response.read())
 
-          full = fetch_xml(f"https://api.openstreetmap.org/api/0.6/way/{WAY_ID}/full")
-          way = next(element for element in full if element.tag == "way" and element.attrib["id"] == WAY_ID)
-          node_ids = [nd.attrib["ref"] for nd in way.findall("nd")]
-          node_by_id = {
-              element.attrib["id"]: {
-                  "lat": float(element.attrib["lat"]),
-                  "lon": float(element.attrib["lon"]),
+          def summarize_way(way_id):
+              doc = fetch_xml(f"https://api.openstreetmap.org/api/0.6/way/{way_id}/full")
+              way = next(element for element in doc if element.tag == "way" and element.attrib["id"] == way_id)
+              node_ids = [nd.attrib["ref"] for nd in way.findall("nd")]
+              coords = {
+                  element.attrib["id"]: {
+                      "lat": float(element.attrib["lat"]),
+                      "lon": float(element.attrib["lon"]),
+                  }
+                  for element in doc
+                  if element.tag == "node"
               }
-              for element in full
-              if element.tag == "node"
-          }
-          tags = {tag.attrib["k"]: tag.attrib["v"] for tag in way.findall("tag")}
+              tags = {tag.attrib["k"]: tag.attrib["v"] for tag in way.findall("tag")}
+              return {
+                  "id": way_id,
+                  "version": int(way.attrib["version"]),
+                  "timestamp": way.attrib["timestamp"],
+                  "tags": tags,
+                  "nodes": [{"id": node_id, **coords[node_id]} for node_id in node_ids],
+              }
 
+          front = summarize_way(WAY_ID)
+          node_ids = [node["id"] for node in front["nodes"]]
           if CONNECTION_NODE_ID not in node_ids:
               raise SystemExit(f"connection node {CONNECTION_NODE_ID} is not on way {WAY_ID}")
 
           connection_index = node_ids.index(CONNECTION_NODE_ID)
           print("WAY_META=" + json.dumps({
               "wayId": WAY_ID,
-              "version": int(way.attrib["version"]),
-              "timestamp": way.attrib["timestamp"],
-              "tags": tags,
+              "version": front["version"],
+              "timestamp": front["timestamp"],
+              "tags": front["tags"],
               "connectionIndex": connection_index,
               "nodeCount": len(node_ids),
           }, sort_keys=True))
-          print("WAY_NODES=" + json.dumps([
-              {"id": node_id, **node_by_id[node_id]}
-              for node_id in node_ids
-          ], separators=(",", ":")))
+          print("WAY_NODES=" + json.dumps(front["nodes"], separators=(",", ":")))
 
           connected = []
           for index, node_id in enumerate(node_ids):
@@ -76,3 +84,6 @@ jobs:
                   "ways": memberships,
               })
           print("NODE_MEMBERSHIPS=" + json.dumps(connected, separators=(",", ":")))
+
+          branch_summaries = [summarize_way(way_id) for way_id in ADJACENT_BRANCH_WAY_IDS]
+          print("ADJACENT_BRANCHES=" + json.dumps(branch_summaries, separators=(",", ":")))
