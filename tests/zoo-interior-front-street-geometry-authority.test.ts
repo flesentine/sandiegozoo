@@ -347,6 +347,44 @@ test("Planner 26 nested arrays reject extra named or symbol properties", () => {
   );
 });
 
+test("Planner 26 requires complete canonical OSM provenance URLs", () => {
+  const wayQuery = mutableClone();
+  (wayQuery as { sourceWayVersionUrl: string }).sourceWayVersionUrl += "?download=1";
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([wayQuery]),
+    /Front Street source-way provenance is malformed/,
+  );
+
+  const nodeCredentials = mutableClone();
+  (nodeCredentials.connectionNode as { sourceVersionUrl: string }).sourceVersionUrl =
+    "https://user@api.openstreetmap.org/api/0.6/node/7053320515/1";
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([nodeCredentials]),
+    /connection node drifted from versioned OSM node provenance/,
+  );
+
+  const nodePort = mutableClone();
+  const previousNode = nodePort.adjacentJunctionCandidates[0].node as {
+    sourceVersionUrl: string;
+  };
+  previousNode.sourceVersionUrl =
+    "https://api.openstreetmap.org:444/api/0.6/node/1619736626/2";
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([nodePort]),
+    /previous adjacent node drifted from versioned OSM node provenance/,
+  );
+
+  const connectorFragment = mutableClone();
+  const previousConnector = connectorFragment.adjacentJunctionCandidates[0] as {
+    connectorWayVersionUrl: string;
+  };
+  previousConnector.connectorWayVersionUrl += "#fragment";
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([connectorFragment]),
+    /previous adjacent junction evidence drifted/,
+  );
+});
+
 test("Planner 26 authority and assessment are deeply immutable", () => {
   const authority = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
   assert.equal(Object.isFrozen(INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY), true);

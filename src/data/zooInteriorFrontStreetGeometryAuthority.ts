@@ -263,16 +263,8 @@ function validOsmObjectUrl(
   if (typeof value !== "string" || typeof objectId !== "string") {
     return false;
   }
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      url.hostname === "www.openstreetmap.org" &&
-      url.pathname === `/${objectType}/${objectId}`
-    );
-  } catch {
-    return false;
-  }
+
+  return value === `https://www.openstreetmap.org/${objectType}/${objectId}`;
 }
 
 function validOsmVersionUrl(
@@ -290,16 +282,11 @@ function validOsmVersionUrl(
   ) {
     return false;
   }
-  try {
-    const url = new URL(value);
-    return (
-      url.protocol === "https:" &&
-      url.hostname === "api.openstreetmap.org" &&
-      url.pathname === `/api/0.6/${objectType}/${objectId}/${version}`
-    );
-  } catch {
-    return false;
-  }
+
+  return (
+    value ===
+    `https://api.openstreetmap.org/api/0.6/${objectType}/${objectId}/${version}`
+  );
 }
 
 function validCoordinate(lat: unknown, lng: unknown) {
