@@ -34,15 +34,19 @@ function mutableClone() {
   return {
     ...source,
     connectionNode: { ...source.connectionNode },
-    endpointNode: { ...source.endpointNode },
-    sourceWaySliceNodeIds: [...source.sourceWaySliceNodeIds],
+    sourceWayNeighborhoodNodeIds: [
+      ...source.sourceWayNeighborhoodNodeIds,
+    ],
     adjacentJunctionCandidates: source.adjacentJunctionCandidates.map(
-      (candidate) => ({ ...candidate }),
+      (candidate) => ({
+        ...candidate,
+        node: { ...candidate.node },
+      }),
     ),
   } as unknown as InteriorFrontStreetGeometryAuthority;
 }
 
-test("Planner 26 captures the exact Front Street geometry boundary from the Planner 25 seed", () => {
+test("Planner 26 captures the exact Front Street neighborhood from the Planner 25 seed", () => {
   const authority = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
   const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
 
@@ -55,10 +59,65 @@ test("Planner 26 captures the exact Front Street geometry boundary from the Plan
   assert.equal(authority.sourceWayTimestamp, "2026-02-21T14:47:49Z");
   assert.equal(authority.sourceWayNodeCount, 17);
   assert.equal(authority.connectionNodeIndex, 4);
-  assert.deepEqual(authority.sourceWaySliceNodeIds, [
+  assert.deepEqual(authority.sourceWayNeighborhoodNodeIds, [
     "1619736626",
     "7053320515",
+    "6239154982",
   ]);
+});
+
+test("Planner 26 pins versioned OSM provenance for every coordinate used in the geometry boundary", () => {
+  const authority = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
+  const [previous, next] = authority.adjacentJunctionCandidates;
+
+  assert.deepEqual(
+    [
+      authority.connectionNode.sourceObjectId,
+      authority.connectionNode.sourceVersion,
+      authority.connectionNode.sourceTimestamp,
+      authority.connectionNode.sourceChangeset,
+      authority.connectionNode.sourceVersionUrl,
+    ],
+    [
+      "7053320515",
+      1,
+      "2019-12-13T00:23:10Z",
+      78341336,
+      "https://api.openstreetmap.org/api/0.6/node/7053320515/1",
+    ],
+  );
+  assert.deepEqual(
+    [
+      previous.node.sourceObjectId,
+      previous.node.sourceVersion,
+      previous.node.sourceTimestamp,
+      previous.node.sourceChangeset,
+      previous.node.sourceVersionUrl,
+    ],
+    [
+      "1619736626",
+      2,
+      "2013-12-23T19:47:46Z",
+      19606502,
+      "https://api.openstreetmap.org/api/0.6/node/1619736626/2",
+    ],
+  );
+  assert.deepEqual(
+    [
+      next.node.sourceObjectId,
+      next.node.sourceVersion,
+      next.node.sourceTimestamp,
+      next.node.sourceChangeset,
+      next.node.sourceVersionUrl,
+    ],
+    [
+      "6239154982",
+      1,
+      "2019-01-27T06:49:41Z",
+      66670306,
+      "https://api.openstreetmap.org/api/0.6/node/6239154982/1",
+    ],
+  );
 });
 
 test("Planner 26 preserves the qualified ingress connection coordinate exactly", () => {
@@ -72,27 +131,45 @@ test("Planner 26 preserves the qualified ingress connection coordinate exactly",
     [authority.connectionNode.lat, authority.connectionNode.lng],
     [ingressNode.lat, ingressNode.lng],
   );
+});
+
+test("Planner 26 preserves both adjacent pedestrian branch candidates without selecting an endpoint", () => {
+  const authority = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
+  const [previous, next] = authority.adjacentJunctionCandidates;
+
+  assert.equal(authority.endpointSelection, "unresolved");
   assert.deepEqual(
-    [authority.endpointNode.sourceObjectId, authority.endpointNode.lat, authority.endpointNode.lng],
-    ["1619736626", 32.735201, -117.1496375],
+    [
+      previous.node.sourceObjectId,
+      previous.relativePosition,
+      previous.connectorWayId,
+      previous.connectorName,
+    ],
+    ["1619736626", "previous-adjacent", "148910139", "Treetops Way"],
+  );
+  assert.deepEqual(
+    [
+      next.node.sourceObjectId,
+      next.relativePosition,
+      next.connectorWayId,
+      next.connectorName,
+    ],
+    ["6239154982", "next-adjacent", "666404421", null],
   );
 });
 
-test("Planner 26 selects the nearest adjacent named pedestrian junction without hiding the unnamed alternative", () => {
-  const authority = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
-  const [named, unnamed] = authority.adjacentJunctionCandidates;
+test("a connector name is retained only as source context and cannot choose the expansion endpoint", () => {
+  const assessment = assessInteriorFrontStreetGeometry();
 
+  assert.deepEqual(assessment.candidateEndpointNodeIds, [
+    "1619736626",
+    "6239154982",
+  ]);
   assert.equal(
-    authority.endpointSelectionRule,
-    "nearest-adjacent-node-with-distinct-named-pedestrian-connector",
-  );
-  assert.deepEqual(
-    [named.nodeId, named.connectorWayId, named.connectorName, named.namedPedestrianConnector],
-    ["1619736626", "148910139", "Treetops Way", true],
-  );
-  assert.deepEqual(
-    [unnamed.nodeId, unnamed.connectorWayId, unnamed.connectorName, unnamed.namedPedestrianConnector],
-    ["6239154982", "666404421", null, false],
+    assessment.routeGraphExpansion.reasons.includes(
+      "EXPANSION_ENDPOINT_NODE_NOT_SOURCED",
+    ),
+    true,
   );
 });
 
@@ -103,24 +180,28 @@ test("Planner 26 source tags remain geometry context rather than RouteEdge seman
     [authority.highwayTag, authority.name, authority.footTag, authority.feeTag, authority.surfaceTag],
     ["pedestrian", "Front Street", "customers", "yes", "asphalt"],
   );
-  assert.equal(authority.plannerMaterialization, "geometry-only");
+  assert.equal(authority.plannerMaterialization, "geometry-candidates-only");
   for (const field of ROUTE_EDGE_FIELDS) {
     assert.equal(field in authority, false);
   }
 });
 
-test("Planner 26 clears only geometry and endpoint blockers and keeps every remaining RouteEdge semantic blocked", () => {
+test("Planner 26 clears only the geometry blocker and keeps endpoint plus every RouteEdge semantic blocked", () => {
   assert.deepEqual(assessInteriorFrontStreetGeometry(), {
-    status: "geometry-ready",
-    authorityId: "sdz-interior-front-street-first-junction-geometry",
+    status: "geometry-candidates-ready",
+    authorityId: "sdz-interior-front-street-adjacent-geometry",
     sourceWayId: "1481425058",
     connectionNodeId: "7053320515",
-    endpointNodeId: "1619736626",
-    endpointConnectorWayId: "148910139",
-    sourceWaySliceNodeIds: ["1619736626", "7053320515"],
+    candidateEndpointNodeIds: ["1619736626", "6239154982"],
+    sourceWayNeighborhoodNodeIds: [
+      "1619736626",
+      "7053320515",
+      "6239154982",
+    ],
     routeGraphExpansion: {
       status: "blocked",
       reasons: [
+        "EXPANSION_ENDPOINT_NODE_NOT_SOURCED",
         "EXACT_SEGMENT_MODE_NOT_SOURCED",
         "EXACT_SEGMENT_DISTANCE_NOT_SOURCED",
         "EXACT_SEGMENT_DURATION_NOT_SOURCED",
@@ -142,43 +223,45 @@ test("Planner 26 rejects connection-coordinate drift from the qualified ingress 
 
   assert.throws(
     () => assertInteriorFrontStreetGeometryAuthorityIntegrity([forged]),
-    /connection-node coordinates drifted from qualified ingress geometry/,
+    /connection node drifted from versioned OSM node provenance/,
   );
 });
 
-test("Planner 26 rejects endpoint or exact source-way-slice drift", () => {
-  const endpointDrift = mutableClone();
-  Object.assign(endpointDrift.endpointNode, {
-    sourceObjectId: "6239154982",
-    sourceUrl: "https://www.openstreetmap.org/node/6239154982",
-    lat: 32.7349978,
-    lng: -117.1495509,
-  });
-  assert.throws(
-    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([endpointDrift]),
-    /selected endpoint or exact Front Street source-way slice drifted/,
-  );
-
-  const sliceDrift = mutableClone();
-  (sliceDrift.sourceWaySliceNodeIds as unknown as string[]).reverse();
-  assert.throws(
-    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([sliceDrift]),
-    /selected endpoint or exact Front Street source-way slice drifted/,
-  );
-});
-
-test("Planner 26 rejects loss of the named Treetops Way junction evidence", () => {
+test("Planner 26 rejects exact source-way neighborhood drift", () => {
   const forged = mutableClone();
-  const named = forged.adjacentJunctionCandidates[0] as {
-    connectorName: string | null;
-    namedPedestrianConnector: boolean;
-  };
-  named.connectorName = null;
-  named.namedPedestrianConnector = false;
+  (forged.sourceWayNeighborhoodNodeIds as unknown as string[]).reverse();
 
   assert.throws(
     () => assertInteriorFrontStreetGeometryAuthorityIntegrity([forged]),
-    /named Treetops Way junction evidence drifted/,
+    /exact Front Street source-way neighborhood drifted/,
+  );
+});
+
+test("Planner 26 rejects candidate node-version drift even when the live node URL still matches", () => {
+  const forged = mutableClone();
+  const previous = forged.adjacentJunctionCandidates[0] as unknown as {
+    node: { sourceVersion: number; sourceVersionUrl: string };
+  };
+  previous.node.sourceVersion = 3;
+  previous.node.sourceVersionUrl =
+    "https://api.openstreetmap.org/api/0.6/node/1619736626/3";
+
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([forged]),
+    /previous adjacent node drifted from versioned OSM node provenance/,
+  );
+});
+
+test("Planner 26 rejects adjacent connector evidence drift without turning names into selection policy", () => {
+  const forged = mutableClone();
+  const previous = forged.adjacentJunctionCandidates[0] as unknown as {
+    connectorName: string | null;
+  };
+  previous.connectorName = "Renamed Path";
+
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity([forged]),
+    /previous adjacent junction evidence drifted/,
   );
 });
 
@@ -205,15 +288,51 @@ test("Planner 26 runtime boundary rejects hidden aliases and RouteEdge field smu
   );
 });
 
-test("Planner 26 nested arrays reject extra named or symbol properties", () => {
-  const extraArrayField = mutableClone();
-  const slice = extraArrayField.sourceWaySliceNodeIds as unknown as string[] & {
+test("Planner 26 validates the outer authority collection as an exact ordinary array", () => {
+  const decorated = [mutableClone()] as unknown as InteriorFrontStreetGeometryAuthority[] & {
     distanceMeters?: number;
   };
-  slice.distanceMeters = 7;
+  Object.defineProperty(decorated, "distanceMeters", {
+    value: 7,
+    enumerable: false,
+  });
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity(decorated),
+    /geometry authority collection cannot contain extra own properties/,
+  );
+
+  const symbolDecorated = [mutableClone()];
+  Object.defineProperty(symbolDecorated, Symbol("distanceMeters"), {
+    value: 7,
+    enumerable: false,
+  });
+  assert.throws(
+    () =>
+      assertInteriorFrontStreetGeometryAuthorityIntegrity(
+        symbolDecorated,
+      ),
+    /geometry authority collection cannot contain extra own properties/,
+  );
+
+  const arrayLike = {
+    0: mutableClone(),
+    length: 1,
+  } as unknown as readonly InteriorFrontStreetGeometryAuthority[];
+  assert.throws(
+    () => assertInteriorFrontStreetGeometryAuthorityIntegrity(arrayLike),
+    /geometry authority collection must be an ordinary array of length 1/,
+  );
+});
+
+test("Planner 26 nested arrays reject extra named or symbol properties", () => {
+  const extraArrayField = mutableClone();
+  const neighborhood = extraArrayField.sourceWayNeighborhoodNodeIds as unknown as string[] & {
+    distanceMeters?: number;
+  };
+  neighborhood.distanceMeters = 7;
   assert.throws(
     () => assertInteriorFrontStreetGeometryAuthorityIntegrity([extraArrayField]),
-    /source-way slice cannot contain extra own properties/,
+    /source-way neighborhood cannot contain extra own properties/,
   );
 
   const symbolField = mutableClone();
@@ -233,14 +352,15 @@ test("Planner 26 authority and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY), true);
   assert.equal(Object.isFrozen(authority), true);
   assert.equal(Object.isFrozen(authority.connectionNode), true);
-  assert.equal(Object.isFrozen(authority.endpointNode), true);
-  assert.equal(Object.isFrozen(authority.sourceWaySliceNodeIds), true);
+  assert.equal(Object.isFrozen(authority.sourceWayNeighborhoodNodeIds), true);
   assert.equal(Object.isFrozen(authority.adjacentJunctionCandidates), true);
   assert.equal(Object.isFrozen(authority.adjacentJunctionCandidates[0]), true);
+  assert.equal(Object.isFrozen(authority.adjacentJunctionCandidates[0].node), true);
 
   const assessment = assessInteriorFrontStreetGeometry();
   assert.equal(Object.isFrozen(assessment), true);
-  assert.equal(Object.isFrozen(assessment.sourceWaySliceNodeIds), true);
+  assert.equal(Object.isFrozen(assessment.candidateEndpointNodeIds), true);
+  assert.equal(Object.isFrozen(assessment.sourceWayNeighborhoodNodeIds), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion.reasons), true);
 });
