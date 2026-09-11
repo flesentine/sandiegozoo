@@ -2,43 +2,41 @@ name: Planner28 Literal Type Fix
 
 on:
   push:
-    branches:
-      - planner/planner-28-objective-segment-distance
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.event.head_commit.message == 'Planner 28: add temporary literal type fix workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           ref: planner/planner-28-objective-segment-distance
       - name: Freeze literal provenance values
+        shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          path = Path('src/data/zooInteriorObjectiveSegmentDistanceAuthority.ts')
+          path = Path("src/data/zooInteriorObjectiveSegmentDistanceAuthority.ts")
           text = path.read_text()
-          replacements = {
-              'sourceFromNodeVersion: geometry.connectionNode.sourceVersion,': 'sourceFromNodeVersion: 1,',
-              'sourceFromNodeTimestamp: geometry.connectionNode.sourceTimestamp,': 'sourceFromNodeTimestamp: "2019-12-13T00:23:10Z",',
-              'sourceFromNodeChangeset: geometry.connectionNode.sourceChangeset,': 'sourceFromNodeChangeset: 78341336,',
-              'sourceToNodeVersion: selectedCandidate.node.sourceVersion,': 'sourceToNodeVersion: 2,',
-              'sourceToNodeTimestamp: selectedCandidate.node.sourceTimestamp,': 'sourceToNodeTimestamp: "2013-12-23T19:47:46Z",',
-              'sourceToNodeChangeset: selectedCandidate.node.sourceChangeset,': 'sourceToNodeChangeset: 19606502,',
-          }
-          for old, new in replacements.items():
+          replacements = [
+              ("sourceFromNodeVersion: geometry.connectionNode.sourceVersion,", "sourceFromNodeVersion: 1,"),
+              ("sourceFromNodeTimestamp: geometry.connectionNode.sourceTimestamp,", "sourceFromNodeTimestamp: \"2019-12-13T00:23:10Z\","),
+              ("sourceFromNodeChangeset: geometry.connectionNode.sourceChangeset,", "sourceFromNodeChangeset: 78341336,"),
+              ("sourceToNodeVersion: selectedCandidate.node.sourceVersion,", "sourceToNodeVersion: 2,"),
+              ("sourceToNodeTimestamp: selectedCandidate.node.sourceTimestamp,", "sourceToNodeTimestamp: \"2013-12-23T19:47:46Z\","),
+              ("sourceToNodeChangeset: selectedCandidate.node.sourceChangeset,", "sourceToNodeChangeset: 19606502,"),
+          ]
+          for old, new in replacements:
               if text.count(old) != 1:
-                  raise SystemExit(f'Expected exactly one occurrence: {old!r}')
+                  raise SystemExit(f"Expected exactly one occurrence: {old!r}")
               text = text.replace(old, new)
           path.write_text(text)
           PY
           git diff --check
-          git diff -- src/data/zooInteriorObjectiveSegmentDistanceAuthority.ts
       - name: Commit fix
+        shell: bash
         run: |
           git config user.name "flesentine"
           git config user.email "chrisgmcc@gmail.com"
