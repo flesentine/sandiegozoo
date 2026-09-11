@@ -6,31 +6,34 @@ import {
 } from "./zooIngressDistanceAuthority.ts";
 
 const FRONT_STREET_GEOMETRY_AUTHORITY_ID =
-  "sdz-interior-front-street-first-junction-geometry" as const;
+  "sdz-interior-front-street-adjacent-geometry" as const;
 const FRONT_STREET_WAY_ID = "1481425058" as const;
 const CONNECTION_NODE_ID = "7053320515" as const;
-const ENDPOINT_NODE_ID = "1619736626" as const;
-const ENDPOINT_CONNECTOR_WAY_ID = "148910139" as const;
+const PREVIOUS_ADJACENT_NODE_ID = "1619736626" as const;
+const NEXT_ADJACENT_NODE_ID = "6239154982" as const;
 
 export type FrontStreetGeometryNode = {
   sourceObjectId: string;
   sourceUrl: string;
+  sourceVersionUrl: string;
+  sourceVersion: number;
+  sourceTimestamp: string;
+  sourceChangeset: number;
   lat: number;
   lng: number;
 };
 
 export type FrontStreetAdjacentJunctionCandidate = {
-  nodeId: string;
-  nodeSourceUrl: string;
+  node: FrontStreetGeometryNode;
   relativePosition: "previous-adjacent" | "next-adjacent";
   connectorWayId: string;
   connectorWayUrl: string;
+  connectorWayVersionUrl: string;
   connectorWayVersion: number;
   connectorWayTimestamp: string;
   connectorHighway: "footway";
   connectorName: string | null;
   connectorSurface: string | null;
-  namedPedestrianConnector: boolean;
 };
 
 export type InteriorFrontStreetGeometryAuthority = {
@@ -38,6 +41,7 @@ export type InteriorFrontStreetGeometryAuthority = {
   provider: "OpenStreetMap";
   sourceWayId: typeof FRONT_STREET_WAY_ID;
   sourceWayUrl: string;
+  sourceWayVersionUrl: string;
   sourceWayVersion: 1;
   sourceWayTimestamp: "2026-02-21T14:47:49Z";
   sourceWayNodeCount: 17;
@@ -48,31 +52,30 @@ export type InteriorFrontStreetGeometryAuthority = {
   feeTag: "yes";
   surfaceTag: "asphalt";
   connectionNode: FrontStreetGeometryNode;
-  endpointNode: FrontStreetGeometryNode;
-  sourceWaySliceNodeIds: readonly [
-    typeof ENDPOINT_NODE_ID,
+  sourceWayNeighborhoodNodeIds: readonly [
+    typeof PREVIOUS_ADJACENT_NODE_ID,
     typeof CONNECTION_NODE_ID,
+    typeof NEXT_ADJACENT_NODE_ID,
   ];
-  endpointSelectionRule:
-    "nearest-adjacent-node-with-distinct-named-pedestrian-connector";
   adjacentJunctionCandidates: readonly [
     FrontStreetAdjacentJunctionCandidate,
     FrontStreetAdjacentJunctionCandidate,
   ];
-  plannerMaterialization: "geometry-only";
+  endpointSelection: "unresolved";
+  plannerMaterialization: "geometry-candidates-only";
 };
 
 export type InteriorFrontStreetGeometryAssessment = {
-  status: "geometry-ready";
+  status: "geometry-candidates-ready";
   authorityId: string;
   sourceWayId: string;
   connectionNodeId: string;
-  endpointNodeId: string;
-  endpointConnectorWayId: string;
-  sourceWaySliceNodeIds: readonly string[];
+  candidateEndpointNodeIds: readonly [string, string];
+  sourceWayNeighborhoodNodeIds: readonly [string, string, string];
   routeGraphExpansion: {
     status: "blocked";
     reasons: readonly [
+      "EXPANSION_ENDPOINT_NODE_NOT_SOURCED",
       "EXACT_SEGMENT_MODE_NOT_SOURCED",
       "EXACT_SEGMENT_DISTANCE_NOT_SOURCED",
       "EXACT_SEGMENT_DURATION_NOT_SOURCED",
@@ -95,6 +98,7 @@ const TOP_LEVEL_FIELDS = [
   "provider",
   "sourceWayId",
   "sourceWayUrl",
+  "sourceWayVersionUrl",
   "sourceWayVersion",
   "sourceWayTimestamp",
   "sourceWayNodeCount",
@@ -105,32 +109,34 @@ const TOP_LEVEL_FIELDS = [
   "feeTag",
   "surfaceTag",
   "connectionNode",
-  "endpointNode",
-  "sourceWaySliceNodeIds",
-  "endpointSelectionRule",
+  "sourceWayNeighborhoodNodeIds",
   "adjacentJunctionCandidates",
+  "endpointSelection",
   "plannerMaterialization",
 ] as const;
 
 const NODE_FIELDS = [
   "sourceObjectId",
   "sourceUrl",
+  "sourceVersionUrl",
+  "sourceVersion",
+  "sourceTimestamp",
+  "sourceChangeset",
   "lat",
   "lng",
 ] as const;
 
 const JUNCTION_FIELDS = [
-  "nodeId",
-  "nodeSourceUrl",
+  "node",
   "relativePosition",
   "connectorWayId",
   "connectorWayUrl",
+  "connectorWayVersionUrl",
   "connectorWayVersion",
   "connectorWayTimestamp",
   "connectorHighway",
   "connectorName",
   "connectorSurface",
-  "namedPedestrianConnector",
 ] as const;
 
 const FORBIDDEN_ROUTE_EDGE_FIELDS = [
@@ -150,6 +156,7 @@ const FORBIDDEN_ROUTE_EDGE_FIELDS = [
 ] as const;
 
 const REMAINING_BLOCK_REASONS = [
+  "EXPANSION_ENDPOINT_NODE_NOT_SOURCED",
   "EXACT_SEGMENT_MODE_NOT_SOURCED",
   "EXACT_SEGMENT_DISTANCE_NOT_SOURCED",
   "EXACT_SEGMENT_DURATION_NOT_SOURCED",
@@ -268,6 +275,33 @@ function validOsmObjectUrl(
   }
 }
 
+function validOsmVersionUrl(
+  value: unknown,
+  objectType: "node" | "way",
+  objectId: unknown,
+  version: unknown,
+) {
+  if (
+    typeof value !== "string" ||
+    typeof objectId !== "string" ||
+    typeof version !== "number" ||
+    !Number.isSafeInteger(version) ||
+    version < 1
+  ) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "api.openstreetmap.org" &&
+      url.pathname === `/api/0.6/${objectType}/${objectId}/${version}`
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validCoordinate(lat: unknown, lng: unknown) {
   return (
     typeof lat === "number" &&
@@ -289,6 +323,14 @@ function validTimestamp(value: unknown) {
   );
 }
 
+function validChangeset(value: unknown) {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0
+  );
+}
+
 function assertNoRouteEdgeMaterialization(
   value: Record<string, unknown>,
   label: string,
@@ -300,12 +342,48 @@ function assertNoRouteEdgeMaterialization(
   }
 }
 
+function assertNodeProvenance(
+  node: FrontStreetGeometryNode,
+  expected: {
+    id: string;
+    version: number;
+    timestamp: string;
+    changeset: number;
+    lat: number;
+    lng: number;
+  },
+  label: string,
+) {
+  if (
+    node.sourceObjectId !== expected.id ||
+    node.sourceVersion !== expected.version ||
+    node.sourceTimestamp !== expected.timestamp ||
+    node.sourceChangeset !== expected.changeset ||
+    node.lat !== expected.lat ||
+    node.lng !== expected.lng ||
+    !validOsmObjectUrl(node.sourceUrl, "node", node.sourceObjectId) ||
+    !validOsmVersionUrl(
+      node.sourceVersionUrl,
+      "node",
+      node.sourceObjectId,
+      node.sourceVersion,
+    ) ||
+    !validTimestamp(node.sourceTimestamp) ||
+    !validChangeset(node.sourceChangeset) ||
+    !validCoordinate(node.lat, node.lng)
+  ) {
+    throw new Error(`${label} drifted from versioned OSM node provenance.`);
+  }
+}
+
 const RAW_AUTHORITY: InteriorFrontStreetGeometryAuthority[] = [
   {
     id: FRONT_STREET_GEOMETRY_AUTHORITY_ID,
     provider: "OpenStreetMap",
     sourceWayId: FRONT_STREET_WAY_ID,
     sourceWayUrl: "https://www.openstreetmap.org/way/1481425058",
+    sourceWayVersionUrl:
+      "https://api.openstreetmap.org/api/0.6/way/1481425058/1",
     sourceWayVersion: 1,
     sourceWayTimestamp: "2026-02-21T14:47:49Z",
     sourceWayNodeCount: 17,
@@ -318,59 +396,80 @@ const RAW_AUTHORITY: InteriorFrontStreetGeometryAuthority[] = [
     connectionNode: {
       sourceObjectId: CONNECTION_NODE_ID,
       sourceUrl: "https://www.openstreetmap.org/node/7053320515",
+      sourceVersionUrl:
+        "https://api.openstreetmap.org/api/0.6/node/7053320515/1",
+      sourceVersion: 1,
+      sourceTimestamp: "2019-12-13T00:23:10Z",
+      sourceChangeset: 78341336,
       lat: 32.7351404,
       lng: -117.1496117,
     },
-    endpointNode: {
-      sourceObjectId: ENDPOINT_NODE_ID,
-      sourceUrl: "https://www.openstreetmap.org/node/1619736626",
-      lat: 32.735201,
-      lng: -117.1496375,
-    },
-    sourceWaySliceNodeIds: [
-      ENDPOINT_NODE_ID,
+    sourceWayNeighborhoodNodeIds: [
+      PREVIOUS_ADJACENT_NODE_ID,
       CONNECTION_NODE_ID,
+      NEXT_ADJACENT_NODE_ID,
     ],
-    endpointSelectionRule:
-      "nearest-adjacent-node-with-distinct-named-pedestrian-connector",
     adjacentJunctionCandidates: [
       {
-        nodeId: ENDPOINT_NODE_ID,
-        nodeSourceUrl: "https://www.openstreetmap.org/node/1619736626",
+        node: {
+          sourceObjectId: PREVIOUS_ADJACENT_NODE_ID,
+          sourceUrl: "https://www.openstreetmap.org/node/1619736626",
+          sourceVersionUrl:
+            "https://api.openstreetmap.org/api/0.6/node/1619736626/2",
+          sourceVersion: 2,
+          sourceTimestamp: "2013-12-23T19:47:46Z",
+          sourceChangeset: 19606502,
+          lat: 32.735201,
+          lng: -117.1496375,
+        },
         relativePosition: "previous-adjacent",
-        connectorWayId: ENDPOINT_CONNECTOR_WAY_ID,
+        connectorWayId: "148910139",
         connectorWayUrl: "https://www.openstreetmap.org/way/148910139",
+        connectorWayVersionUrl:
+          "https://api.openstreetmap.org/api/0.6/way/148910139/7",
         connectorWayVersion: 7,
         connectorWayTimestamp: "2026-02-21T20:28:40Z",
         connectorHighway: "footway",
         connectorName: "Treetops Way",
         connectorSurface: "concrete",
-        namedPedestrianConnector: true,
       },
       {
-        nodeId: "6239154982",
-        nodeSourceUrl: "https://www.openstreetmap.org/node/6239154982",
+        node: {
+          sourceObjectId: NEXT_ADJACENT_NODE_ID,
+          sourceUrl: "https://www.openstreetmap.org/node/6239154982",
+          sourceVersionUrl:
+            "https://api.openstreetmap.org/api/0.6/node/6239154982/1",
+          sourceVersion: 1,
+          sourceTimestamp: "2019-01-27T06:49:41Z",
+          sourceChangeset: 66670306,
+          lat: 32.7349978,
+          lng: -117.1495509,
+        },
         relativePosition: "next-adjacent",
         connectorWayId: "666404421",
         connectorWayUrl: "https://www.openstreetmap.org/way/666404421",
+        connectorWayVersionUrl:
+          "https://api.openstreetmap.org/api/0.6/way/666404421/2",
         connectorWayVersion: 2,
         connectorWayTimestamp: "2023-01-04T00:10:45Z",
         connectorHighway: "footway",
         connectorName: null,
         connectorSurface: null,
-        namedPedestrianConnector: false,
       },
     ],
-    plannerMaterialization: "geometry-only",
+    endpointSelection: "unresolved",
+    plannerMaterialization: "geometry-candidates-only",
   },
 ];
 
 export function assertInteriorFrontStreetGeometryAuthorityIntegrity(
   authorities: readonly InteriorFrontStreetGeometryAuthority[],
 ) {
-  if (authorities.length !== 1) {
-    throw new Error("Planner 26 requires exactly one Front Street geometry authority record.");
-  }
+  assertExactOrdinaryArray(
+    authorities,
+    1,
+    "Planner 26 geometry authority collection",
+  );
 
   const candidate: unknown = authorities[0];
   assertExactPlainObject(candidate, TOP_LEVEL_FIELDS, "Planner 26 geometry authority");
@@ -378,11 +477,19 @@ export function assertInteriorFrontStreetGeometryAuthorityIntegrity(
 
   const record = candidate as unknown as InteriorFrontStreetGeometryAuthority;
   assertExactPlainObject(record.connectionNode, NODE_FIELDS, "Planner 26 connection node");
-  assertExactPlainObject(record.endpointNode, NODE_FIELDS, "Planner 26 endpoint node");
-  assertExactOrdinaryArray(record.sourceWaySliceNodeIds, 2, "Planner 26 source-way slice");
-  assertExactOrdinaryArray(record.adjacentJunctionCandidates, 2, "Planner 26 adjacent-junction candidates");
+  assertExactOrdinaryArray(
+    record.sourceWayNeighborhoodNodeIds,
+    3,
+    "Planner 26 source-way neighborhood",
+  );
+  assertExactOrdinaryArray(
+    record.adjacentJunctionCandidates,
+    2,
+    "Planner 26 adjacent-junction candidates",
+  );
   for (const [index, junction] of record.adjacentJunctionCandidates.entries()) {
     assertExactPlainObject(junction, JUNCTION_FIELDS, `Planner 26 junction candidate ${index}`);
+    assertExactPlainObject(junction.node, NODE_FIELDS, `Planner 26 junction candidate ${index} node`);
   }
 
   const seed = INTERIOR_GRAPH_EXPANSION_SEEDS.find(
@@ -411,26 +518,37 @@ export function assertInteriorFrontStreetGeometryAuthorityIntegrity(
     record.footTag !== "customers" ||
     record.feeTag !== "yes" ||
     record.surfaceTag !== "asphalt" ||
-    record.plannerMaterialization !== "geometry-only"
+    record.endpointSelection !== "unresolved" ||
+    record.plannerMaterialization !== "geometry-candidates-only"
   ) {
     throw new Error("Planner 26 Front Street geometry authority drifted from the sourced OSM snapshot or Planner 25 seed.");
   }
 
   if (
     !validOsmObjectUrl(record.sourceWayUrl, "way", record.sourceWayId) ||
+    !validOsmVersionUrl(
+      record.sourceWayVersionUrl,
+      "way",
+      record.sourceWayId,
+      record.sourceWayVersion,
+    ) ||
     !validTimestamp(record.sourceWayTimestamp)
   ) {
     throw new Error("Planner 26 Front Street source-way provenance is malformed.");
   }
 
-  for (const node of [record.connectionNode, record.endpointNode]) {
-    if (
-      !validOsmObjectUrl(node.sourceUrl, "node", node.sourceObjectId) ||
-      !validCoordinate(node.lat, node.lng)
-    ) {
-      throw new Error(`Planner 26 geometry node ${node.sourceObjectId} is malformed.`);
-    }
-  }
+  assertNodeProvenance(
+    record.connectionNode,
+    {
+      id: CONNECTION_NODE_ID,
+      version: 1,
+      timestamp: "2019-12-13T00:23:10Z",
+      changeset: 78341336,
+      lat: 32.7351404,
+      lng: -117.1496117,
+    },
+    "Planner 26 connection node",
+  );
 
   if (
     record.connectionNode.lat !== ingressConnection.lat ||
@@ -440,37 +558,64 @@ export function assertInteriorFrontStreetGeometryAuthorityIntegrity(
   }
 
   if (
-    record.endpointNode.sourceObjectId !== ENDPOINT_NODE_ID ||
-    record.endpointNode.lat !== 32.735201 ||
-    record.endpointNode.lng !== -117.1496375 ||
-    record.sourceWaySliceNodeIds[0] !== ENDPOINT_NODE_ID ||
-    record.sourceWaySliceNodeIds[1] !== CONNECTION_NODE_ID ||
-    record.endpointSelectionRule !==
-      "nearest-adjacent-node-with-distinct-named-pedestrian-connector"
+    record.sourceWayNeighborhoodNodeIds[0] !== PREVIOUS_ADJACENT_NODE_ID ||
+    record.sourceWayNeighborhoodNodeIds[1] !== CONNECTION_NODE_ID ||
+    record.sourceWayNeighborhoodNodeIds[2] !== NEXT_ADJACENT_NODE_ID
   ) {
-    throw new Error("Planner 26 selected endpoint or exact Front Street source-way slice drifted.");
+    throw new Error("Planner 26 exact Front Street source-way neighborhood drifted.");
   }
 
   const [previousCandidate, nextCandidate] = record.adjacentJunctionCandidates;
+
+  assertNodeProvenance(
+    previousCandidate.node,
+    {
+      id: PREVIOUS_ADJACENT_NODE_ID,
+      version: 2,
+      timestamp: "2013-12-23T19:47:46Z",
+      changeset: 19606502,
+      lat: 32.735201,
+      lng: -117.1496375,
+    },
+    "Planner 26 previous adjacent node",
+  );
   if (
-    previousCandidate.nodeId !== ENDPOINT_NODE_ID ||
     previousCandidate.relativePosition !== "previous-adjacent" ||
-    previousCandidate.connectorWayId !== ENDPOINT_CONNECTOR_WAY_ID ||
+    previousCandidate.connectorWayId !== "148910139" ||
     previousCandidate.connectorWayVersion !== 7 ||
     previousCandidate.connectorWayTimestamp !== "2026-02-21T20:28:40Z" ||
     previousCandidate.connectorHighway !== "footway" ||
     previousCandidate.connectorName !== "Treetops Way" ||
     previousCandidate.connectorSurface !== "concrete" ||
-    previousCandidate.namedPedestrianConnector !== true ||
-    !validOsmObjectUrl(previousCandidate.nodeSourceUrl, "node", previousCandidate.nodeId) ||
-    !validOsmObjectUrl(previousCandidate.connectorWayUrl, "way", previousCandidate.connectorWayId) ||
+    !validOsmObjectUrl(
+      previousCandidate.connectorWayUrl,
+      "way",
+      previousCandidate.connectorWayId,
+    ) ||
+    !validOsmVersionUrl(
+      previousCandidate.connectorWayVersionUrl,
+      "way",
+      previousCandidate.connectorWayId,
+      previousCandidate.connectorWayVersion,
+    ) ||
     !validTimestamp(previousCandidate.connectorWayTimestamp)
   ) {
-    throw new Error("Planner 26 named Treetops Way junction evidence drifted.");
+    throw new Error("Planner 26 previous adjacent junction evidence drifted.");
   }
 
+  assertNodeProvenance(
+    nextCandidate.node,
+    {
+      id: NEXT_ADJACENT_NODE_ID,
+      version: 1,
+      timestamp: "2019-01-27T06:49:41Z",
+      changeset: 66670306,
+      lat: 32.7349978,
+      lng: -117.1495509,
+    },
+    "Planner 26 next adjacent node",
+  );
   if (
-    nextCandidate.nodeId !== "6239154982" ||
     nextCandidate.relativePosition !== "next-adjacent" ||
     nextCandidate.connectorWayId !== "666404421" ||
     nextCandidate.connectorWayVersion !== 2 ||
@@ -478,12 +623,20 @@ export function assertInteriorFrontStreetGeometryAuthorityIntegrity(
     nextCandidate.connectorHighway !== "footway" ||
     nextCandidate.connectorName !== null ||
     nextCandidate.connectorSurface !== null ||
-    nextCandidate.namedPedestrianConnector !== false ||
-    !validOsmObjectUrl(nextCandidate.nodeSourceUrl, "node", nextCandidate.nodeId) ||
-    !validOsmObjectUrl(nextCandidate.connectorWayUrl, "way", nextCandidate.connectorWayId) ||
+    !validOsmObjectUrl(
+      nextCandidate.connectorWayUrl,
+      "way",
+      nextCandidate.connectorWayId,
+    ) ||
+    !validOsmVersionUrl(
+      nextCandidate.connectorWayVersionUrl,
+      "way",
+      nextCandidate.connectorWayId,
+      nextCandidate.connectorWayVersion,
+    ) ||
     !validTimestamp(nextCandidate.connectorWayTimestamp)
   ) {
-    throw new Error("Planner 26 unnamed adjacent-junction evidence drifted.");
+    throw new Error("Planner 26 next adjacent junction evidence drifted.");
   }
 }
 
@@ -496,13 +649,17 @@ export const INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY:
 export function assessInteriorFrontStreetGeometry(): InteriorFrontStreetGeometryAssessment {
   const record = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
   return deepFreeze({
-    status: "geometry-ready",
+    status: "geometry-candidates-ready",
     authorityId: record.id,
     sourceWayId: record.sourceWayId,
     connectionNodeId: record.connectionNode.sourceObjectId,
-    endpointNodeId: record.endpointNode.sourceObjectId,
-    endpointConnectorWayId: ENDPOINT_CONNECTOR_WAY_ID,
-    sourceWaySliceNodeIds: [...record.sourceWaySliceNodeIds],
+    candidateEndpointNodeIds: [
+      record.adjacentJunctionCandidates[0].node.sourceObjectId,
+      record.adjacentJunctionCandidates[1].node.sourceObjectId,
+    ],
+    sourceWayNeighborhoodNodeIds: [
+      ...record.sourceWayNeighborhoodNodeIds,
+    ] as [string, string, string],
     routeGraphExpansion: {
       status: "blocked",
       reasons: [...REMAINING_BLOCK_REASONS],
