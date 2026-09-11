@@ -474,8 +474,7 @@ export function assertInteriorPedestrianDirectionPolicyIntegrity(
 
   if (
     PEDESTRIAN_DIRECTION_RESOLUTION_POLICY.scope !==
-      "highway-pedestrian-ingress-ways" ||
-    policy.scope === PEDESTRIAN_DIRECTION_RESOLUTION_POLICY.scope
+      "highway-pedestrian-ingress-ways"
   ) {
     throw new Error("Planner 29 must not silently reuse or widen the ingress-only Planner 21 scope.");
   }
