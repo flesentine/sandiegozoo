@@ -1,0 +1,78 @@
+name: Planner26 OSM Probe
+
+on:
+  push:
+    branches:
+      - planner/planner-26-front-street-geometry
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe exact Front Street OSM geometry
+        shell: python
+        run: |
+          import json
+          import urllib.request
+          import xml.etree.ElementTree as ET
+
+          WAY_ID = "1481425058"
+          CONNECTION_NODE_ID = "7053320515"
+
+          def fetch_xml(url):
+              req = urllib.request.Request(url, headers={"User-Agent": "WildRoute-Planner26-source-probe/1.0"})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return ET.fromstring(response.read())
+
+          full = fetch_xml(f"https://api.openstreetmap.org/api/0.6/way/{WAY_ID}/full")
+          way = next(element for element in full if element.tag == "way" and element.attrib["id"] == WAY_ID)
+          node_ids = [nd.attrib["ref"] for nd in way.findall("nd")]
+          node_by_id = {
+              element.attrib["id"]: {
+                  "lat": float(element.attrib["lat"]),
+                  "lon": float(element.attrib["lon"]),
+              }
+              for element in full
+              if element.tag == "node"
+          }
+          tags = {tag.attrib["k"]: tag.attrib["v"] for tag in way.findall("tag")}
+
+          if CONNECTION_NODE_ID not in node_ids:
+              raise SystemExit(f"connection node {CONNECTION_NODE_ID} is not on way {WAY_ID}")
+
+          connection_index = node_ids.index(CONNECTION_NODE_ID)
+          print("WAY_META=" + json.dumps({
+              "wayId": WAY_ID,
+              "version": int(way.attrib["version"]),
+              "timestamp": way.attrib["timestamp"],
+              "tags": tags,
+              "connectionIndex": connection_index,
+              "nodeCount": len(node_ids),
+          }, sort_keys=True))
+          print("WAY_NODES=" + json.dumps([
+              {"id": node_id, **node_by_id[node_id]}
+              for node_id in node_ids
+          ], separators=(",", ":")))
+
+          connected = []
+          for index, node_id in enumerate(node_ids):
+              ways_doc = fetch_xml(f"https://api.openstreetmap.org/api/0.6/node/{node_id}/ways")
+              memberships = []
+              for member_way in ways_doc.findall("way"):
+                  member_tags = {tag.attrib["k"]: tag.attrib["v"] for tag in member_way.findall("tag")}
+                  memberships.append({
+                      "id": member_way.attrib["id"],
+                      "highway": member_tags.get("highway"),
+                      "name": member_tags.get("name"),
+                      "foot": member_tags.get("foot"),
+                      "access": member_tags.get("access"),
+                  })
+              connected.append({
+                  "index": index,
+                  "nodeId": node_id,
+                  "ways": memberships,
+              })
+          print("NODE_MEMBERSHIPS=" + json.dumps(connected, separators=(",", ":")))
