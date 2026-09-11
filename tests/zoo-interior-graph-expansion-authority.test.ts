@@ -288,6 +288,62 @@ test("prototype and non-enumerable field tricks cannot bypass the runtime schema
   );
 });
 
+test("official corridor access labels are validated as an exact ordinary string array", () => {
+  const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
+
+  const fakeJsonArray = {
+    toJSON: () => [...seed.officialCorridorAccessLabels],
+  };
+  const forgedObject = {
+    ...seed,
+    officialCorridorAccessLabels: fakeJsonArray,
+  } as unknown as InteriorGraphExpansionSeed;
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        forgedObject,
+      ]),
+    /officialCorridorAccessLabels must be an ordinary array/,
+  );
+
+  const decoratedLabels = [
+    ...seed.officialCorridorAccessLabels,
+  ] as string[] & {
+    exactSegmentDurationMinutes?: number;
+  };
+  decoratedLabels.exactSegmentDurationMinutes =
+    seed.officialPublishedWalkMinutes;
+  const forgedNamedProperty = {
+    ...seed,
+    officialCorridorAccessLabels: decoratedLabels,
+  } as InteriorGraphExpansionSeed;
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        forgedNamedProperty,
+      ]),
+    /officialCorridorAccessLabels cannot contain extra property exactSegmentDurationMinutes/,
+  );
+
+  const secret = Symbol("exactSegmentDurationMinutes");
+  const symbolDecoratedLabels = [
+    ...seed.officialCorridorAccessLabels,
+  ] as string[] & Record<symbol, number>;
+  symbolDecoratedLabels[secret] =
+    seed.officialPublishedWalkMinutes;
+  const forgedSymbolProperty = {
+    ...seed,
+    officialCorridorAccessLabels: symbolDecoratedLabels,
+  } as InteriorGraphExpansionSeed;
+  assert.throws(
+    () =>
+      assertInteriorGraphExpansionAuthorityIntegrity([
+        forgedSymbolProperty,
+      ]),
+    /officialCorridorAccessLabels cannot contain symbol properties/,
+  );
+});
+
 test("the canonical Planner 25 expansion seed ID is part of the integrity contract", () => {
   const seed = INTERIOR_GRAPH_EXPANSION_SEEDS[0];
   const renamed = {
