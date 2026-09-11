@@ -251,6 +251,72 @@ function assertExactSeedShape(
   }
 }
 
+function assertExactStringArray(
+  value: unknown,
+  expected: readonly string[],
+  label: string,
+) {
+  if (
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  ) {
+    throw new Error(
+      `${label} must be an ordinary array.`,
+    );
+  }
+
+  const ownKeys = Reflect.ownKeys(value);
+  const symbolKeys = ownKeys.filter(
+    (key): key is symbol => typeof key === "symbol",
+  );
+
+  if (symbolKeys.length > 0) {
+    throw new Error(
+      `${label} cannot contain symbol properties.`,
+    );
+  }
+
+  const expectedIndexKeys = expected.map((_, index) => String(index));
+  const allowedKeys = new Set<string>([
+    ...expectedIndexKeys,
+    "length",
+  ]);
+  const unexpectedKeys = (ownKeys as string[])
+    .filter((key) => !allowedKeys.has(key))
+    .sort();
+
+  if (unexpectedKeys.length > 0) {
+    throw new Error(
+      `${label} cannot contain extra property ${unexpectedKeys.join(
+        ", ",
+      )}.`,
+    );
+  }
+
+  if (value.length !== expected.length) {
+    throw new Error(
+      `${label} must contain exactly ${expected.length} entries.`,
+    );
+  }
+
+  for (let index = 0; index < expected.length; index += 1) {
+    const key = String(index);
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+
+    if (
+      !descriptor ||
+      !descriptor.enumerable ||
+      !("value" in descriptor) ||
+      typeof descriptor.value !== "string" ||
+      descriptor.value !== expected[index]
+    ) {
+      throw new Error(
+        `${label} entry ${index} must be the exact expected string in an enumerable own data property.`,
+      );
+    }
+  }
+}
+
 const FRONT_STREET_TOPOLOGIES =
   ENTRANCE_PEDESTRIAN_TOPOLOGY.filter(
     (record) =>
@@ -366,6 +432,14 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
     );
   }
 
+  const expectedAccessLabels =
+    FRONT_STREET_CORRIDOR.accessLabels ?? [];
+  assertExactStringArray(
+    seed.officialCorridorAccessLabels,
+    expectedAccessLabels,
+    `${label} officialCorridorAccessLabels`,
+  );
+
   if (
     seed.officialCorridorId !==
       FRONT_STREET_CORRIDOR.id ||
@@ -376,11 +450,7 @@ export function assertInteriorGraphExpansionAuthorityIntegrity(
       FRONT_STREET_CORRIDOR.publishedWalkMinutes ||
     seed.officialCorridorTerrain !== "mild" ||
     seed.officialCorridorTerrain !==
-      FRONT_STREET_CORRIDOR.terrain ||
-    JSON.stringify(seed.officialCorridorAccessLabels) !==
-      JSON.stringify(
-        FRONT_STREET_CORRIDOR.accessLabels ?? [],
-      )
+      FRONT_STREET_CORRIDOR.terrain
   ) {
     throw new Error(
       "Planner 25 Front Street expansion seed drifted from official corridor authority.",
