@@ -148,7 +148,12 @@ test("Planner 26 rejects connection-coordinate drift from the qualified ingress 
 
 test("Planner 26 rejects endpoint or exact source-way-slice drift", () => {
   const endpointDrift = mutableClone();
-  (endpointDrift.endpointNode as { sourceObjectId: string }).sourceObjectId = "6239154982";
+  Object.assign(endpointDrift.endpointNode, {
+    sourceObjectId: "6239154982",
+    sourceUrl: "https://www.openstreetmap.org/node/6239154982",
+    lat: 32.7349978,
+    lng: -117.1495509,
+  });
   assert.throws(
     () => assertInteriorFrontStreetGeometryAuthorityIntegrity([endpointDrift]),
     /selected endpoint or exact Front Street source-way slice drifted/,
