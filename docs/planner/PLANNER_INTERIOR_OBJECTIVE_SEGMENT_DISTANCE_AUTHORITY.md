@@ -117,4 +117,4 @@ In particular, the official Treetops Way 7-minute corridor summary must not be u
 
 ## Next boundary
 
-Planner 29 should qualify the next independent exact-segment semantic. The safest candidate is pedestrian mode/direction interpretation using the already pinned Front Street source-way tags and the existing Planner 21 pedestrian-direction policy, while keeping duration, mobility, terrain, and operational status independent.
+Planner 29 should qualify the next independent exact-segment semantic. Pedestrian mode/direction is the leading candidate, but Planner 21 cannot simply be reused: its frozen scope is explicitly `highway-pedestrian-ingress-ways`. Planner 29 must first source the exact Front Street direction-related tags and define a deliberate interior-segment policy/authority boundary before resolving pedestrian direction. Duration, mobility, terrain, and operational status remain independent.
