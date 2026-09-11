@@ -1,38 +1,13 @@
 name: Planner29 OSM Direction Probe
 
-on:
-  push:
-    branches:
-      - planner/planner-29-interior-pedestrian-direction
-
-permissions:
-  contents: read
+on: push
 
 jobs:
   probe:
-    if: github.event.head_commit.message == 'Planner 29: add temporary OSM direction probe'
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch exact Front Street way v1
-        shell: bash
+      - name: Fetch exact Front Street way v1 tags
         run: |
-          set -euo pipefail
-          URL='https://api.openstreetmap.org/api/0.6/way/1481425058/1'
-          curl --fail --silent --show-error --location "$URL" -o way.xml
-          echo '--- exact way metadata and tags ---'
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse('way.xml').getroot()
-          way = root.find('way')
-          if way is None:
-              raise SystemExit('way element missing')
-          print('id=', way.attrib.get('id'))
-          print('version=', way.attrib.get('version'))
-          print('timestamp=', way.attrib.get('timestamp'))
-          print('changeset=', way.attrib.get('changeset'))
-          print('nodes=', [nd.attrib['ref'] for nd in way.findall('nd')])
-          tags = {tag.attrib['k']: tag.attrib['v'] for tag in way.findall('tag')}
-          for key in sorted(tags):
-              print(f'tag:{key}={tags[key]}')
-          print('direction_subset=', {k: tags.get(k) for k in ['highway','foot','oneway','oneway:foot','access','barrier','fee']})
-          PY
+          set -e
+          curl -fsSL 'https://api.openstreetmap.org/api/0.6/way/1481425058/1' -o /tmp/way.xml
+          python3 -c "import xml.etree.ElementTree as ET; w=ET.parse('/tmp/way.xml').getroot().find('way'); print('WAY_METADATA', w.attrib); print('NODE_REFS', [n.attrib['ref'] for n in w.findall('nd')]); print('TAGS', {t.attrib['k']:t.attrib['v'] for t in w.findall('tag')})"
