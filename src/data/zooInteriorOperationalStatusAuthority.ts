@@ -3,7 +3,7 @@ import {
 } from "./zooIngressOperationalStatusAuthority.ts";
 import {
   zooOperationalDateAt,
-} from "./zooIngressRuntimeActivation.ts";
+} from "./zooOperationalClock.ts";
 import {
   INTERIOR_ACCESSIBILITY_AUTHORITY,
 } from "./zooInteriorAccessibilityAuthority.ts";

@@ -20,7 +20,7 @@ import {
 } from "../src/data/zooIngressOperationalStatusAuthority.ts";
 import {
   zooOperationalDateAt,
-} from "../src/data/zooIngressRuntimeActivation.ts";
+} from "../src/data/zooOperationalClock.ts";
 
 const TEST_NOW = Date.now();
 const TEST_DATE = zooOperationalDateAt(TEST_NOW);

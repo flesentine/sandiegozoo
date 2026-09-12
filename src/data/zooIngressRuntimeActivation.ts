@@ -1,4 +1,8 @@
 import {
+  SAN_DIEGO_ZOO_TIME_ZONE,
+  zooOperationalDateAt,
+} from "./zooOperationalClock.ts";
+import {
   INGRESS_ROUTE_EDGE_BINDINGS,
   INGRESS_ROUTE_GRAPH_DATA,
 } from "./zooIngressRouteEdgeMaterialization.ts";
@@ -9,8 +13,10 @@ import {
   type RouteResult,
 } from "../planner/routing.ts";
 
-export const SAN_DIEGO_ZOO_TIME_ZONE =
-  "America/Los_Angeles" as const;
+export {
+  SAN_DIEGO_ZOO_TIME_ZONE,
+  zooOperationalDateAt,
+};
 
 export type RuntimeEvidenceStatus =
   | "inside"
@@ -186,45 +192,6 @@ function stableId(value: string) {
     value.trim().length > 0 &&
     value === value.trim()
   );
-}
-
-export function zooOperationalDateAt(
-  nowMs: number,
-) {
-  if (!Number.isFinite(nowMs)) {
-    throw new Error(
-      "Planner 24 Zoo operational date requires a finite timestamp.",
-    );
-  }
-
-  const parts = new Intl.DateTimeFormat(
-    "en-US",
-    {
-      timeZone:
-        SAN_DIEGO_ZOO_TIME_ZONE,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    },
-  ).formatToParts(new Date(nowMs));
-
-  const values = new Map(
-    parts.map((part) => [
-      part.type,
-      part.value,
-    ]),
-  );
-  const year = values.get("year");
-  const month = values.get("month");
-  const day = values.get("day");
-
-  if (!year || !month || !day) {
-    throw new Error(
-      "Planner 24 could not resolve the San Diego Zoo local calendar date.",
-    );
-  }
-
-  return `${year}-${month}-${day}`;
 }
 
 function assertTimedEvidence(

@@ -91,7 +91,7 @@ Evidence for another segment is rejected instead of being ignored.
 
 ## Resolver-owned time
 
-The runtime resolver owns the evaluation instant via `Date.now()` and resolves the current operational date in `America/Los_Angeles` through the existing Planner 24 Zoo-date helper.
+The runtime resolver owns the evaluation instant via `Date.now()` and resolves the current operational date in `America/Los_Angeles` through the neutral Zoo operational clock extracted from Planner 24.
 
 Callers cannot supply or replay an `evaluatedAt` field.
 
