@@ -251,7 +251,7 @@ test("Planner 36 rejects coercible non-string guide URLs without invoking caller
   assert.equal(coercions, 0);
 });
 
-test("Planner 36 snapshots proxy-backed audit and guide evidence without invoking get traps", () => {
+test("Planner 36 rejects proxy-backed audit and guide evidence without invoking get traps", () => {
   const audit = mutableAudit();
   const guideTarget = { ...audit.accessibilityGuideEvidence };
   let guideReads = 0;
@@ -278,11 +278,60 @@ test("Planner 36 snapshots proxy-backed audit and guide evidence without invokin
     },
   }) as typeof audit;
 
-  assert.doesNotThrow(
+  assert.throws(
     () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+    /cannot be Proxy-backed/,
   );
   assert.equal(auditReads, 0);
   assert.equal(guideReads, 0);
+});
+
+test("Planner 36 rejects proxies that conceal configurable semantic fields", () => {
+  const auditTarget = mutableAudit() as InteriorStrollerEvidenceAudit & {
+    stroller?: boolean;
+  };
+  auditTarget.stroller = true;
+  const proxiedAudit = new Proxy(auditTarget, {
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter(
+        (key) => key !== "stroller",
+      );
+    },
+  });
+
+  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+    /cannot be Proxy-backed/,
+  );
+  assert.equal(proxiedAudit.stroller, true);
+
+  const guideAudit = mutableAudit();
+  const guideTarget = {
+    ...guideAudit.accessibilityGuideEvidence,
+    stroller: true,
+  } as typeof guideAudit.accessibilityGuideEvidence & {
+    stroller: boolean;
+  };
+  guideAudit.accessibilityGuideEvidence = new Proxy(
+    guideTarget,
+    {
+      ownKeys(target) {
+        return Reflect.ownKeys(target).filter(
+          (key) => key !== "stroller",
+        );
+      },
+    },
+  );
+
+  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([guideAudit]),
+    /cannot be Proxy-backed/,
+  );
+  assert.equal(
+    (guideAudit.accessibilityGuideEvidence as typeof guideTarget)
+      .stroller,
+    true,
+  );
 });
 
 test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {

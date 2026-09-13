@@ -314,6 +314,19 @@ function snapshotExactOrdinaryArray(
   return Object.freeze(snapshot);
 }
 
+function assertNotProxyBacked(
+  value: unknown,
+  label: string,
+) {
+  try {
+    structuredClone(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or contain unsupported runtime values.`,
+    );
+  }
+}
+
 function validTimestamp(value: unknown) {
   return (
     typeof value === "string" &&
@@ -455,6 +468,11 @@ export function assertInteriorStrollerEvidenceAuditPolicyIntegrity(
       "Planner 36 stroller evidence-audit policy drifted from its conservative boundary.",
     );
   }
+
+  assertNotProxyBacked(
+    policy,
+    "Planner 36 stroller evidence-audit policy",
+  );
 }
 
 function assertAccessibilityGuideEvidenceIntegrity(
@@ -488,6 +506,11 @@ function assertAccessibilityGuideEvidenceIntegrity(
       "Planner 36 stroller accessibility-guide evidence drifted from the qualified source boundary.",
     );
   }
+
+  assertNotProxyBacked(
+    evidence,
+    "Planner 36 stroller accessibility-guide evidence",
+  );
 }
 
 export function assertInteriorStrollerEvidenceAuditIntegrity(
@@ -500,8 +523,9 @@ export function assertInteriorStrollerEvidenceAuditIntegrity(
     "Planner 36 stroller evidence-audit collection",
   );
 
+  const originalAudit = normalizedAudits[0];
   const candidate = snapshotExactPlainObject(
-    normalizedAudits[0],
+    originalAudit,
     AUDIT_FIELDS,
     "Planner 36 stroller evidence audit",
   );
@@ -582,6 +606,15 @@ export function assertInteriorStrollerEvidenceAuditIntegrity(
       "Planner 36 stroller evidence audit detached from the qualified exact segment or prior unresolved stroller/stairs boundaries.",
     );
   }
+
+  assertNotProxyBacked(
+    originalAudit,
+    "Planner 36 stroller evidence audit",
+  );
+  assertNotProxyBacked(
+    audits,
+    "Planner 36 stroller evidence-audit collection",
+  );
 }
 
 assertInteriorStrollerEvidenceAuditPolicyIntegrity(RAW_POLICY);
