@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -68,6 +67,8 @@ jobs:
 
           old_blocked = '''    return deepFreeze({\n      status: "blocked",\n      reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",\n      objectiveSourceRecordId,\n      globalEndpointSelection: "unresolved",\n    });'''
           new_blocked = '''    return deepFreeze(nullPrototypeRecord({\n      status: "blocked",\n      reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",\n      objectiveSourceRecordId,\n      globalEndpointSelection: "unresolved",\n    }));'''
+          if old_blocked not in text:
+              raise SystemExit('blocked assessment block not found')
           text = text.replace(old_blocked, new_blocked, 1)
 
           old_ready = '''  return deepFreeze({\n    status: "provenance-ready",\n    objectiveSourceRecordId,\n    sourceFromNodeId: FROM_NODE_ID,\n    sourceToNodeId: TO_NODE_ID,\n    provenance: {\n      ...INTERIOR_PROVENANCE_AUTHORITY.provenance,\n    },\n    confidenceRationale:\n      "provenance-complete-while-stairs-and-stroller-remain-unresolved",\n    selectionScope: "objective-only",\n    globalEndpointSelection: "unresolved",\n    exactSegmentMaterialization: {\n      status: "blocked",\n      reasons: [...REMAINING_BLOCK_REASONS] as [\n        "EXACT_SEGMENT_STAIRS_NOT_SOURCED",\n        "EXACT_SEGMENT_STROLLER_NOT_SOURCED",\n      ],\n    },\n  });'''
