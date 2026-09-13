@@ -22,91 +22,26 @@ jobs:
         with:
           node-version: 22.12.0
       - name: Apply accessor-array hardening and regression
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
 
-          source_path = Path('src/data/zooInteriorStairsAuthority.ts')
+          source_path = Path("src/data/zooInteriorStairsAuthority.ts")
           source = source_path.read_text()
-          old = '''  if (
-    Reflect.ownKeys(value).some(
-      (key) =>
-        typeof key !== "string" ||
-        !allowedOwnKeys.has(key),
-    )
-  ) {
-    throw new Error(`${label} cannot contain extra own properties.`);
-  }
-}
-'''
-          new = '''  if (
-    Reflect.ownKeys(value).some(
-      (key) =>
-        typeof key !== "string" ||
-        !allowedOwnKeys.has(key),
-    )
-  ) {
-    throw new Error(`${label} cannot contain extra own properties.`);
-  }
-
-  for (let index = 0; index < expectedLength; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(
-      value,
-      String(index),
-    );
-    if (
-      !descriptor ||
-      !descriptor.enumerable ||
-      !("value" in descriptor)
-    ) {
-      throw new Error(
-        `${label} requires enumerable own data element ${index}.`,
-      );
-    }
-  }
-}
-'''
+          old = "  if (\n    Reflect.ownKeys(value).some(\n      (key) =>\n        typeof key !== \"string\" ||\n        !allowedOwnKeys.has(key),\n    )\n  ) {\n    throw new Error(`${label} cannot contain extra own properties.`);\n  }\n}\n"
+          new = "  if (\n    Reflect.ownKeys(value).some(\n      (key) =>\n        typeof key !== \"string\" ||\n        !allowedOwnKeys.has(key),\n    )\n  ) {\n    throw new Error(`${label} cannot contain extra own properties.`);\n  }\n\n  for (let index = 0; index < expectedLength; index += 1) {\n    const descriptor = Object.getOwnPropertyDescriptor(\n      value,\n      String(index),\n    );\n    if (\n      !descriptor ||\n      !descriptor.enumerable ||\n      !(\"value\" in descriptor)\n    ) {\n      throw new Error(\n        `${label} requires enumerable own data element ${index}.`,\n      );\n    }\n  }\n}\n"
           if source.count(old) != 1:
-              raise SystemExit(f'expected one source match, found {source.count(old)}')
+              raise SystemExit(f"expected one source match, found {source.count(old)}")
           source_path.write_text(source.replace(old, new, 1))
 
-          test_path = Path('tests/zoo-interior-stairs-authority.test.ts')
+          test_path = Path("tests/zoo-interior-stairs-authority.test.ts")
           tests = test_path.read_text()
-          marker = '''  assert.throws(
-    () => assertInteriorStairsEvidenceAuditIntegrity(decorated),
-    /extra own properties/,
-  );
-});
-'''
-          replacement = '''  assert.throws(
-    () => assertInteriorStairsEvidenceAuditIntegrity(decorated),
-    /extra own properties/,
-  );
-
-  const accessorBacked = [
-    mutableAudit(),
-  ] as unknown as InteriorStairsEvidenceAudit[];
-  let reads = 0;
-  Object.defineProperty(accessorBacked, "0", {
-    enumerable: true,
-    configurable: true,
-    get() {
-      reads += 1;
-      return reads === 1
-        ? mutableAudit()
-        : { ...mutableAudit(), stairs: false };
-    },
-  });
-  assert.throws(
-    () => assertInteriorStairsEvidenceAuditIntegrity(accessorBacked),
-    /enumerable own data element 0/,
-  );
-  assert.equal(reads, 0);
-});
-'''
+          marker = "  assert.throws(\n    () => assertInteriorStairsEvidenceAuditIntegrity(decorated),\n    /extra own properties/,\n  );\n});\n"
+          replacement = "  assert.throws(\n    () => assertInteriorStairsEvidenceAuditIntegrity(decorated),\n    /extra own properties/,\n  );\n\n  const accessorBacked = [\n    mutableAudit(),\n  ] as unknown as InteriorStairsEvidenceAudit[];\n  let reads = 0;\n  Object.defineProperty(accessorBacked, \"0\", {\n    enumerable: true,\n    configurable: true,\n    get() {\n      reads += 1;\n      return reads === 1\n        ? mutableAudit()\n        : { ...mutableAudit(), stairs: false };\n    },\n  });\n  assert.throws(\n    () => assertInteriorStairsEvidenceAuditIntegrity(accessorBacked),\n    /enumerable own data element 0/,\n  );\n  assert.equal(reads, 0);\n});\n"
           if tests.count(marker) != 1:
-              raise SystemExit(f'expected one test marker, found {tests.count(marker)}')
+              raise SystemExit(f"expected one test marker, found {tests.count(marker)}")
           test_path.write_text(tests.replace(marker, replacement, 1))
+          PY
       - run: npm install --no-audit --no-fund
       - run: npm run test:planner
       - run: npm run typecheck
