@@ -11,9 +11,11 @@ import {
   classifyExactStairsAuthority,
 } from "./zooIngressTerrainAuthority.ts";
 
-const POLICY_ID = "sdz-interior-stairs-policy-v2" as const;
+const POLICY_ID = "sdz-interior-stairs-policy-v3" as const;
 const AUTHORITY_ID =
   "sdz-interior-tiger-trail-front-street-stairs" as const;
+const APPLICABILITY_EVIDENCE_ID =
+  "sdz-zoo-accessibility-guide-2026-route-applicability" as const;
 const OBJECTIVE_SOURCE_RECORD_ID = "sdz-tiger-trail" as const;
 const OPERATIONAL_STATUS_AUTHORITY_ID =
   "sdz-interior-tiger-trail-front-street-operational-status" as const;
@@ -25,18 +27,41 @@ const SOURCE_WAY_ID = "1481425058" as const;
 const FROM_NODE_ID = "7053320515" as const;
 const TO_NODE_ID = "1619736626" as const;
 const ADOPTED_AT = "2026-09-13T00:39:00-07:00" as const;
+const GUIDE_OBSERVED_AT = "2026-09-13T00:39:00-07:00" as const;
+const ZOO_ACCESSIBILITY_GUIDE_URL =
+  "https://sdzwa.org/sdzwa-accessibility-guide" as const;
 const ADA_STANDARD_URL =
   "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf" as const;
 const ADA_STANDARD_SECTION = "402.2" as const;
 const ADA_STAIRS_SEMANTIC =
   "stairs-not-an-accessible-route-component" as const;
 
+export type InteriorStairsApplicabilityEvidence = {
+  id: typeof APPLICABILITY_EVIDENCE_ID;
+  sourceUrl: typeof ZOO_ACCESSIBILITY_GUIDE_URL;
+  sourceLabel:
+    "San Diego Zoo Wildlife Alliance Accessibility Guide 2026";
+  observedAt: typeof GUIDE_OBSERVED_AT;
+  sourceAuthority: "official-zoo-accessibility-guide";
+  adaComplianceContext:
+    "committed-to-ada-and-california-access-laws";
+  zooAccessibilityMapMeaning:
+    "provides-information-on-accessible-routes";
+  zooBestPathMeaning:
+    "blue-dotted-line-is-best-path-of-travel";
+  mobilityDeviceMapInstruction:
+    "consult-accessibility-map-to-determine-accessible-areas";
+  plannerMaterialization:
+    "stairs-applicability-evidence-only";
+};
+
 export type InteriorStairsPolicy = {
   id: typeof POLICY_ID;
-  policyVersion: "2";
+  policyVersion: "3";
   adoptedAt: typeof ADOPTED_AT;
   scope:
-    "exact-segment-with-qualified-ada-accessible-route-semantic";
+    "exact-segment-with-zoo-authored-accessible-route-applicability";
+  applicabilityEvidenceId: typeof APPLICABILITY_EVIDENCE_ID;
   exactWayIdentityRequirement:
     "pedestrian-asphalt-front-street-source-context";
   exactWayIdentityRole:
@@ -47,6 +72,8 @@ export type InteriorStairsPolicy = {
     "exact-segment-must-already-be-accessible-true";
   wheelchairIndicatorRequirement: "shown";
   mapRouteLegendRequirement: "ADA MOST ACCESSIBLE ROUTE";
+  zooRouteApplicabilityRequirement:
+    "official-guide-must-describe-map-as-accessible-routes-under-ada-compliance-context";
   adaStandardReferenceUrl: typeof ADA_STANDARD_URL;
   adaStandardSection: typeof ADA_STANDARD_SECTION;
   accessibleRouteStairsSemantics: typeof ADA_STAIRS_SEMANTIC;
@@ -64,6 +91,11 @@ export type InteriorStairsClassificationInput = {
   accessible: boolean;
   wheelchairIndicator: string;
   mapRouteLegend: string;
+  zooGuideSourceUrl: string;
+  zooGuideAdaComplianceContext: string;
+  zooGuideAccessibilityMapMeaning: string;
+  zooGuideBestPathMeaning: string;
+  zooGuideMobilityDeviceMapInstruction: string;
   adaStandardReferenceUrl: string;
   adaStandardSection: string;
   accessibleRouteStairsSemantics: string;
@@ -74,7 +106,7 @@ export type InteriorStairsClassification =
       status: "supported";
       stairs: false;
       basis:
-        "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic";
+        "zoo-authored-accessible-route-applicability-plus-ada-402-2-components";
     }
   | {
       status: "blocked";
@@ -82,6 +114,7 @@ export type InteriorStairsClassification =
         | "EXACT_WAY_IDENTITY_CONTEXT_NOT_MET"
         | "ACCESSIBILITY_SOURCE_NAME_NOT_EXACT_SOURCE_WAY_MATCH"
         | "ACCESSIBILITY_PREREQUISITE_NOT_MET"
+        | "ZOO_ACCESSIBLE_ROUTE_APPLICABILITY_NOT_ESTABLISHED"
         | "ACCESSIBLE_ROUTE_STANDARD_PREREQUISITE_NOT_MET";
     };
 
@@ -91,6 +124,7 @@ export type InteriorStairsAuthority = {
   operationalStatusAuthorityId:
     typeof OPERATIONAL_STATUS_AUTHORITY_ID;
   accessibilityAuthorityId: typeof ACCESSIBILITY_AUTHORITY_ID;
+  applicabilityEvidenceId: typeof APPLICABILITY_EVIDENCE_ID;
   sourceSnapshotId: typeof SOURCE_SNAPSHOT_ID;
   policyId: typeof POLICY_ID;
   sourceWayId: typeof SOURCE_WAY_ID;
@@ -101,12 +135,21 @@ export type InteriorStairsAuthority = {
   exactWaySurface: "asphalt";
   wheelchairIndicator: "shown";
   mapRouteLegend: "ADA MOST ACCESSIBLE ROUTE";
+  zooGuideSourceUrl: typeof ZOO_ACCESSIBILITY_GUIDE_URL;
+  zooGuideAdaComplianceContext:
+    "committed-to-ada-and-california-access-laws";
+  zooGuideAccessibilityMapMeaning:
+    "provides-information-on-accessible-routes";
+  zooGuideBestPathMeaning:
+    "blue-dotted-line-is-best-path-of-travel";
+  zooGuideMobilityDeviceMapInstruction:
+    "consult-accessibility-map-to-determine-accessible-areas";
   adaStandardReferenceUrl: typeof ADA_STANDARD_URL;
   adaStandardSection: typeof ADA_STANDARD_SECTION;
   accessibleRouteStairsSemantics: typeof ADA_STAIRS_SEMANTIC;
   stairs: false;
   resolutionBasis:
-    "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic";
+    "zoo-authored-accessible-route-applicability-plus-ada-402-2-components";
   absenceOfHighwayStepsRole:
     "non-authoritative-supporting-context-only";
   exactWayIdentityRole:
@@ -144,17 +187,32 @@ export type InteriorStairsAssessment =
       globalEndpointSelection: "unresolved";
     };
 
+const APPLICABILITY_FIELDS = [
+  "id",
+  "sourceUrl",
+  "sourceLabel",
+  "observedAt",
+  "sourceAuthority",
+  "adaComplianceContext",
+  "zooAccessibilityMapMeaning",
+  "zooBestPathMeaning",
+  "mobilityDeviceMapInstruction",
+  "plannerMaterialization",
+] as const;
+
 const POLICY_FIELDS = [
   "id",
   "policyVersion",
   "adoptedAt",
   "scope",
+  "applicabilityEvidenceId",
   "exactWayIdentityRequirement",
   "exactWayIdentityRole",
   "exactWayNameRequirement",
   "accessibilityRequirement",
   "wheelchairIndicatorRequirement",
   "mapRouteLegendRequirement",
+  "zooRouteApplicabilityRequirement",
   "adaStandardReferenceUrl",
   "adaStandardSection",
   "accessibleRouteStairsSemantics",
@@ -168,6 +226,7 @@ const AUTHORITY_FIELDS = [
   "objectiveSourceRecordId",
   "operationalStatusAuthorityId",
   "accessibilityAuthorityId",
+  "applicabilityEvidenceId",
   "sourceSnapshotId",
   "policyId",
   "sourceWayId",
@@ -178,6 +237,11 @@ const AUTHORITY_FIELDS = [
   "exactWaySurface",
   "wheelchairIndicator",
   "mapRouteLegend",
+  "zooGuideSourceUrl",
+  "zooGuideAdaComplianceContext",
+  "zooGuideAccessibilityMapMeaning",
+  "zooGuideBestPathMeaning",
+  "zooGuideMobilityDeviceMapInstruction",
   "adaStandardReferenceUrl",
   "adaStandardSection",
   "accessibleRouteStairsSemantics",
@@ -338,6 +402,19 @@ function validTimestamp(value: unknown) {
   );
 }
 
+function validZooAccessibilityGuideUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "sdzwa.org" &&
+      url.pathname === "/sdzwa-accessibility-guide"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function validAdaStandardsUrl(value: string) {
   try {
     const url = new URL(value);
@@ -348,6 +425,61 @@ function validAdaStandardsUrl(value: string) {
     );
   } catch {
     return false;
+  }
+}
+
+const RAW_APPLICABILITY_EVIDENCE: InteriorStairsApplicabilityEvidence = {
+  id: APPLICABILITY_EVIDENCE_ID,
+  sourceUrl: ZOO_ACCESSIBILITY_GUIDE_URL,
+  sourceLabel:
+    "San Diego Zoo Wildlife Alliance Accessibility Guide 2026",
+  observedAt: GUIDE_OBSERVED_AT,
+  sourceAuthority: "official-zoo-accessibility-guide",
+  adaComplianceContext:
+    "committed-to-ada-and-california-access-laws",
+  zooAccessibilityMapMeaning:
+    "provides-information-on-accessible-routes",
+  zooBestPathMeaning:
+    "blue-dotted-line-is-best-path-of-travel",
+  mobilityDeviceMapInstruction:
+    "consult-accessibility-map-to-determine-accessible-areas",
+  plannerMaterialization:
+    "stairs-applicability-evidence-only",
+};
+
+export function assertInteriorStairsApplicabilityEvidenceIntegrity(
+  evidence: InteriorStairsApplicabilityEvidence,
+) {
+  assertExactPlainObject(
+    evidence,
+    APPLICABILITY_FIELDS,
+    "Planner 35 stairs applicability evidence",
+  );
+
+  if (
+    evidence.id !== APPLICABILITY_EVIDENCE_ID ||
+    evidence.sourceUrl !== ZOO_ACCESSIBILITY_GUIDE_URL ||
+    !validZooAccessibilityGuideUrl(evidence.sourceUrl) ||
+    evidence.sourceLabel !==
+      "San Diego Zoo Wildlife Alliance Accessibility Guide 2026" ||
+    evidence.observedAt !== GUIDE_OBSERVED_AT ||
+    !validTimestamp(evidence.observedAt) ||
+    evidence.sourceAuthority !==
+      "official-zoo-accessibility-guide" ||
+    evidence.adaComplianceContext !==
+      "committed-to-ada-and-california-access-laws" ||
+    evidence.zooAccessibilityMapMeaning !==
+      "provides-information-on-accessible-routes" ||
+    evidence.zooBestPathMeaning !==
+      "blue-dotted-line-is-best-path-of-travel" ||
+    evidence.mobilityDeviceMapInstruction !==
+      "consult-accessibility-map-to-determine-accessible-areas" ||
+    evidence.plannerMaterialization !==
+      "stairs-applicability-evidence-only"
+  ) {
+    throw new Error(
+      "Planner 35 stairs applicability evidence drifted from the frozen official Zoo guide snapshot.",
+    );
   }
 }
 
@@ -387,6 +519,24 @@ export function classifyInteriorStairs(
   }
 
   if (
+    input.zooGuideSourceUrl !== ZOO_ACCESSIBILITY_GUIDE_URL ||
+    !validZooAccessibilityGuideUrl(input.zooGuideSourceUrl) ||
+    input.zooGuideAdaComplianceContext !==
+      "committed-to-ada-and-california-access-laws" ||
+    input.zooGuideAccessibilityMapMeaning !==
+      "provides-information-on-accessible-routes" ||
+    input.zooGuideBestPathMeaning !==
+      "blue-dotted-line-is-best-path-of-travel" ||
+    input.zooGuideMobilityDeviceMapInstruction !==
+      "consult-accessibility-map-to-determine-accessible-areas"
+  ) {
+    return {
+      status: "blocked",
+      reason: "ZOO_ACCESSIBLE_ROUTE_APPLICABILITY_NOT_ESTABLISHED",
+    };
+  }
+
+  if (
     input.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
     !validAdaStandardsUrl(input.adaStandardReferenceUrl) ||
     input.adaStandardSection !== ADA_STANDARD_SECTION ||
@@ -404,16 +554,17 @@ export function classifyInteriorStairs(
     status: "supported",
     stairs: false,
     basis:
-      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
+      "zoo-authored-accessible-route-applicability-plus-ada-402-2-components",
   };
 }
 
 const RAW_POLICY: InteriorStairsPolicy = {
   id: POLICY_ID,
-  policyVersion: "2",
+  policyVersion: "3",
   adoptedAt: ADOPTED_AT,
   scope:
-    "exact-segment-with-qualified-ada-accessible-route-semantic",
+    "exact-segment-with-zoo-authored-accessible-route-applicability",
+  applicabilityEvidenceId: APPLICABILITY_EVIDENCE_ID,
   exactWayIdentityRequirement:
     "pedestrian-asphalt-front-street-source-context",
   exactWayIdentityRole:
@@ -424,6 +575,8 @@ const RAW_POLICY: InteriorStairsPolicy = {
     "exact-segment-must-already-be-accessible-true",
   wheelchairIndicatorRequirement: "shown",
   mapRouteLegendRequirement: "ADA MOST ACCESSIBLE ROUTE",
+  zooRouteApplicabilityRequirement:
+    "official-guide-must-describe-map-as-accessible-routes-under-ada-compliance-context",
   adaStandardReferenceUrl: ADA_STANDARD_URL,
   adaStandardSection: ADA_STANDARD_SECTION,
   accessibleRouteStairsSemantics: ADA_STAIRS_SEMANTIC,
@@ -450,6 +603,7 @@ const RAW_AUTHORITY: InteriorStairsAuthority[] = [
       OPERATIONAL_STATUS_AUTHORITY_ID,
     accessibilityAuthorityId:
       ACCESSIBILITY_AUTHORITY_ID,
+    applicabilityEvidenceId: APPLICABILITY_EVIDENCE_ID,
     sourceSnapshotId: SOURCE_SNAPSHOT_ID,
     policyId: POLICY_ID,
     sourceWayId: SOURCE_WAY_ID,
@@ -462,12 +616,21 @@ const RAW_AUTHORITY: InteriorStairsAuthority[] = [
       INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT.sourceTags.surface,
     wheelchairIndicator: accessibility.wheelchairIndicator,
     mapRouteLegend: accessibility.mapRouteLegend,
+    zooGuideSourceUrl: ZOO_ACCESSIBILITY_GUIDE_URL,
+    zooGuideAdaComplianceContext:
+      RAW_APPLICABILITY_EVIDENCE.adaComplianceContext,
+    zooGuideAccessibilityMapMeaning:
+      RAW_APPLICABILITY_EVIDENCE.zooAccessibilityMapMeaning,
+    zooGuideBestPathMeaning:
+      RAW_APPLICABILITY_EVIDENCE.zooBestPathMeaning,
+    zooGuideMobilityDeviceMapInstruction:
+      RAW_APPLICABILITY_EVIDENCE.mobilityDeviceMapInstruction,
     adaStandardReferenceUrl: ADA_STANDARD_URL,
     adaStandardSection: ADA_STANDARD_SECTION,
     accessibleRouteStairsSemantics: ADA_STAIRS_SEMANTIC,
     stairs: false,
     resolutionBasis:
-      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
+      "zoo-authored-accessible-route-applicability-plus-ada-402-2-components",
     absenceOfHighwayStepsRole:
       "non-authoritative-supporting-context-only",
     exactWayIdentityRole:
@@ -491,11 +654,12 @@ export function assertInteriorStairsPolicyIntegrity(
 
   if (
     policy.id !== POLICY_ID ||
-    policy.policyVersion !== "2" ||
+    policy.policyVersion !== "3" ||
     policy.adoptedAt !== ADOPTED_AT ||
     !validTimestamp(policy.adoptedAt) ||
     policy.scope !==
-      "exact-segment-with-qualified-ada-accessible-route-semantic" ||
+      "exact-segment-with-zoo-authored-accessible-route-applicability" ||
+    policy.applicabilityEvidenceId !== APPLICABILITY_EVIDENCE_ID ||
     policy.exactWayIdentityRequirement !==
       "pedestrian-asphalt-front-street-source-context" ||
     policy.exactWayIdentityRole !==
@@ -507,6 +671,8 @@ export function assertInteriorStairsPolicyIntegrity(
     policy.wheelchairIndicatorRequirement !== "shown" ||
     policy.mapRouteLegendRequirement !==
       "ADA MOST ACCESSIBLE ROUTE" ||
+    policy.zooRouteApplicabilityRequirement !==
+      "official-guide-must-describe-map-as-accessible-routes-under-ada-compliance-context" ||
     policy.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
     !validAdaStandardsUrl(policy.adaStandardReferenceUrl) ||
     policy.adaStandardSection !== ADA_STANDARD_SECTION ||
@@ -527,6 +693,9 @@ export function assertInteriorStairsPolicyIntegrity(
 export function assertInteriorStairsAuthorityIntegrity(
   authorities: readonly InteriorStairsAuthority[],
 ) {
+  assertInteriorStairsApplicabilityEvidenceIntegrity(
+    RAW_APPLICABILITY_EVIDENCE,
+  );
   assertInteriorStairsPolicyIntegrity(RAW_POLICY);
   assertExactOrdinaryArray(
     authorities,
@@ -568,6 +737,8 @@ export function assertInteriorStairsAuthorityIntegrity(
       OPERATIONAL_STATUS_AUTHORITY_ID ||
     record.accessibilityAuthorityId !==
       ACCESSIBILITY_AUTHORITY_ID ||
+    record.applicabilityEvidenceId !==
+      APPLICABILITY_EVIDENCE_ID ||
     record.sourceSnapshotId !== SOURCE_SNAPSHOT_ID ||
     record.policyId !== POLICY_ID ||
     record.sourceWayId !== SOURCE_WAY_ID ||
@@ -579,13 +750,22 @@ export function assertInteriorStairsAuthorityIntegrity(
     record.wheelchairIndicator !== "shown" ||
     record.mapRouteLegend !==
       "ADA MOST ACCESSIBLE ROUTE" ||
+    record.zooGuideSourceUrl !== ZOO_ACCESSIBILITY_GUIDE_URL ||
+    record.zooGuideAdaComplianceContext !==
+      "committed-to-ada-and-california-access-laws" ||
+    record.zooGuideAccessibilityMapMeaning !==
+      "provides-information-on-accessible-routes" ||
+    record.zooGuideBestPathMeaning !==
+      "blue-dotted-line-is-best-path-of-travel" ||
+    record.zooGuideMobilityDeviceMapInstruction !==
+      "consult-accessibility-map-to-determine-accessible-areas" ||
     record.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
     record.adaStandardSection !== ADA_STANDARD_SECTION ||
     record.accessibleRouteStairsSemantics !==
       ADA_STAIRS_SEMANTIC ||
     record.stairs !== false ||
     record.resolutionBasis !==
-      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic" ||
+      "zoo-authored-accessible-route-applicability-plus-ada-402-2-components" ||
     record.absenceOfHighwayStepsRole !==
       "non-authoritative-supporting-context-only" ||
     record.exactWayIdentityRole !==
@@ -679,6 +859,15 @@ export function assertInteriorStairsAuthorityIntegrity(
       currentAccessibility.wheelchairIndicator,
     mapRouteLegend:
       currentAccessibility.mapRouteLegend,
+    zooGuideSourceUrl: record.zooGuideSourceUrl,
+    zooGuideAdaComplianceContext:
+      record.zooGuideAdaComplianceContext,
+    zooGuideAccessibilityMapMeaning:
+      record.zooGuideAccessibilityMapMeaning,
+    zooGuideBestPathMeaning:
+      record.zooGuideBestPathMeaning,
+    zooGuideMobilityDeviceMapInstruction:
+      record.zooGuideMobilityDeviceMapInstruction,
     adaStandardReferenceUrl:
       record.adaStandardReferenceUrl,
     adaStandardSection:
@@ -698,8 +887,15 @@ export function assertInteriorStairsAuthorityIntegrity(
   }
 }
 
+assertInteriorStairsApplicabilityEvidenceIntegrity(
+  RAW_APPLICABILITY_EVIDENCE,
+);
 assertInteriorStairsPolicyIntegrity(RAW_POLICY);
 assertInteriorStairsAuthorityIntegrity(RAW_AUTHORITY);
+
+export const INTERIOR_STAIRS_APPLICABILITY_EVIDENCE:
+  InteriorStairsApplicabilityEvidence =
+  deepFreeze(RAW_APPLICABILITY_EVIDENCE);
 
 export const INTERIOR_STAIRS_POLICY:
   InteriorStairsPolicy = deepFreeze(RAW_POLICY);
