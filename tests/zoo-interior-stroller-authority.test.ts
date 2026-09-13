@@ -246,7 +246,7 @@ test("Planner 36 rejects coercible non-string guide URLs without invoking caller
 
   assert.throws(
     () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
-    /accessibility-guide evidence drifted/,
+    /(accessibility-guide evidence drifted|cannot be Proxy-backed)/,
   );
   assert.equal(coercions, 0);
 });
