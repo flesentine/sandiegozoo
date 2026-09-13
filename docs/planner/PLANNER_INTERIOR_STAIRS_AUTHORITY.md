@@ -10,59 +10,70 @@ The qualified value is:
 
 - `stairs: false`
 
-This does **not** come from the absence of `highway=steps` alone. Planner 18's conservative rule remains intact: missing step tags by themselves are insufficient to establish `stairs:false`.
+Planner 35 does **not** derive that value from a missing `highway=steps` tag or from the Zoo map merely failing to publish stairs. Planner 18's conservative rule remains intact: absence alone is insufficient.
 
-## Evidence conjunction
+## Positive evidence chain
 
-Planner 35 adopts a new prospective product semantic policy only for an unusually narrow conjunction of already-qualified evidence.
+Planner 35 v2 uses a different, positive semantic chain.
 
-### 1. Positive exact OSM classification
+### 1. Exact segment identity remains pinned
 
-The complete version-pinned Planner 29 snapshot for OSM way `1481425058` positively classifies Front Street as:
+The complete version-pinned Planner 29 OSM snapshot keeps the exact source identity fixed:
 
+- way `1481425058`
 - `highway=pedestrian`
 - `surface=asphalt`
 - `name=Front Street`
+- endpoints `7053320515 ↔ 1619736626`
 
-This is positive feature classification, not inference from a missing tag.
+These OSM facts are **identity context only**. Planner 35 explicitly does not treat `pedestrian`, `asphalt`, or the absence of `highway=steps` as no-stairs authority.
 
-### 2. Exact-name wheelchair-route evidence
+### 2. Planner 33 already qualifies this exact segment as accessible
 
-Planner 33 has already qualified this exact segment as `accessible:true` only because the exact OSM way name and official accessibility corridor name are both `Front Street`, with:
+Planner 33 maps the exact-name-matched official Zoo accessibility evidence to `accessible:true` for this same exact segment. Its prerequisites include:
 
+- exact source-way name: `Front Street`
+- official accessibility source-way/corridor name: `Front Street`
 - wheelchair indicator: `shown`
-- route legend: `ADA MOST ACCESSIBLE ROUTE`
+- official route legend: `ADA MOST ACCESSIBLE ROUTE`
 
-Planner 35 requires that prior exact-segment result rather than independently promoting corridor accessibility.
+Planner 35 does not independently promote the Zoo's corridor data. It requires the already-qualified exact Planner 33 accessibility result.
 
-### 3. Controlled stairs vocabulary on the same official map
+### 3. ADA Standards §402.2 supplies the stairs semantic
 
-Planner 18 freezes the official accessibility map's walking-corridor terrain vocabulary.
+Planner 35 freezes the Department of Justice **2010 ADA Standards for Accessible Design** as semantic authority:
 
-For Front Street the same official map publishes:
+- source: `https://www.ada.gov/assets/pdfs/2010-design-standards.pdf`
+- section: `402.2 Components`
 
-- terrain: `mild`
-- stairs evidence: `not-explicitly-published`
+Section 402.2 defines accessible-route components as walking surfaces, doorways, ramps, curb ramps, elevators, and platform lifts. Stairs are not an accessible-route component.
 
-Critically, the same artifact also publishes Fern Canyon Trail as:
+Planner 35 therefore adopts the narrow prospective product rule:
 
-- terrain: `steep-and-stairs`
-- stairs evidence: `explicitly-published`
+> when this exact segment has already been qualified by Planner 33 as the Zoo's wheelchair-marked `ADA MOST ACCESSIBLE ROUTE`, the accessible traversal represented by that exact segment does not require stairs.
 
-That controlled contrast establishes that the map has an explicit mechanism for identifying stair-bearing walking corridors. Planner 35 requires this contrast to remain present on the same official artifact.
+That is the positive semantic basis for `stairs:false`.
+
+## What changed after review
+
+The first Planner 35 candidate also relied on a comparison between Front Street's `mild` terrain row and Fern Canyon Trail's explicit `Steep Terrain and Stairs` row. Codex correctly identified that as insufficient: one explicit stairs label does not prove that every stair-bearing corridor is exhaustively labeled.
+
+Planner 35 v2 removes that inference completely. Terrain non-publication and the Fern Canyon contrast are no longer prerequisites or authority.
 
 ## Policy boundary
 
-`stairs:false` is supported only when all of the following remain true:
+`stairs:false` is supported only while all of these remain true:
 
-1. exact source way is positively `highway=pedestrian`;
-2. exact source way surface is `asphalt`;
-3. exact source-way name equals the official corridor name;
-4. the exact segment already has qualified `accessible:true` wheelchair-route evidence;
-5. Front Street remains published as `mild` with no explicit stairs notation;
-6. the same official map continues to contain a known stair-bearing corridor using the explicit `steep-and-stairs` / `explicitly-published` vocabulary.
+1. the exact source way and endpoints remain the same Planner 29 / Planner 34 segment;
+2. the exact OSM identity remains `pedestrian` / `asphalt` / `Front Street`;
+3. Planner 33 still qualifies this exact segment as `accessible:true`;
+4. the exact accessibility source-way name remains `Front Street`;
+5. the wheelchair indicator remains `shown`;
+6. the official route legend remains `ADA MOST ACCESSIBLE ROUTE`;
+7. the semantic authority remains the DOJ ADA Standards §402.2 accessible-route component definition;
+8. Planner 18 still treats absence of `highway=steps` alone as insufficient.
 
-If any prerequisite changes, Planner 35 fails closed.
+Any prerequisite drift fails closed.
 
 ## What Planner 35 does not claim
 
@@ -70,11 +81,12 @@ Planner 35 does not establish a general rule that:
 
 - missing `highway=steps` means no stairs;
 - every `highway=pedestrian` way is stair-free;
-- every mild corridor is stair-free;
-- wheelchair accessibility alone implies `stairs:false`;
-- all parts of the named Front Street corridor inherit exact-edge semantics.
+- asphalt implies no stairs;
+- every `mild` Zoo corridor is stair-free;
+- every wheelchair-related map symbol automatically means `stairs:false`;
+- all parts of named Front Street inherit this exact-edge result.
 
-The result is limited to this already-qualified exact objective-selected segment and this evidence conjunction.
+The result is objective-only and exact-segment-only, and depends on the prior exact Planner 33 accessibility qualification plus the ADA accessible-route semantic definition.
 
 ## What Planner 35 clears
 
@@ -95,18 +107,19 @@ Planner 35 fails closed on:
 
 - unsupported objectives;
 - exact way/endpoint drift;
-- source snapshot drift away from `pedestrian` / `asphalt` / `Front Street`;
-- loss of exact accessibility authority;
-- OSM/corridor name mismatch;
-- Front Street terrain drift;
-- loss of the official stair-bearing contrast corridor;
+- Planner 29 source identity drift;
+- loss of Planner 33 exact accessibility authority;
+- source-way/accessibility-name mismatch;
+- wheelchair indicator or ADA route legend drift;
+- ADA source URL or section drift;
+- weakening the accessible-route no-stairs semantic;
 - promotion of absence-only evidence into authority;
 - stroller or provenance promotion;
-- hidden, symbol, inherited, accessor, unknown fields;
+- hidden, inherited, symbol, accessor, unknown fields;
 - decorated authority arrays.
 
 ## Next boundary
 
 After Planner 35, only exact stroller suitability and final cross-semantic provenance remain before this exact Tiger Trail Front Street segment can be considered for RouteEdge materialization.
 
-Planner 36 should inspect whether the combination of facility stroller permission and the now-qualified exact wheelchair-accessible, non-stair segment is sufficient for a narrow stroller-suitability policy. Facility-level stroller permission alone must remain insufficient.
+Planner 36 should inspect whether facility stroller permission plus the already-qualified exact accessible, non-stair traversal is enough for a narrow stroller-suitability policy. Facility permission alone must remain insufficient.
