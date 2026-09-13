@@ -174,6 +174,9 @@ if (!selectedCandidate) {
   );
 }
 
+const qualifiedZone = zone;
+const qualifiedSelectedCandidate = selectedCandidate;
+
 const RAW_PROVENANCE = nullPrototypeRecord<SourceProvenance>({
   sourceUrl: SOURCE_VERSION_URL,
   sourceLabel:
@@ -264,7 +267,7 @@ export function assertInteriorEndpointRouteNodeAuthorityIntegrity() {
     );
   }
 
-  const node = selectedCandidate.node;
+  const node = qualifiedSelectedCandidate.node;
   if (
     node.sourceObjectId !== SOURCE_OBJECT_ID ||
     node.sourceVersion !== SOURCE_VERSION ||
@@ -273,9 +276,9 @@ export function assertInteriorEndpointRouteNodeAuthorityIntegrity() {
     node.sourceChangeset !== SOURCE_CHANGESET ||
     node.lat !== LAT ||
     node.lng !== LNG ||
-    selectedCandidate.relativePosition !== "previous-adjacent" ||
-    selectedCandidate.connectorWayId !== "148910139" ||
-    selectedCandidate.connectorName !== "Treetops Way"
+    qualifiedSelectedCandidate.relativePosition !== "previous-adjacent" ||
+    qualifiedSelectedCandidate.connectorWayId !== "148910139" ||
+    qualifiedSelectedCandidate.connectorName !== "Treetops Way"
   ) {
     throw new Error(
       "Planner 38 selected endpoint drifted from version-pinned Planner 26 geometry.",
@@ -301,7 +304,7 @@ export function assertInteriorEndpointRouteNodeAuthorityIntegrity() {
   }
 
   if (
-    zone.id !== ZONE_ID ||
+    qualifiedZone.id !== ZONE_ID ||
     routeNodeForSourceObjectId(SOURCE_OBJECT_ID) !== undefined
   ) {
     throw new Error(
