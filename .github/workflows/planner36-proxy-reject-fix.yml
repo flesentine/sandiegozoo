@@ -1,0 +1,200 @@
+name: Planner 36 proxy rejection
+
+on:
+  push:
+    branches:
+      - planner/planner-36-interior-stroller-evidence
+    paths:
+      - .github/workflows/planner36-proxy-reject-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: planner/planner-36-interior-stroller-evidence
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - name: Reject Proxy-backed Planner 36 inputs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("src/data/zooInteriorStrollerAuthority.ts")
+          source = source_path.read_text()
+
+          marker = '''function validTimestamp(value: unknown) {
+'''
+          helper = '''function assertNotProxyBacked(
+  value: unknown,
+  label: string,
+) {
+  try {
+    structuredClone(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or contain unsupported runtime values.`,
+    );
+  }
+}
+
+'''
+          if source.count(marker) != 1:
+              raise SystemExit(f"helper marker count {source.count(marker)}")
+          source = source.replace(marker, helper + marker, 1)
+
+          old = '''  const normalizedPolicy = snapshotExactPlainObject(
+    policy,
+    POLICY_FIELDS,
+    "Planner 36 stroller evidence-audit policy",
+  ) as unknown as InteriorStrollerEvidenceAuditPolicy;
+
+  if (
+'''
+          new = '''  const normalizedPolicy = snapshotExactPlainObject(
+    policy,
+    POLICY_FIELDS,
+    "Planner 36 stroller evidence-audit policy",
+  ) as unknown as InteriorStrollerEvidenceAuditPolicy;
+  assertNotProxyBacked(
+    policy,
+    "Planner 36 stroller evidence-audit policy",
+  );
+
+  if (
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f"policy insertion count {source.count(old)}")
+          source = source.replace(old, new, 1)
+
+          old = '''  const normalizedEvidence = snapshotExactPlainObject(
+    evidence,
+    GUIDE_FIELDS,
+    "Planner 36 stroller accessibility-guide evidence",
+  ) as unknown as StrollerAccessibilityGuideEvidence;
+
+  if (
+'''
+          new = '''  const normalizedEvidence = snapshotExactPlainObject(
+    evidence,
+    GUIDE_FIELDS,
+    "Planner 36 stroller accessibility-guide evidence",
+  ) as unknown as StrollerAccessibilityGuideEvidence;
+  assertNotProxyBacked(
+    evidence,
+    "Planner 36 stroller accessibility-guide evidence",
+  );
+
+  if (
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f"guide insertion count {source.count(old)}")
+          source = source.replace(old, new, 1)
+
+          old = '''  const candidate = snapshotExactPlainObject(
+    normalizedAudits[0],
+    AUDIT_FIELDS,
+    "Planner 36 stroller evidence audit",
+  );
+  const record =
+'''
+          new = '''  const originalAudit = normalizedAudits[0];
+  const candidate = snapshotExactPlainObject(
+    originalAudit,
+    AUDIT_FIELDS,
+    "Planner 36 stroller evidence audit",
+  );
+  const record =
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f"audit original insertion count {source.count(old)}")
+          source = source.replace(old, new, 1)
+
+          old = '''  assertAccessibilityGuideEvidenceIntegrity(
+    record.accessibilityGuideEvidence,
+  );
+
+  if (
+'''
+          new = '''  assertAccessibilityGuideEvidenceIntegrity(
+    record.accessibilityGuideEvidence,
+  );
+  assertNotProxyBacked(
+    originalAudit,
+    "Planner 36 stroller evidence audit",
+  );
+  assertNotProxyBacked(
+    audits,
+    "Planner 36 stroller evidence-audit collection",
+  );
+
+  if (
+'''
+          if source.count(old) != 1:
+              raise SystemExit(f"audit proxy insertion count {source.count(old)}")
+          source = source.replace(old, new, 1)
+          source_path.write_text(source)
+
+          test_path = Path("tests/zoo-interior-stroller-authority.test.ts")
+          tests = test_path.read_text()
+          old = '''  assert.doesNotThrow(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+  );
+  assert.equal(auditReads, 0);
+  assert.equal(guideReads, 0);
+});
+
+test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
+'''
+          new = '''  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+    /cannot be Proxy-backed/,
+  );
+  assert.equal(auditReads, 0);
+  assert.equal(guideReads, 0);
+});
+
+test("Planner 36 rejects proxies that hide configurable semantic fields", () => {
+  const audit = mutableAudit() as InteriorStrollerEvidenceAudit & {
+    stroller?: boolean;
+  };
+  audit.stroller = true;
+  const proxiedAudit = new Proxy(audit, {
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter(
+        (key) => key !== "stroller",
+      );
+    },
+  });
+
+  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+    /cannot be Proxy-backed/,
+  );
+  assert.equal(proxiedAudit.stroller, true);
+});
+
+test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
+'''
+          if tests.count(old) != 1:
+              raise SystemExit(f"proxy regression replacement count {tests.count(old)}")
+          tests = tests.replace(old, new, 1)
+          test_path.write_text(tests)
+          PY
+      - run: npm install --no-audit --no-fund
+      - run: npm run test:planner
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/zooInteriorStrollerAuthority.ts tests/zoo-interior-stroller-authority.test.ts
+          git commit -m "Reject Proxy-backed Planner 36 runtime inputs"
+          git push origin HEAD:planner/planner-36-interior-stroller-evidence
