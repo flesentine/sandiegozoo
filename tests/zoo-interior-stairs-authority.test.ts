@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  INTERIOR_STAIRS_APPLICABILITY_EVIDENCE,
   INTERIOR_STAIRS_AUTHORITY,
   INTERIOR_STAIRS_POLICY,
   assessInteriorStairs,
+  assertInteriorStairsApplicabilityEvidenceIntegrity,
   assertInteriorStairsAuthorityIntegrity,
   assertInteriorStairsPolicyIntegrity,
   classifyInteriorStairs,
   interiorStairsForObjective,
+  type InteriorStairsApplicabilityEvidence,
   type InteriorStairsAuthority,
   type InteriorStairsPolicy,
 } from "../src/data/zooInteriorStairsAuthority.ts";
@@ -33,12 +36,28 @@ function validInput() {
     accessible: true,
     wheelchairIndicator: "shown",
     mapRouteLegend: "ADA MOST ACCESSIBLE ROUTE",
+    zooGuideSourceUrl:
+      "https://sdzwa.org/sdzwa-accessibility-guide",
+    zooGuideAdaComplianceContext:
+      "committed-to-ada-and-california-access-laws",
+    zooGuideAccessibilityMapMeaning:
+      "provides-information-on-accessible-routes",
+    zooGuideBestPathMeaning:
+      "blue-dotted-line-is-best-path-of-travel",
+    zooGuideMobilityDeviceMapInstruction:
+      "consult-accessibility-map-to-determine-accessible-areas",
     adaStandardReferenceUrl:
       "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf",
     adaStandardSection: "402.2",
     accessibleRouteStairsSemantics:
       "stairs-not-an-accessible-route-component",
   };
+}
+
+function mutableApplicability() {
+  return {
+    ...INTERIOR_STAIRS_APPLICABILITY_EVIDENCE,
+  } as unknown as InteriorStairsApplicabilityEvidence;
 }
 
 function mutablePolicy() {
@@ -49,13 +68,52 @@ function mutableAuthority() {
   return { ...INTERIOR_STAIRS_AUTHORITY[0] } as unknown as InteriorStairsAuthority;
 }
 
-test("Planner 35 maps the already-qualified exact accessible route plus ADA 402.2 semantics to stairs=false", () => {
+test("Planner 35 v3 maps Zoo-authored accessible-route applicability plus ADA 402.2 semantics to stairs=false", () => {
   assert.deepEqual(classifyInteriorStairs(validInput()), {
     status: "supported",
     stairs: false,
     basis:
-      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
+      "zoo-authored-accessible-route-applicability-plus-ada-402-2-components",
   });
+});
+
+test("Planner 35 freezes official Zoo-authored applicability evidence instead of assuming map labels are formal ADA routes", () => {
+  assert.deepEqual(INTERIOR_STAIRS_APPLICABILITY_EVIDENCE, {
+    id: "sdz-zoo-accessibility-guide-2026-route-applicability",
+    sourceUrl: "https://sdzwa.org/sdzwa-accessibility-guide",
+    sourceLabel:
+      "San Diego Zoo Wildlife Alliance Accessibility Guide 2026",
+    observedAt: "2026-09-13T00:39:00-07:00",
+    sourceAuthority: "official-zoo-accessibility-guide",
+    adaComplianceContext:
+      "committed-to-ada-and-california-access-laws",
+    zooAccessibilityMapMeaning:
+      "provides-information-on-accessible-routes",
+    zooBestPathMeaning:
+      "blue-dotted-line-is-best-path-of-travel",
+    mobilityDeviceMapInstruction:
+      "consult-accessibility-map-to-determine-accessible-areas",
+    plannerMaterialization:
+      "stairs-applicability-evidence-only",
+  });
+});
+
+test("Planner 35 requires the Zoo guide to establish accessible-route applicability", () => {
+  for (const patch of [
+    { zooGuideSourceUrl: "https://example.com/accessibility-guide" },
+    { zooGuideAdaComplianceContext: "generic-accessibility-context" },
+    { zooGuideAccessibilityMapMeaning: "general-map-only" },
+    { zooGuideBestPathMeaning: "unknown" },
+    { zooGuideMobilityDeviceMapInstruction: "not-specified" },
+  ]) {
+    assert.deepEqual(
+      classifyInteriorStairs({ ...validInput(), ...patch }),
+      {
+        status: "blocked",
+        reason: "ZOO_ACCESSIBLE_ROUTE_APPLICABILITY_NOT_ESTABLISHED",
+      },
+    );
+  }
 });
 
 test("Planner 35 preserves Planner 18 absence-only stairs blocking", () => {
@@ -132,7 +190,7 @@ test("Planner 35 requires the already-qualified wheelchair accessibility result"
   }
 });
 
-test("Planner 35 requires the exact DOJ ADA accessible-route semantic reference", () => {
+test("Planner 35 requires the exact DOJ ADA accessible-route component semantic", () => {
   for (const patch of [
     { adaStandardReferenceUrl: "https://example.com/ada.pdf" },
     { adaStandardSection: "405" },
@@ -150,16 +208,6 @@ test("Planner 35 requires the exact DOJ ADA accessible-route semantic reference"
       },
     );
   }
-
-  assert.equal(
-    INTERIOR_STAIRS_POLICY.adaStandardReferenceUrl,
-    "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf",
-  );
-  assert.equal(INTERIOR_STAIRS_POLICY.adaStandardSection, "402.2");
-  assert.equal(
-    INTERIOR_STAIRS_POLICY.accessibleRouteStairsSemantics,
-    "stairs-not-an-accessible-route-component",
-  );
 });
 
 test("Planner 35 stays attached to the exact Planner 34 segment and Planner 33 accessibility evidence", () => {
@@ -238,7 +286,33 @@ test("other objectives cannot inherit the Tiger Trail stairs result", () => {
   }
 });
 
-test("Planner 35 policy rejects absence inference or semantic-standard weakening", () => {
+test("Planner 35 applicability evidence rejects source and semantic drift", () => {
+  const urlDrift = mutableApplicability() as unknown as {
+    sourceUrl: string;
+  };
+  urlDrift.sourceUrl = "https://example.com/guide";
+  assert.throws(
+    () =>
+      assertInteriorStairsApplicabilityEvidenceIntegrity(
+        urlDrift as unknown as InteriorStairsApplicabilityEvidence,
+      ),
+    /applicability evidence drifted/,
+  );
+
+  const routeDrift = mutableApplicability() as unknown as {
+    zooAccessibilityMapMeaning: string;
+  };
+  routeDrift.zooAccessibilityMapMeaning = "general-map-only";
+  assert.throws(
+    () =>
+      assertInteriorStairsApplicabilityEvidenceIntegrity(
+        routeDrift as unknown as InteriorStairsApplicabilityEvidence,
+      ),
+    /applicability evidence drifted/,
+  );
+});
+
+test("Planner 35 policy rejects absence inference or accessible-route applicability weakening", () => {
   const absencePolicy = mutablePolicy() as unknown as {
     absenceOfHighwayStepsAlone: string;
   };
@@ -252,15 +326,15 @@ test("Planner 35 policy rejects absence inference or semantic-standard weakening
     /stairs policy drifted/,
   );
 
-  const semanticPolicy = mutablePolicy() as unknown as {
-    accessibleRouteStairsSemantics: string;
+  const applicabilityPolicy = mutablePolicy() as unknown as {
+    zooRouteApplicabilityRequirement: string;
   };
-  semanticPolicy.accessibleRouteStairsSemantics =
-    "stairs-may-be-an-accessible-route-component";
+  applicabilityPolicy.zooRouteApplicabilityRequirement =
+    "map-label-alone-is-enough";
   assert.throws(
     () =>
       assertInteriorStairsPolicyIntegrity(
-        semanticPolicy as unknown as InteriorStairsPolicy,
+        applicabilityPolicy as unknown as InteriorStairsPolicy,
       ),
     /stairs policy drifted/,
   );
@@ -321,7 +395,11 @@ test("Planner 35 rejects stroller/provenance promotion and hidden or decorated f
   );
 });
 
-test("Planner 35 policy, authority, and assessments are deeply immutable", () => {
+test("Planner 35 applicability evidence, policy, authority, and assessments are deeply immutable", () => {
+  assert.equal(
+    Object.isFrozen(INTERIOR_STAIRS_APPLICABILITY_EVIDENCE),
+    true,
+  );
   assert.equal(Object.isFrozen(INTERIOR_STAIRS_POLICY), true);
   assert.equal(Object.isFrozen(INTERIOR_STAIRS_AUTHORITY), true);
   assert.equal(Object.isFrozen(INTERIOR_STAIRS_AUTHORITY[0]), true);
