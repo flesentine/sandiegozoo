@@ -314,12 +314,15 @@ function snapshotExactOrdinaryArray(
   return Object.freeze(snapshot);
 }
 
+const TRUSTED_STRUCTURED_CLONE =
+  globalThis.structuredClone.bind(globalThis);
+
 function assertNotProxyBacked(
   value: unknown,
   label: string,
 ) {
   try {
-    structuredClone(value);
+    TRUSTED_STRUCTURED_CLONE(value);
   } catch {
     throw new Error(
       `${label} cannot be Proxy-backed or contain unsupported runtime values.`,

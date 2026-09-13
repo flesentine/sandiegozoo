@@ -334,6 +334,37 @@ test("Planner 36 rejects proxies that conceal configurable semantic fields", () 
   );
 });
 
+test("Planner 36 proxy rejection cannot be disabled by a caller trap mutating global structuredClone", () => {
+  const auditTarget = mutableAudit() as InteriorStrollerEvidenceAudit & {
+    stroller?: boolean;
+  };
+  auditTarget.stroller = true;
+
+  const originalStructuredClone = globalThis.structuredClone;
+  let trapRuns = 0;
+  const proxiedAudit = new Proxy(auditTarget, {
+    getPrototypeOf(target) {
+      trapRuns += 1;
+      globalThis.structuredClone = ((value: unknown) => value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(target);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter((key) => key !== "stroller");
+    },
+  });
+
+  try {
+    assert.throws(
+      () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+      /cannot be Proxy-backed/,
+    );
+    assert.equal(trapRuns > 0, true);
+    assert.equal(proxiedAudit.stroller, true);
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
+
 test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
   const cyclic: Record<string, unknown> = {};
   cyclic.self = cyclic;
