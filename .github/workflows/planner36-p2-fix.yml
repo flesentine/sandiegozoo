@@ -1,0 +1,154 @@
+name: Planner 36 P2 patch
+
+on:
+  push:
+    branches:
+      - planner/planner-36-interior-stroller-evidence
+    paths:
+      - .github/workflows/planner36-p2-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: planner/planner-36-interior-stroller-evidence
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - name: Apply primitive-boundary hardening and regressions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("src/data/zooInteriorStrollerAuthority.ts")
+          source = source_path.read_text()
+
+          old_url = '''function validExactUrl(value: string, expected: string) {
+  try {
+    return new URL(value).toString() === expected;
+  } catch {
+    return false;
+  }
+}
+'''
+          new_url = '''function validExactUrl(value: unknown, expected: string) {
+  if (typeof value !== "string" || value !== expected) {
+    return false;
+  }
+
+  try {
+    return new URL(value).toString() === expected;
+  } catch {
+    return false;
+  }
+}
+
+function assertObjectiveSourceRecordId(
+  value: unknown,
+): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value !== value.trim()
+  ) {
+    throw new Error(
+      "Planner 36 objectiveSourceRecordId must be a primitive stable string.",
+    );
+  }
+}
+'''
+          if source.count(old_url) != 1:
+              raise SystemExit(f"expected one URL helper match, found {source.count(old_url)}")
+          source = source.replace(old_url, new_url, 1)
+
+          old_lookup = '''export function interiorStrollerEvidenceAuditForObjective(
+  objectiveSourceRecordId: string,
+) {
+  return INTERIOR_STROLLER_EVIDENCE_AUDIT.find(
+'''
+          new_lookup = '''export function interiorStrollerEvidenceAuditForObjective(
+  objectiveSourceRecordId: string,
+) {
+  assertObjectiveSourceRecordId(objectiveSourceRecordId);
+
+  return INTERIOR_STROLLER_EVIDENCE_AUDIT.find(
+'''
+          if source.count(old_lookup) != 1:
+              raise SystemExit(f"expected one lookup match, found {source.count(old_lookup)}")
+          source = source.replace(old_lookup, new_lookup, 1)
+          source_path.write_text(source)
+
+          test_path = Path("tests/zoo-interior-stroller-authority.test.ts")
+          tests = test_path.read_text()
+
+          marker = '''test("Planner 36 runtime boundary rejects accessor-backed audit array elements without invoking them", () => {
+'''
+          additions = '''test("Planner 36 rejects coercible non-string guide URLs without invoking caller code", () => {
+  const audit = mutableAudit();
+  let coercions = 0;
+  const coercibleUrl = {
+    toString() {
+      coercions += 1;
+      return "https://sdzwa.org/sdzwa-accessibility-guide";
+    },
+    stroller: true,
+  };
+  Object.assign(audit.accessibilityGuideEvidence, {
+    sourceUrl: coercibleUrl as unknown as string,
+  });
+
+  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
+    /accessibility-guide evidence drifted/,
+  );
+  assert.equal(coercions, 0);
+});
+
+test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+
+  assert.throws(
+    () => interiorStrollerEvidenceAuditForObjective(
+      cyclic as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+  assert.throws(
+    () => assessInteriorStroller(
+      cyclic as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+
+  assert.throws(
+    () => assessInteriorStroller(
+      new String("sdz-tiger-trail") as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+});
+
+'''
+          if tests.count(marker) != 1:
+              raise SystemExit(f"expected one test insertion marker, found {tests.count(marker)}")
+          tests = tests.replace(marker, additions + marker, 1)
+          test_path.write_text(tests)
+          PY
+      - run: npm install --no-audit --no-fund
+      - run: npm run test:planner
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/zooInteriorStrollerAuthority.ts tests/zoo-interior-stroller-authority.test.ts
+          git commit -m "Fix Planner 36 primitive runtime boundaries"
+          git push origin HEAD:planner/planner-36-interior-stroller-evidence
