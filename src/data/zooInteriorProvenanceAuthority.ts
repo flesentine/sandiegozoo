@@ -137,6 +137,17 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
+}
+
 function assertObjectiveSourceRecordId(
   value: unknown,
 ): asserts value is string {
@@ -206,53 +217,56 @@ if (
   );
 }
 
-const RAW_LINEAGE: InteriorProvenanceLineage = {
-  geometryAuthorityId: geometry.id,
-  branchSelectionAuthorityId: branchSelection.id,
-  distanceAuthorityId: distance.id,
-  directionSourceSnapshotId: directionSnapshot.id,
-  directionAuthorityId: direction.id,
-  modeAuthorityId: mode.id,
-  durationAuthorityId: duration.id,
-  difficultyAuthorityId: difficulty.id,
-  accessibilityAuthorityId: accessibility.id,
-  operationalStatusAuthorityId: operationalStatus.id,
-  stairsEvidenceAuditId: stairsAudit.id,
-  strollerEvidenceAuditId: strollerAudit.id,
-};
+const RAW_LINEAGE: InteriorProvenanceLineage =
+  nullPrototypeRecord<InteriorProvenanceLineage>({
+    geometryAuthorityId: geometry.id,
+    branchSelectionAuthorityId: branchSelection.id,
+    distanceAuthorityId: distance.id,
+    directionSourceSnapshotId: directionSnapshot.id,
+    directionAuthorityId: direction.id,
+    modeAuthorityId: mode.id,
+    durationAuthorityId: duration.id,
+    difficultyAuthorityId: difficulty.id,
+    accessibilityAuthorityId: accessibility.id,
+    operationalStatusAuthorityId: operationalStatus.id,
+    stairsEvidenceAuditId: stairsAudit.id,
+    strollerEvidenceAuditId: strollerAudit.id,
+  });
 
-const RAW_PROVENANCE: SourceProvenance = {
-  sourceUrl: SOURCE_WAY_VERSION_URL,
-  sourceLabel:
-    "OpenStreetMap way 1481425058 v1 with WildRoute exact-segment semantic lineage",
-  lastVerified: SOURCE_OBSERVED_AT,
-  confidence: "provisional",
-  effectiveFrom: EFFECTIVE_FROM,
-};
+const RAW_PROVENANCE: SourceProvenance =
+  nullPrototypeRecord<SourceProvenance>({
+    sourceUrl: SOURCE_WAY_VERSION_URL,
+    sourceLabel:
+      "OpenStreetMap way 1481425058 v1 with WildRoute exact-segment semantic lineage",
+    lastVerified: SOURCE_OBSERVED_AT,
+    confidence: "provisional",
+    effectiveFrom: EFFECTIVE_FROM,
+  });
 
-const RAW_AUTHORITY: InteriorProvenanceAuthority = {
-  id: AUTHORITY_ID,
-  objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-  sourceWayId: SOURCE_WAY_ID,
-  sourceWayVersion: SOURCE_WAY_VERSION,
-  sourceWayVersionUrl: SOURCE_WAY_VERSION_URL,
-  sourceWayTimestamp: SOURCE_WAY_TIMESTAMP,
-  sourceWayChangeset: SOURCE_WAY_CHANGESET,
-  sourceObservedAt: SOURCE_OBSERVED_AT,
-  sourceFromNodeId: FROM_NODE_ID,
-  sourceToNodeId: TO_NODE_ID,
-  lineage: RAW_LINEAGE,
-  provenance: RAW_PROVENANCE,
-  provenanceScope:
-    "primary-version-pinned-geometry-source-plus-qualified-semantic-lineage",
-  confidenceRationale:
-    "provenance-complete-while-stairs-and-stroller-remain-unresolved",
-  semanticCompletion: "blocked",
-  unresolvedSemanticBlockers: REMAINING_BLOCK_REASONS,
-  selectionScope: "objective-only",
-  globalEndpointSelection: "unresolved",
-  plannerMaterialization: "provenance-only",
-};
+const RAW_AUTHORITY: InteriorProvenanceAuthority =
+  nullPrototypeRecord<InteriorProvenanceAuthority>({
+    id: AUTHORITY_ID,
+    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+    sourceWayId: SOURCE_WAY_ID,
+    sourceWayVersion: SOURCE_WAY_VERSION,
+    sourceWayVersionUrl: SOURCE_WAY_VERSION_URL,
+    sourceWayTimestamp: SOURCE_WAY_TIMESTAMP,
+    sourceWayChangeset: SOURCE_WAY_CHANGESET,
+    sourceObservedAt: SOURCE_OBSERVED_AT,
+    sourceFromNodeId: FROM_NODE_ID,
+    sourceToNodeId: TO_NODE_ID,
+    lineage: RAW_LINEAGE,
+    provenance: RAW_PROVENANCE,
+    provenanceScope:
+      "primary-version-pinned-geometry-source-plus-qualified-semantic-lineage",
+    confidenceRationale:
+      "provenance-complete-while-stairs-and-stroller-remain-unresolved",
+    semanticCompletion: "blocked",
+    unresolvedSemanticBlockers: REMAINING_BLOCK_REASONS,
+    selectionScope: "objective-only",
+    globalEndpointSelection: "unresolved",
+    plannerMaterialization: "provenance-only",
+  });
 
 export function assertInteriorProvenanceAuthorityIntegrity() {
   if (
@@ -338,6 +352,16 @@ export function assertInteriorProvenanceAuthorityIntegrity() {
     );
   }
 
+  if (
+    Object.getPrototypeOf(RAW_AUTHORITY) !== null ||
+    Object.getPrototypeOf(RAW_LINEAGE) !== null ||
+    Object.getPrototypeOf(RAW_PROVENANCE) !== null
+  ) {
+    throw new Error(
+      "Planner 37 provenance exports must remain isolated from Object.prototype.",
+    );
+  }
+
   const expectedLineage = [
     geometry.id,
     branchSelection.id,
@@ -381,7 +405,7 @@ export function assertInteriorProvenanceAuthorityIntegrity() {
     "stairs",
     "stroller",
   ]) {
-    if (Object.hasOwn(RAW_AUTHORITY, forbidden)) {
+    if (forbidden in RAW_AUTHORITY) {
       throw new Error(
         `Planner 37 provenance authority must not materialize ${forbidden}.`,
       );
@@ -400,32 +424,42 @@ export function assessInteriorProvenance(
   assertObjectiveSourceRecordId(objectiveSourceRecordId);
 
   if (objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID) {
-    return deepFreeze({
-      status: "blocked",
-      reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",
-      objectiveSourceRecordId,
-      globalEndpointSelection: "unresolved",
-    });
+    return deepFreeze(
+      nullPrototypeRecord<Extract<
+        InteriorProvenanceAssessment,
+        { status: "blocked" }
+      >>({
+        status: "blocked",
+        reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",
+        objectiveSourceRecordId,
+        globalEndpointSelection: "unresolved",
+      }),
+    );
   }
 
-  return deepFreeze({
-    status: "provenance-ready",
-    objectiveSourceRecordId,
-    sourceFromNodeId: FROM_NODE_ID,
-    sourceToNodeId: TO_NODE_ID,
-    provenance: {
-      ...INTERIOR_PROVENANCE_AUTHORITY.provenance,
-    },
-    confidenceRationale:
-      "provenance-complete-while-stairs-and-stroller-remain-unresolved",
-    selectionScope: "objective-only",
-    globalEndpointSelection: "unresolved",
-    exactSegmentMaterialization: {
-      status: "blocked",
-      reasons: [...REMAINING_BLOCK_REASONS] as [
-        "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
-        "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-      ],
-    },
-  });
+  return deepFreeze(
+    nullPrototypeRecord<Extract<
+      InteriorProvenanceAssessment,
+      { status: "provenance-ready" }
+    >>({
+      status: "provenance-ready",
+      objectiveSourceRecordId,
+      sourceFromNodeId: FROM_NODE_ID,
+      sourceToNodeId: TO_NODE_ID,
+      provenance: nullPrototypeRecord<SourceProvenance>({
+        ...INTERIOR_PROVENANCE_AUTHORITY.provenance,
+      }),
+      confidenceRationale:
+        "provenance-complete-while-stairs-and-stroller-remain-unresolved",
+      selectionScope: "objective-only",
+      globalEndpointSelection: "unresolved",
+      exactSegmentMaterialization: nullPrototypeRecord({
+        status: "blocked" as const,
+        reasons: [...REMAINING_BLOCK_REASONS] as [
+          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+        ],
+      }),
+    }),
+  );
 }
