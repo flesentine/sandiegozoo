@@ -21,7 +21,6 @@ import {
   INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT,
 } from "../src/data/zooInteriorPedestrianDirectionAuthority.ts";
 import {
-  CORRIDOR_TERRAIN_EVIDENCE,
   classifyExactStairsAuthority,
 } from "../src/data/zooIngressTerrainAuthority.ts";
 
@@ -30,14 +29,15 @@ function validInput() {
     exactWayHighway: "pedestrian",
     exactWaySurface: "asphalt",
     exactWayName: "Front Street",
-    corridorName: "Front Street",
+    accessibilitySourceWayName: "Front Street",
     accessible: true,
     wheelchairIndicator: "shown",
     mapRouteLegend: "ADA MOST ACCESSIBLE ROUTE",
-    corridorTerrain: "mild",
-    corridorStairsEvidence: "not-explicitly-published",
-    knownStairCorridorTerrain: "steep-and-stairs",
-    knownStairCorridorStairsEvidence: "explicitly-published",
+    adaStandardReferenceUrl:
+      "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf",
+    adaStandardSection: "402.2",
+    accessibleRouteStairsSemantics:
+      "stairs-not-an-accessible-route-component",
   };
 }
 
@@ -49,16 +49,16 @@ function mutableAuthority() {
   return { ...INTERIOR_STAIRS_AUTHORITY[0] } as unknown as InteriorStairsAuthority;
 }
 
-test("Planner 35 maps the combined positive exact-way, wheelchair-corridor, and controlled-stairs contrast to stairs=false", () => {
+test("Planner 35 maps the already-qualified exact accessible route plus ADA 402.2 semantics to stairs=false", () => {
   assert.deepEqual(classifyInteriorStairs(validInput()), {
     status: "supported",
     stairs: false,
     basis:
-      "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast",
+      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
   });
 });
 
-test("Planner 35 does not weaken Planner 18 absence-only stairs semantics", () => {
+test("Planner 35 preserves Planner 18 absence-only stairs blocking", () => {
   const planner18 = classifyExactStairsAuthority({
     id: "front-street-test",
     sourceTags: {
@@ -76,32 +76,42 @@ test("Planner 35 does not weaken Planner 18 absence-only stairs semantics", () =
   );
 });
 
-test("Planner 35 requires a positive pedestrian asphalt source-way classification", () => {
+test("Planner 35 keeps OSM pedestrian/asphalt classification as identity context only", () => {
+  assert.equal(
+    INTERIOR_STAIRS_POLICY.exactWayIdentityRole,
+    "identity-context-only-not-no-stairs-authority",
+  );
+  assert.equal(
+    INTERIOR_STAIRS_AUTHORITY[0].exactWayIdentityRole,
+    "identity-context-only-not-no-stairs-authority",
+  );
+
   for (const patch of [
     { exactWayHighway: "footway" },
     { exactWayHighway: "steps" },
     { exactWaySurface: "unknown" },
+    { exactWayName: "Other Street" },
   ]) {
     assert.deepEqual(
       classifyInteriorStairs({ ...validInput(), ...patch }),
       {
         status: "blocked",
-        reason:
-          "EXACT_WAY_NOT_POSITIVE_NONSTEP_PEDESTRIAN_CLASSIFICATION",
+        reason: "EXACT_WAY_IDENTITY_CONTEXT_NOT_MET",
       },
     );
   }
 });
 
-test("Planner 35 requires exact source-way and official corridor name identity", () => {
+test("Planner 35 requires exact source-way name identity with the qualified accessibility source", () => {
   assert.deepEqual(
     classifyInteriorStairs({
       ...validInput(),
-      corridorName: "Treetops Way",
+      accessibilitySourceWayName: "Treetops Way",
     }),
     {
       status: "blocked",
-      reason: "CORRIDOR_NAME_NOT_EXACT_SOURCE_WAY_MATCH",
+      reason:
+        "ACCESSIBILITY_SOURCE_NAME_NOT_EXACT_SOURCE_WAY_MATCH",
     },
   );
 });
@@ -122,60 +132,34 @@ test("Planner 35 requires the already-qualified wheelchair accessibility result"
   }
 });
 
-test("Planner 35 requires Front Street mild terrain and the official controlled stairs contrast", () => {
-  assert.deepEqual(
-    classifyInteriorStairs({
-      ...validInput(),
-      corridorTerrain: "steep",
-    }),
+test("Planner 35 requires the exact DOJ ADA accessible-route semantic reference", () => {
+  for (const patch of [
+    { adaStandardReferenceUrl: "https://example.com/ada.pdf" },
+    { adaStandardSection: "405" },
     {
-      status: "blocked",
-      reason: "CORRIDOR_TERRAIN_NOT_MAPPED_BY_POLICY",
+      accessibleRouteStairsSemantics:
+        "stairs-may-be-an-accessible-route-component",
     },
-  );
-  assert.deepEqual(
-    classifyInteriorStairs({
-      ...validInput(),
-      knownStairCorridorStairsEvidence:
-        "not-explicitly-published",
-    }),
-    {
-      status: "blocked",
-      reason: "CONTROLLED_STAIRS_CONTRAST_NOT_ESTABLISHED",
-    },
-  );
-});
+  ]) {
+    assert.deepEqual(
+      classifyInteriorStairs({ ...validInput(), ...patch }),
+      {
+        status: "blocked",
+        reason:
+          "ACCESSIBLE_ROUTE_STANDARD_PREREQUISITE_NOT_MET",
+      },
+    );
+  }
 
-test("official map evidence distinguishes Front Street from an explicitly stair-bearing corridor", () => {
-  const frontStreet = CORRIDOR_TERRAIN_EVIDENCE.find(
-    (record) =>
-      record.id ===
-      "sdz-corridor-front-street-terrain-evidence",
-  );
-  const fernCanyon = CORRIDOR_TERRAIN_EVIDENCE.find(
-    (record) =>
-      record.id ===
-      "sdz-corridor-fern-canyon-trail-terrain-evidence",
-  );
-
-  assert.ok(frontStreet);
-  assert.equal(frontStreet.corridorName, "Front Street");
-  assert.equal(frontStreet.publishedTerrain, "mild");
   assert.equal(
-    frontStreet.stairsEvidence,
-    "not-explicitly-published",
+    INTERIOR_STAIRS_POLICY.adaStandardReferenceUrl,
+    "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf",
   );
-  assert.ok(fernCanyon);
-  assert.equal(fernCanyon.corridorName, "Fern Canyon Trail");
+  assert.equal(INTERIOR_STAIRS_POLICY.adaStandardSection, "402.2");
   assert.equal(
-    fernCanyon.publishedTerrain,
-    "steep-and-stairs",
+    INTERIOR_STAIRS_POLICY.accessibleRouteStairsSemantics,
+    "stairs-not-an-accessible-route-component",
   );
-  assert.equal(
-    fernCanyon.stairsEvidence,
-    "explicitly-published",
-  );
-  assert.equal(frontStreet.artifactId, fernCanyon.artifactId);
 });
 
 test("Planner 35 stays attached to the exact Planner 34 segment and Planner 33 accessibility evidence", () => {
@@ -199,9 +183,14 @@ test("Planner 35 stays attached to the exact Planner 34 segment and Planner 33 a
   );
   assert.equal(stairs.sourceWayName, accessibility.sourceWayName);
   assert.equal(accessibility.accessible, true);
+  assert.equal(accessibility.wheelchairIndicator, "shown");
+  assert.equal(
+    accessibility.mapRouteLegend,
+    "ADA MOST ACCESSIBLE ROUTE",
+  );
 });
 
-test("Planner 35 stays attached to the complete version-pinned Planner 29 OSM tag snapshot", () => {
+test("Planner 35 stays attached to the complete version-pinned Planner 29 OSM identity snapshot", () => {
   const stairs = INTERIOR_STAIRS_AUTHORITY[0];
   const snapshot = INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT;
   assert.equal(stairs.sourceSnapshotId, snapshot.id);
@@ -249,29 +238,43 @@ test("other objectives cannot inherit the Tiger Trail stairs result", () => {
   }
 });
 
-test("Planner 35 policy and authority reject weakening the evidence conjunction", () => {
-  const policy = mutablePolicy() as unknown as {
+test("Planner 35 policy rejects absence inference or semantic-standard weakening", () => {
+  const absencePolicy = mutablePolicy() as unknown as {
     absenceOfHighwayStepsAlone: string;
   };
-  policy.absenceOfHighwayStepsAlone = "sufficient-for-stairs-false";
+  absencePolicy.absenceOfHighwayStepsAlone =
+    "sufficient-for-stairs-false";
   assert.throws(
     () =>
       assertInteriorStairsPolicyIntegrity(
-        policy as unknown as InteriorStairsPolicy,
+        absencePolicy as unknown as InteriorStairsPolicy,
+      ),
+    /stairs policy drifted/,
+  );
+
+  const semanticPolicy = mutablePolicy() as unknown as {
+    accessibleRouteStairsSemantics: string;
+  };
+  semanticPolicy.accessibleRouteStairsSemantics =
+    "stairs-may-be-an-accessible-route-component";
+  assert.throws(
+    () =>
+      assertInteriorStairsPolicyIntegrity(
+        semanticPolicy as unknown as InteriorStairsPolicy,
       ),
     /stairs policy drifted/,
   );
 
   const authority = mutableAuthority() as unknown as {
-    exactWayHighway: string;
+    adaStandardSection: string;
   };
-  authority.exactWayHighway = "footway";
+  authority.adaStandardSection = "405";
   assert.throws(
     () =>
       assertInteriorStairsAuthorityIntegrity([
         authority as unknown as InteriorStairsAuthority,
       ]),
-    /stairs authority drifted|detached/,
+    /stairs authority drifted|no longer reproduces/,
   );
 });
 
