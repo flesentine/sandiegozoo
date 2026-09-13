@@ -1,84 +1,73 @@
-name: Planner37 P2 fix
+name: Planner 37 prototype boundary fix
 
 on:
   push:
     branches:
       - planner/planner-37-interior-provenance
+    paths:
+      - .github/workflows/planner37-p2-fix.yml
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
         with:
           ref: planner/planner-37-interior-provenance
-      - name: Patch provenance prototype boundary
-        shell: bash
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - name: Harden provenance exports against inherited semantic fields
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           from pathlib import Path
 
-          path = Path('src/data/zooInteriorProvenanceAuthority.ts')
-          text = path.read_text()
+          source_path = Path("src/data/zooInteriorProvenanceAuthority.ts")
+          source = source_path.read_text()
 
-          marker = '''function assertObjectiveSourceRecordId(\n'''
-          helper = '''function nullPrototypeRecord<T extends object>(value: T): T {\n  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;\n  for (const key of Reflect.ownKeys(value)) {\n    const descriptor = Object.getOwnPropertyDescriptor(value, key);\n    if (descriptor) {\n      Object.defineProperty(snapshot, key, descriptor);\n    }\n  }\n  return snapshot as T;\n}\n\n'''
-          if helper not in text:
-              text = text.replace(marker, helper + marker, 1)
+          marker = "function assertObjectiveSourceRecordId(\n"
+          helper = """function nullPrototypeRecord<T extends object>(value: T): T {\n  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;\n  for (const key of Reflect.ownKeys(value)) {\n    const descriptor = Object.getOwnPropertyDescriptor(value, key);\n    if (descriptor) {\n      Object.defineProperty(snapshot, key, descriptor);\n    }\n  }\n  return snapshot as T;\n}\n\n"""
+          if source.count(marker) != 1:
+              raise SystemExit(f"objective marker count {source.count(marker)}")
+          if helper not in source:
+              source = source.replace(marker, helper + marker, 1)
 
-          text = text.replace(
-              'const RAW_LINEAGE: InteriorProvenanceLineage = {',
-              'const RAW_LINEAGE: InteriorProvenanceLineage = nullPrototypeRecord({',
-              1,
-          )
-          text = text.replace(
-              '  strollerEvidenceAuditId: strollerAudit.id,\n};\n\nconst RAW_PROVENANCE:',
-              '  strollerEvidenceAuditId: strollerAudit.id,\n});\n\nconst RAW_PROVENANCE:',
-              1,
-          )
-          text = text.replace(
-              'const RAW_PROVENANCE: SourceProvenance = {',
-              'const RAW_PROVENANCE: SourceProvenance = nullPrototypeRecord({',
-              1,
-          )
-          text = text.replace(
-              '  effectiveFrom: EFFECTIVE_FROM,\n};\n\nconst RAW_AUTHORITY:',
-              '  effectiveFrom: EFFECTIVE_FROM,\n});\n\nconst RAW_AUTHORITY:',
-              1,
-          )
-          text = text.replace(
-              'const RAW_AUTHORITY: InteriorProvenanceAuthority = {',
-              'const RAW_AUTHORITY: InteriorProvenanceAuthority = nullPrototypeRecord({',
-              1,
-          )
-          text = text.replace(
-              '  plannerMaterialization: "provenance-only",\n};\n\nexport function assertInteriorProvenanceAuthorityIntegrity()',
-              '  plannerMaterialization: "provenance-only",\n});\n\nexport function assertInteriorProvenanceAuthorityIntegrity()',
-              1,
-          )
-          text = text.replace(
-              '    if (Object.hasOwn(RAW_AUTHORITY, forbidden)) {',
-              '    if (forbidden in RAW_AUTHORITY) {',
-              1,
-          )
+          replacements = [
+              ('const RAW_LINEAGE: InteriorProvenanceLineage = {', 'const RAW_LINEAGE: InteriorProvenanceLineage = nullPrototypeRecord({'),
+              ('  strollerEvidenceAuditId: strollerAudit.id,\n};\n\nconst RAW_PROVENANCE:', '  strollerEvidenceAuditId: strollerAudit.id,\n});\n\nconst RAW_PROVENANCE:'),
+              ('const RAW_PROVENANCE: SourceProvenance = {', 'const RAW_PROVENANCE: SourceProvenance = nullPrototypeRecord({'),
+              ('  effectiveFrom: EFFECTIVE_FROM,\n};\n\nconst RAW_AUTHORITY:', '  effectiveFrom: EFFECTIVE_FROM,\n});\n\nconst RAW_AUTHORITY:'),
+              ('const RAW_AUTHORITY: InteriorProvenanceAuthority = {', 'const RAW_AUTHORITY: InteriorProvenanceAuthority = nullPrototypeRecord({'),
+              ('  plannerMaterialization: "provenance-only",\n};\n\nexport function assertInteriorProvenanceAuthorityIntegrity()', '  plannerMaterialization: "provenance-only",\n});\n\nexport function assertInteriorProvenanceAuthorityIntegrity()'),
+              ('    if (Object.hasOwn(RAW_AUTHORITY, forbidden)) {', '    if (forbidden in RAW_AUTHORITY) {'),
+          ]
+          for old, new in replacements:
+              if old in source:
+                  source = source.replace(old, new, 1)
+              elif new not in source:
+                  raise SystemExit(f"missing source marker: {old[:60]}")
 
           old_blocked = '''    return deepFreeze({\n      status: "blocked",\n      reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",\n      objectiveSourceRecordId,\n      globalEndpointSelection: "unresolved",\n    });'''
           new_blocked = '''    return deepFreeze(nullPrototypeRecord({\n      status: "blocked",\n      reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",\n      objectiveSourceRecordId,\n      globalEndpointSelection: "unresolved",\n    }));'''
-          if old_blocked not in text:
-              raise SystemExit('blocked assessment block not found')
-          text = text.replace(old_blocked, new_blocked, 1)
+          if old_blocked in source:
+              source = source.replace(old_blocked, new_blocked, 1)
+          elif new_blocked not in source:
+              raise SystemExit("blocked assessment marker missing")
 
           old_ready = '''  return deepFreeze({\n    status: "provenance-ready",\n    objectiveSourceRecordId,\n    sourceFromNodeId: FROM_NODE_ID,\n    sourceToNodeId: TO_NODE_ID,\n    provenance: {\n      ...INTERIOR_PROVENANCE_AUTHORITY.provenance,\n    },\n    confidenceRationale:\n      "provenance-complete-while-stairs-and-stroller-remain-unresolved",\n    selectionScope: "objective-only",\n    globalEndpointSelection: "unresolved",\n    exactSegmentMaterialization: {\n      status: "blocked",\n      reasons: [...REMAINING_BLOCK_REASONS] as [\n        "EXACT_SEGMENT_STAIRS_NOT_SOURCED",\n        "EXACT_SEGMENT_STROLLER_NOT_SOURCED",\n      ],\n    },\n  });'''
           new_ready = '''  return deepFreeze(nullPrototypeRecord({\n    status: "provenance-ready",\n    objectiveSourceRecordId,\n    sourceFromNodeId: FROM_NODE_ID,\n    sourceToNodeId: TO_NODE_ID,\n    provenance: nullPrototypeRecord({\n      ...INTERIOR_PROVENANCE_AUTHORITY.provenance,\n    }),\n    confidenceRationale:\n      "provenance-complete-while-stairs-and-stroller-remain-unresolved",\n    selectionScope: "objective-only",\n    globalEndpointSelection: "unresolved",\n    exactSegmentMaterialization: nullPrototypeRecord({\n      status: "blocked",\n      reasons: [...REMAINING_BLOCK_REASONS] as [\n        "EXACT_SEGMENT_STAIRS_NOT_SOURCED",\n        "EXACT_SEGMENT_STROLLER_NOT_SOURCED",\n      ],\n    }),\n  }));'''
-          if old_ready not in text:
-              raise SystemExit('ready assessment block not found')
-          text = text.replace(old_ready, new_ready, 1)
-          path.write_text(text)
+          if old_ready in source:
+              source = source.replace(old_ready, new_ready, 1)
+          elif new_ready not in source:
+              raise SystemExit("ready assessment marker missing")
 
-          test_path = Path('tests/zoo-interior-provenance-authority.test.ts')
+          source_path.write_text(source)
+
+          test_path = Path("tests/zoo-interior-provenance-authority.test.ts")
           tests = test_path.read_text()
           regression = r'''
 
@@ -132,21 +121,23 @@ test("Planner 37 exported records ignore Object.prototype semantic pollution aft
   }
 });
 '''
-          if 'Object.prototype semantic pollution after module load' not in tests:
-              test_path.write_text(tests + regression)
+          if "Object.prototype semantic pollution after module load" not in tests:
+              tests += regression
+          test_path.write_text(tests)
           PY
-      - name: Run Planner 37 regression and full gate
-        run: |
-          npm install --no-audit --no-fund
-          npm run test:planner
-          npm run typecheck
-          npm run build
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Planner tests
+        run: npm run test:planner
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
       - name: Commit fix
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/data/zooInteriorProvenanceAuthority.ts tests/zoo-interior-provenance-authority.test.ts
-          git diff --cached --quiet && exit 0
+          git diff --cached --check
           git commit -m "Harden Planner 37 prototype boundary"
           git push origin HEAD:planner/planner-37-interior-provenance
