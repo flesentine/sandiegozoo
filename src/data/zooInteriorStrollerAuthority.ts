@@ -183,11 +183,11 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function assertExactPlainObject(
+function snapshotExactPlainObject(
   value: unknown,
   allowedFields: readonly string[],
   label: string,
-): asserts value is Record<string, unknown> {
+): Readonly<Record<string, unknown>> {
   if (
     !value ||
     typeof value !== "object" ||
@@ -206,11 +206,12 @@ function assertExactPlainObject(
 
   const expected = new Set(allowedFields);
   const stringKeys = ownKeys as string[];
+  const actual = new Set(stringKeys);
   const unknown = stringKeys
     .filter((key) => !expected.has(key))
     .sort();
   const missing = allowedFields.filter(
-    (key) => !Object.hasOwn(value, key),
+    (key) => !actual.has(key),
   );
 
   if (unknown.length > 0) {
@@ -224,6 +225,7 @@ function assertExactPlainObject(
     );
   }
 
+  const snapshot: Record<string, unknown> = {};
   for (const field of allowedFields) {
     const descriptor =
       Object.getOwnPropertyDescriptor(value, field);
@@ -236,18 +238,25 @@ function assertExactPlainObject(
         `${label} requires enumerable own data field ${field}.`,
       );
     }
+    Object.defineProperty(snapshot, field, {
+      value: descriptor.value,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
   }
+
+  return Object.freeze(snapshot);
 }
 
-function assertExactOrdinaryArray(
+function snapshotExactOrdinaryArray(
   value: unknown,
   expectedLength: number,
   label: string,
-): asserts value is unknown[] {
+): readonly unknown[] {
   if (
     !Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Array.prototype ||
-    value.length !== expectedLength
+    Object.getPrototypeOf(value) !== Array.prototype
   ) {
     throw new Error(
       `${label} must be an ordinary array of length ${expectedLength}.`,
@@ -261,8 +270,9 @@ function assertExactOrdinaryArray(
     ),
     "length",
   ]);
+  const ownKeys = Reflect.ownKeys(value);
   if (
-    Reflect.ownKeys(value).some(
+    ownKeys.some(
       (key) =>
         typeof key !== "string" ||
         !allowedOwnKeys.has(key),
@@ -271,6 +281,19 @@ function assertExactOrdinaryArray(
     throw new Error(`${label} cannot contain extra own properties.`);
   }
 
+  const lengthDescriptor =
+    Object.getOwnPropertyDescriptor(value, "length");
+  if (
+    !lengthDescriptor ||
+    !("value" in lengthDescriptor) ||
+    lengthDescriptor.value !== expectedLength
+  ) {
+    throw new Error(
+      `${label} must be an ordinary array of length ${expectedLength}.`,
+    );
+  }
+
+  const snapshot: unknown[] = [];
   for (let index = 0; index < expectedLength; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
@@ -285,7 +308,10 @@ function assertExactOrdinaryArray(
         `${label} requires enumerable own data element ${index}.`,
       );
     }
+    snapshot.push(descriptor.value);
   }
+
+  return Object.freeze(snapshot);
 }
 
 function validTimestamp(value: unknown) {
@@ -398,31 +424,31 @@ const RAW_AUDIT: InteriorStrollerEvidenceAudit[] = [
 export function assertInteriorStrollerEvidenceAuditPolicyIntegrity(
   policy: InteriorStrollerEvidenceAuditPolicy,
 ) {
-  assertExactPlainObject(
+  const normalizedPolicy = snapshotExactPlainObject(
     policy,
     POLICY_FIELDS,
     "Planner 36 stroller evidence-audit policy",
-  );
+  ) as unknown as InteriorStrollerEvidenceAuditPolicy;
 
   if (
-    policy.id !== POLICY_ID ||
-    policy.policyVersion !== "1" ||
-    policy.adoptedAt !== ADOPTED_AT ||
-    !validTimestamp(policy.adoptedAt) ||
-    policy.scope !==
+    normalizedPolicy.id !== POLICY_ID ||
+    normalizedPolicy.policyVersion !== "1" ||
+    normalizedPolicy.adoptedAt !== ADOPTED_AT ||
+    !validTimestamp(normalizedPolicy.adoptedAt) ||
+    normalizedPolicy.scope !==
       "exact-objective-selected-interior-segment-stroller-evidence-audit" ||
-    policy.facilityPermission !==
+    normalizedPolicy.facilityPermission !==
       "insufficient-for-exact-route-suitability" ||
-    policy.wheelchairTaggedStrollerTreatment !==
+    normalizedPolicy.wheelchairTaggedStrollerTreatment !==
       "accessibility-device-special-case-not-generic-stroller-authority" ||
-    policy.wheelchairAccessibility !==
+    normalizedPolicy.wheelchairAccessibility !==
       "does-not-establish-generic-stroller-suitability" ||
-    policy.unresolvedStairs !==
+    normalizedPolicy.unresolvedStairs !==
       "cannot-be-treated-as-stroller-compatible" ||
-    policy.positiveEvidenceRequirement !==
+    normalizedPolicy.positiveEvidenceRequirement !==
       "direct-exact-segment-generic-stroller-suitability-or-explicit-all-strollers-route-binding" ||
-    policy.unresolvedPlannerValue !== "unknown" ||
-    policy.authority !==
+    normalizedPolicy.unresolvedPlannerValue !== "unknown" ||
+    normalizedPolicy.authority !==
       "conservative-evidence-audit-policy"
   ) {
     throw new Error(
@@ -434,28 +460,28 @@ export function assertInteriorStrollerEvidenceAuditPolicyIntegrity(
 function assertAccessibilityGuideEvidenceIntegrity(
   evidence: StrollerAccessibilityGuideEvidence,
 ) {
-  assertExactPlainObject(
+  const normalizedEvidence = snapshotExactPlainObject(
     evidence,
     GUIDE_FIELDS,
     "Planner 36 stroller accessibility-guide evidence",
-  );
+  ) as unknown as StrollerAccessibilityGuideEvidence;
 
   if (
     !validExactUrl(
-      evidence.sourceUrl,
+      normalizedEvidence.sourceUrl,
       ZOO_ACCESSIBILITY_GUIDE_URL,
     ) ||
-    evidence.sourceLabel !==
+    normalizedEvidence.sourceLabel !==
       ZOO_ACCESSIBILITY_GUIDE_LABEL ||
-    evidence.observedAt !== ADOPTED_AT ||
-    !validTimestamp(evidence.observedAt) ||
-    evidence.childStrollerAccessibilityDevicePolicy !==
+    normalizedEvidence.observedAt !== ADOPTED_AT ||
+    !validTimestamp(normalizedEvidence.observedAt) ||
+    normalizedEvidence.childStrollerAccessibilityDevicePolicy !==
       "wheelchair-tag-available-when-child-cannot-transfer" ||
-    evidence.mobilityDeviceMapAdvisement !==
+    normalizedEvidence.mobilityDeviceMapAdvisement !==
       "consult-accessibility-map-or-app-and-signs" ||
-    evidence.evidenceScope !==
+    normalizedEvidence.evidenceScope !==
       "accessibility-device-specific" ||
-    evidence.genericStrollerRouteSuitabilityAuthority !==
+    normalizedEvidence.genericStrollerRouteSuitabilityAuthority !==
       "not-established"
   ) {
     throw new Error(
@@ -468,15 +494,14 @@ export function assertInteriorStrollerEvidenceAuditIntegrity(
   audits: readonly InteriorStrollerEvidenceAudit[],
 ) {
   assertInteriorStrollerEvidenceAuditPolicyIntegrity(RAW_POLICY);
-  assertExactOrdinaryArray(
+  const normalizedAudits = snapshotExactOrdinaryArray(
     audits,
     1,
     "Planner 36 stroller evidence-audit collection",
   );
 
-  const candidate: unknown = audits[0];
-  assertExactPlainObject(
-    candidate,
+  const candidate = snapshotExactPlainObject(
+    normalizedAudits[0],
     AUDIT_FIELDS,
     "Planner 36 stroller evidence audit",
   );

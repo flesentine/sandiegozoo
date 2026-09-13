@@ -251,6 +251,40 @@ test("Planner 36 rejects coercible non-string guide URLs without invoking caller
   assert.equal(coercions, 0);
 });
 
+test("Planner 36 snapshots proxy-backed audit and guide evidence without invoking get traps", () => {
+  const audit = mutableAudit();
+  const guideTarget = { ...audit.accessibilityGuideEvidence };
+  let guideReads = 0;
+  audit.accessibilityGuideEvidence = new Proxy(guideTarget, {
+    get(target, property, receiver) {
+      guideReads += 1;
+      if (property === "sourceUrl") {
+        return guideReads === 1
+          ? "https://sdzwa.org/sdzwa-accessibility-guide"
+          : { stroller: true };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  }) as typeof audit.accessibilityGuideEvidence;
+
+  let auditReads = 0;
+  const proxiedAudit = new Proxy(audit, {
+    get(target, property, receiver) {
+      auditReads += 1;
+      if (property === "sourceWayId" && auditReads > 1) {
+        return { stroller: true };
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  }) as typeof audit;
+
+  assert.doesNotThrow(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+  );
+  assert.equal(auditReads, 0);
+  assert.equal(guideReads, 0);
+});
+
 test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
   const cyclic: Record<string, unknown> = {};
   cyclic.self = cyclic;
