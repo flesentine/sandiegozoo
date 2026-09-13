@@ -88,7 +88,7 @@ test("Planner 37 pins provenance to the exact OSM way version snapshot", () => {
 test("Planner 37 emits conservative SourceProvenance instead of verified confidence", () => {
   const provenance = INTERIOR_PROVENANCE_AUTHORITY.provenance;
 
-  assert.deepEqual(provenance, {
+  assert.deepEqual({ ...provenance }, {
     sourceUrl:
       "https://api.openstreetmap.org/api/0.6/way/1481425058/1",
     sourceLabel:
@@ -193,7 +193,7 @@ test("Planner 37 provenance authority cannot masquerade as RouteEdge or RouteNod
 
 test("Planner 37 unsupported objectives fail closed", () => {
   assert.deepEqual(
-    assessInteriorProvenance("sdz-panda-ridge"),
+    { ...assessInteriorProvenance("sdz-panda-ridge") },
     {
       status: "blocked",
       reason: "OBJECTIVE_PROVENANCE_NOT_SOURCED",
@@ -237,5 +237,83 @@ test("Planner 37 authority and assessment outputs are deeply immutable", () => {
     assert.equal(Object.isFrozen(result.provenance), true);
     assert.equal(Object.isFrozen(result.exactSegmentMaterialization), true);
     assert.equal(Object.isFrozen(result.exactSegmentMaterialization.reasons), true);
+  }
+});
+
+test("Planner 37 exported records ignore Object.prototype semantic pollution after module load", () => {
+  const pollutedKeys = ["stairs", "stroller", "routeEdgeId"] as const;
+  const originalDescriptors = new Map(
+    pollutedKeys.map((key) => [
+      key,
+      Object.getOwnPropertyDescriptor(Object.prototype, key),
+    ]),
+  );
+
+  try {
+    Object.defineProperty(Object.prototype, "stairs", {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(Object.prototype, "stroller", {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(Object.prototype, "routeEdgeId", {
+      value: "polluted-route-edge",
+      configurable: true,
+    });
+
+    assert.equal(Object.getPrototypeOf(INTERIOR_PROVENANCE_AUTHORITY), null);
+    assert.equal(Object.getPrototypeOf(INTERIOR_PROVENANCE_AUTHORITY.lineage), null);
+    assert.equal(Object.getPrototypeOf(INTERIOR_PROVENANCE_AUTHORITY.provenance), null);
+    assert.equal(
+      (INTERIOR_PROVENANCE_AUTHORITY as unknown as Record<string, unknown>).stairs,
+      undefined,
+    );
+    assert.equal(
+      (INTERIOR_PROVENANCE_AUTHORITY as unknown as Record<string, unknown>).stroller,
+      undefined,
+    );
+    assert.equal(
+      (INTERIOR_PROVENANCE_AUTHORITY as unknown as Record<string, unknown>).routeEdgeId,
+      undefined,
+    );
+
+    const result = assessInteriorProvenance("sdz-tiger-trail");
+    assert.equal(Object.getPrototypeOf(result), null);
+    assert.equal(
+      (result as unknown as Record<string, unknown>).stairs,
+      undefined,
+    );
+    assert.equal(
+      (result as unknown as Record<string, unknown>).stroller,
+      undefined,
+    );
+    assert.equal(
+      (result as unknown as Record<string, unknown>).routeEdgeId,
+      undefined,
+    );
+
+    if (result.status === "provenance-ready") {
+      assert.equal(Object.getPrototypeOf(result.provenance), null);
+      assert.equal(Object.getPrototypeOf(result.exactSegmentMaterialization), null);
+      assert.equal(
+        (result.provenance as unknown as Record<string, unknown>).stairs,
+        undefined,
+      );
+      assert.equal(
+        (result.exactSegmentMaterialization as unknown as Record<string, unknown>).stroller,
+        undefined,
+      );
+    }
+  } finally {
+    for (const key of pollutedKeys) {
+      const descriptor = originalDescriptors.get(key);
+      if (descriptor) {
+        Object.defineProperty(Object.prototype, key, descriptor);
+      } else {
+        delete (Object.prototype as Record<string, unknown>)[key];
+      }
+    }
   }
 });
