@@ -1,152 +1,119 @@
-# Planner 35 — Interior Stairs Authority
+# Planner 35 — Interior Stairs Evidence Audit
 
-## Purpose
+## Outcome
 
-Planner 35 qualifies one additional RouteEdge semantic for the Tiger Trail objective-selected Front Street segment:
+Planner 35 does **not** clear stairs for the Tiger Trail objective-selected Front Street segment:
 
 `7053320515 ↔ 1619736626`
 
-The qualified value is:
+The exact result remains:
 
-- `stairs: false`
+- `stairs: unknown`
+- blocker: `EXACT_SEGMENT_STAIRS_NOT_SOURCED`
 
-Planner 35 does **not** derive that value from a missing `highway=steps` tag, `mild` terrain, or a map simply failing to mention stairs. Planner 18's conservative absence-only rule remains intact.
+This is intentional. Three increasingly strict candidate policies were reviewed, and each exposed the same fundamental source gap: no current source positively proves that this exact traversal is stair-free or explicitly binds it to ADA §402.
 
-## Review history
+## Evidence audited
 
-The first candidate relied partly on Front Street having no explicit stairs publication while Fern Canyon Trail was explicitly labeled with stairs. Codex correctly rejected that because one positive stairs label does not prove exhaustive stair labeling.
+### Exact OSM source snapshot
 
-The second candidate removed that inference but jumped directly from Planner 33's product `accessible:true` result to federal ADA §402.2. Codex correctly identified the missing applicability premise: a Zoo map label alone had not established that the traversal was an accessible route to which §402.2 should be applied.
-
-Planner 35 v3 makes that applicability premise explicit with a separate official Zoo-authored source.
-
-## Positive evidence chain
-
-### 1. Exact segment identity remains pinned
-
-The complete version-pinned Planner 29 OSM snapshot keeps the exact source identity fixed:
+The version-pinned Front Street snapshot identifies the exact way as:
 
 - way `1481425058`
 - `highway=pedestrian`
 - `surface=asphalt`
 - `name=Front Street`
-- endpoints `7053320515 ↔ 1619736626`
 
-These OSM facts are **identity context only**. They are not no-stairs authority.
+Planner 18 already established the correct boundary: absence of `highway=steps` is not positive `stairs:false` authority. Pedestrian/asphalt classification remains identity context only.
 
-### 2. Planner 33 already qualifies this exact segment as accessible
+### Planner 33 accessibility
 
-Planner 33 maps the exact-name-matched official Zoo accessibility evidence to `accessible:true` for this same exact segment. Its prerequisites include:
+Planner 33 qualifies this exact segment as `accessible:true` using exact-name-matched official wheelchair / `ADA MOST ACCESSIBLE ROUTE` evidence.
 
-- exact source-way name: `Front Street`
-- official accessibility source-way/corridor name: `Front Street`
-- wheelchair indicator: `shown`
-- official route legend: `ADA MOST ACCESSIBLE ROUTE`
+But Planner 33 explicitly keeps:
 
-Planner 35 does not independently re-promote the map corridor.
+- `stairsAuthorityState: independent-unresolved`
 
-### 3. The official 2026 Zoo Accessibility Guide establishes route applicability
+Planner 35 preserves that independence. Wheelchair accessibility does not automatically establish `stairs:false`.
 
-Planner 35 v3 freezes a separate source snapshot from the **San Diego Zoo Wildlife Alliance Accessibility Guide 2026**:
+### Official 2026 Zoo Accessibility Guide
 
-- source: `https://sdzwa.org/sdzwa-accessibility-guide`
-- source authority: official Zoo accessibility guide
-- the Zoo states that it is committed to compliance with the ADA and California access laws;
-- the guide describes the Zoo accessibility map as providing information on **accessible routes** for guests with limited mobility;
-- it says the blue dotted line on the Zoo accessibility map indicates the **best path of travel**;
-- it directs mobility-device users to consult the accessibility map/app and signs to determine which areas are accessible.
+The current official guide is useful context:
 
-This is the missing Zoo-authored applicability premise. Planner 35 no longer asks the `ADA MOST ACCESSIBLE ROUTE` legend to prove formal applicability by itself.
+`https://sdzwa.org/sdzwa-accessibility-guide`
 
-### 4. ADA Standards §402.2 supplies the route-component semantic
+It states ADA and California access-law compliance context, describes the Zoo accessibility map as providing information on accessible routes, identifies the blue dotted line as the best path of travel, and directs mobility-device users to consult the accessibility map/app/signage.
 
-Planner 35 freezes the Department of Justice **2010 ADA Standards for Accessible Design**:
+That is meaningful accessibility guidance, but it does **not** explicitly state that this exact Front Street traversal is an ADA §402 Accessible Route.
 
-- source: `https://www.ada.gov/assets/pdfs/2010-design-standards.pdf`
-- section: `402.2 Components`
+### DOJ 2010 ADA Standards §402.2
 
-Section 402.2 defines the permitted components of an accessible route through walking surfaces, doorways, ramps, curb ramps, elevators, and platform lifts. Stairs are not an accessible-route component.
+The federal standard remains useful semantic context:
 
-Planner 35 v3 therefore adopts a narrow prospective product rule only after both prerequisites are present:
+`https://www.ada.gov/assets/pdfs/2010-design-standards.pdf`
 
-1. the Zoo itself establishes that its accessibility map is information for accessible routes / best path of travel in an ADA-compliance context; and
-2. the exact Planner 33 Front Street traversal is the wheelchair-marked `ADA MOST ACCESSIBLE ROUTE` on that map.
+Section 402.2 defines the components of an already-established Accessible Route. It cannot supply the missing applicability premise by itself.
 
-The federal component definition then supplies the no-stairs semantic for the accessible traversal represented by the exact segment.
+## Review history
 
-## Planner 18 remains conservative
+Planner 35 deliberately stopped instead of forcing a conclusion.
 
-Planner 35 explicitly freezes:
+### Candidate 1
 
-- `absenceOfHighwayStepsAlone: insufficient-for-stairs-false`
-- `absenceOfHighwayStepsRole: non-authoritative-supporting-context-only`
-- OSM identity role: `identity-context-only-not-no-stairs-authority`
+Tried to combine OSM pedestrian/asphalt classification, Planner 33 accessibility, and the Zoo map's explicit stairs vocabulary.
 
-The integrity boundary also re-runs Planner 18 `classifyExactStairsAuthority` on the current exact snapshot and requires it to remain blocked. If Planner 18 ever started inferring `stairs:false` from tag absence, Planner 35 would fail integrity.
+Rejected because non-publication of stairs is still absence evidence; one corridor labeled with stairs does not prove exhaustive labeling.
 
-## Policy boundary
+### Candidate 2
 
-`stairs:false` is supported only while all of these remain true:
+Removed the non-publication inference and combined Planner 33 `accessible:true` with ADA §402.2.
 
-1. the exact source way and endpoints remain the same Planner 29 / Planner 34 segment;
-2. the exact OSM identity remains `pedestrian` / `asphalt` / `Front Street` as identity context only;
-3. Planner 33 still qualifies this exact segment as `accessible:true`;
-4. the accessibility source-way name remains `Front Street`;
-5. the wheelchair indicator remains `shown`;
-6. the map route legend remains `ADA MOST ACCESSIBLE ROUTE`;
-7. the official 2026 Zoo Accessibility Guide remains the applicability source;
-8. the guide evidence remains ADA-compliance context + accessible-routes map semantics + blue-dotted best-path semantics + mobility-device map instruction;
-9. the downstream semantic authority remains DOJ ADA Standards §402.2;
-10. Planner 18 remains blocked on absence-only stairs inference.
+Rejected because Planner 33's product accessibility result did not itself establish formal §402 applicability.
 
-Any prerequisite drift fails closed.
+### Candidate 3
 
-## What Planner 35 does not claim
+Added the official 2026 Zoo Accessibility Guide as a separate accessible-route applicability source.
 
-Planner 35 does not establish a general rule that:
+Rejected because the guide still does not explicitly bind this mapped Front Street traversal to §402. A general ADA compliance statement plus accessible-route guidance is not the same as exact-route certification.
 
-- missing `highway=steps` means no stairs;
-- every `highway=pedestrian` way is stair-free;
-- asphalt implies no stairs;
-- every `mild` Zoo corridor is stair-free;
-- every wheelchair icon or `accessible:true` value automatically means `stairs:false`;
-- the `ADA MOST ACCESSIBLE ROUTE` legend alone certifies §402 applicability;
-- all parts of named Front Street inherit this exact-edge result.
+## Frozen conservative policy
 
-The result is objective-only and exact-segment-only.
+Planner 35 now records the evidence standard required to revisit this field:
 
-## What Planner 35 clears
+`stairs:false` requires either:
 
-Planner 35 clears only:
+1. an explicit source binding this exact traversal to ADA §402 / equivalent no-stairs route semantics; or
+2. direct exact-segment evidence that the traversal is stair-free.
 
-- `EXACT_SEGMENT_STAIRS_NOT_SOURCED`
+Until one of those exists, `stairs` stays `unknown`.
 
-## What remains blocked
+The audit freezes these guardrails:
 
-1. `EXACT_SEGMENT_STROLLER_NOT_SOURCED`
-2. `EXACT_SEGMENT_PROVENANCE_NOT_COMPLETE`
+- missing `highway=steps` is insufficient;
+- `highway=pedestrian` / asphalt are identity context only;
+- wheelchair accessibility remains independent of stairs;
+- general Zoo accessible-route guidance does not bind this exact segment to §402;
+- §402 semantics require explicit exact-route applicability before use;
+- no direct stair-free evidence is currently sourced.
 
-No RouteEdge or RouteNode is materialized yet.
+## Exact-segment materialization state
 
-## Integrity boundary
+After Planner 35, the exact Tiger Trail Front Street segment remains blocked by:
 
-Planner 35 fails closed on:
+1. `EXACT_SEGMENT_STAIRS_NOT_SOURCED`
+2. `EXACT_SEGMENT_STROLLER_NOT_SOURCED`
+3. `EXACT_SEGMENT_PROVENANCE_NOT_COMPLETE`
 
-- unsupported objectives;
-- exact way/endpoint drift;
-- Planner 29 source identity drift;
-- loss of Planner 33 exact accessibility authority;
-- source-way/accessibility-name mismatch;
-- wheelchair indicator or map legend drift;
-- Zoo Accessibility Guide source or applicability-semantic drift;
-- ADA Standards source, section, or component-semantic drift;
-- promotion of absence-only evidence into authority;
-- stroller or provenance promotion;
-- hidden, inherited, symbol, accessor, unknown fields;
-- decorated authority arrays.
+No RouteEdge or RouteNode is materialized.
+
+## Why this milestone still matters
+
+Planner 35 closes a real evidence question instead of leaving it ambiguous. Future work cannot quietly turn accessibility, asphalt, or missing tags into `stairs:false`; the required positive evidence is now explicit and regression-tested.
+
+This also lets the next independent semantic investigation continue without weakening the stairs boundary.
 
 ## Next boundary
 
-After Planner 35, only exact stroller suitability and final cross-semantic provenance remain before this exact Tiger Trail Front Street segment can be considered for RouteEdge materialization.
+Planner 36 can investigate stroller suitability independently.
 
-Planner 36 should use independent stroller evidence. The current Zoo policy allows strollers, and the current 2026 Accessibility Guide explicitly recognizes a stroller used as an accessibility device and can issue it a wheelchair tag. Facility permission alone must remain insufficient.
+The 2026 Zoo Accessibility Guide provides promising stroller-specific evidence: a child using a stroller as an accessibility device can request a wheelchair tag, and mobility-device users are directed to the accessibility map. Facility-level stroller permission alone remains insufficient, and Planner 36 must not depend on `stairs:false` because Planner 35 correctly leaves stairs unresolved.
