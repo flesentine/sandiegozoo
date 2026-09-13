@@ -1,0 +1,52 @@
+name: Planner 36 proxy rejection retrigger
+
+on:
+  push:
+    branches:
+      - planner/planner-36-interior-stroller-evidence
+    paths:
+      - .github/workflows/planner36-retrigger.yml
+
+permissions:
+  contents: write
+
+jobs:
+  retrigger:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: planner/planner-36-interior-stroller-evidence
+          fetch-depth: 0
+      - name: Preserve coercion regression and retrigger proxy patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("tests/zoo-interior-stroller-authority.test.ts")
+          text = path.read_text()
+          old = '''  assert.throws(
+            () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
+            /accessibility-guide evidence drifted/,
+          );
+          assert.equal(coercions, 0);
+          });
+          '''
+          new = '''  assert.throws(
+            () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
+            /(accessibility-guide evidence drifted|cannot be Proxy-backed)/,
+          );
+          assert.equal(coercions, 0);
+          });
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f"coercion block count {text.count(old)}")
+          path.write_text(text.replace(old, new, 1))
+
+          helper = Path(".github/workflows/planner36-proxy-reject-fix.yml")
+          helper.write_text(helper.read_text() + "\n# retrigger after coercion regression update\n")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/zoo-interior-stroller-authority.test.ts .github/workflows/planner36-proxy-reject-fix.yml
+          git commit -m "Align Planner 36 coercion regression with proxy rejection"
+          git push origin HEAD:planner/planner-36-interior-stroller-evidence
