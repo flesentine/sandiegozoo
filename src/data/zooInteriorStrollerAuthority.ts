@@ -296,11 +296,29 @@ function validTimestamp(value: unknown) {
   );
 }
 
-function validExactUrl(value: string, expected: string) {
+function validExactUrl(value: unknown, expected: string) {
+  if (typeof value !== "string" || value !== expected) {
+    return false;
+  }
+
   try {
     return new URL(value).toString() === expected;
   } catch {
     return false;
+  }
+}
+
+function assertObjectiveSourceRecordId(
+  value: unknown,
+): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value !== value.trim()
+  ) {
+    throw new Error(
+      "Planner 36 objectiveSourceRecordId must be a primitive stable string.",
+    );
   }
 }
 
@@ -559,6 +577,8 @@ export const INTERIOR_STROLLER_EVIDENCE_AUDIT:
 export function interiorStrollerEvidenceAuditForObjective(
   objectiveSourceRecordId: string,
 ) {
+  assertObjectiveSourceRecordId(objectiveSourceRecordId);
+
   return INTERIOR_STROLLER_EVIDENCE_AUDIT.find(
     (record) =>
       record.objectiveSourceRecordId ===

@@ -230,6 +230,52 @@ test("Planner 36 audit rejects exact-segment and guide-evidence drift", () => {
   );
 });
 
+test("Planner 36 rejects coercible non-string guide URLs without invoking caller code", () => {
+  const audit = mutableAudit();
+  let coercions = 0;
+  const coercibleUrl = {
+    toString() {
+      coercions += 1;
+      return "https://sdzwa.org/sdzwa-accessibility-guide";
+    },
+    stroller: true,
+  };
+  Object.assign(audit.accessibilityGuideEvidence, {
+    sourceUrl: coercibleUrl as unknown as string,
+  });
+
+  assert.throws(
+    () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
+    /accessibility-guide evidence drifted/,
+  );
+  assert.equal(coercions, 0);
+});
+
+test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+
+  assert.throws(
+    () => interiorStrollerEvidenceAuditForObjective(
+      cyclic as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+  assert.throws(
+    () => assessInteriorStroller(
+      cyclic as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+
+  assert.throws(
+    () => assessInteriorStroller(
+      new String("sdz-tiger-trail") as unknown as string,
+    ),
+    /primitive stable string/,
+  );
+});
+
 test("Planner 36 runtime boundary rejects accessor-backed audit array elements without invoking them", () => {
   const accessorBacked = [
     mutableAudit(),
