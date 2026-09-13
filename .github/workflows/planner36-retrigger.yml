@@ -24,26 +24,19 @@ jobs:
           from pathlib import Path
           path = Path("tests/zoo-interior-stroller-authority.test.ts")
           text = path.read_text()
-          old = '''  assert.throws(
-            () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
-            /accessibility-guide evidence drifted/,
-          );
-          assert.equal(coercions, 0);
-          });
-          '''
-          new = '''  assert.throws(
-            () => assertInteriorStrollerEvidenceAuditIntegrity([audit]),
-            /(accessibility-guide evidence drifted|cannot be Proxy-backed)/,
-          );
-          assert.equal(coercions, 0);
-          });
-          '''
-          if text.count(old) != 1:
-              raise SystemExit(f"coercion block count {text.count(old)}")
-          path.write_text(text.replace(old, new, 1))
+          title = 'test("Planner 36 rejects coercible non-string guide URLs without invoking caller code", () => {'
+          start = text.index(title)
+          end = text.index('\n});', start) + len('\n});')
+          block = text[start:end]
+          old = '/accessibility-guide evidence drifted/'
+          new = '/(accessibility-guide evidence drifted|cannot be Proxy-backed)/'
+          if block.count(old) != 1:
+              raise SystemExit(f"coercion regex count {block.count(old)}")
+          block = block.replace(old, new, 1)
+          path.write_text(text[:start] + block + text[end:])
 
           helper = Path(".github/workflows/planner36-proxy-reject-fix.yml")
-          helper.write_text(helper.read_text() + "\n# retrigger after coercion regression update\n")
+          helper.write_text(helper.read_text() + "\n# retrigger after coercion regression update v2\n")
           PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
