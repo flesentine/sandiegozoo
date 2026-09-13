@@ -1,0 +1,98 @@
+name: Planner 36 trusted clone fix
+
+on:
+  push:
+    branches:
+      - planner/planner-36-interior-stroller-evidence
+    paths:
+      - .github/workflows/planner36-trusted-clone-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: planner/planner-36-interior-stroller-evidence
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - name: Capture trusted structured clone before caller traps
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("src/data/zooInteriorStrollerAuthority.ts")
+          source = source_path.read_text()
+          marker = "function assertNotProxyBacked(\n"
+          replacement = "const TRUSTED_STRUCTURED_CLONE =\n  globalThis.structuredClone.bind(globalThis);\n\nfunction assertNotProxyBacked(\n"
+          if source.count(marker) != 1:
+              raise SystemExit(f"assertNotProxyBacked marker count {source.count(marker)}")
+          source = source.replace(marker, replacement, 1)
+          old_call = "    structuredClone(value);"
+          new_call = "    TRUSTED_STRUCTURED_CLONE(value);"
+          if source.count(old_call) != 1:
+              raise SystemExit(f"structuredClone call count {source.count(old_call)}")
+          source = source.replace(old_call, new_call, 1)
+          source_path.write_text(source)
+
+          test_path = Path("tests/zoo-interior-stroller-authority.test.ts")
+          tests = test_path.read_text()
+          anchor = 'test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {'
+          regression = r'''test("Planner 36 proxy rejection cannot be disabled by a caller trap mutating global structuredClone", () => {
+  const auditTarget = mutableAudit() as InteriorStrollerEvidenceAudit & {
+    stroller?: boolean;
+  };
+  auditTarget.stroller = true;
+
+  const originalStructuredClone = globalThis.structuredClone;
+  let trapRuns = 0;
+  const proxiedAudit = new Proxy(auditTarget, {
+    getPrototypeOf(target) {
+      trapRuns += 1;
+      globalThis.structuredClone = ((value: unknown) => value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(target);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter((key) => key !== "stroller");
+    },
+  });
+
+  try {
+    assert.throws(
+      () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+      /cannot be Proxy-backed/,
+    );
+    assert.equal(trapRuns > 0, true);
+    assert.equal(proxiedAudit.stroller, true);
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
+
+'''
+          if tests.count(anchor) != 1:
+              raise SystemExit(f"test anchor count {tests.count(anchor)}")
+          tests = tests.replace(anchor, regression + anchor, 1)
+          test_path.write_text(tests)
+          PY
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Planner tests
+        run: npm run test:planner
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/zooInteriorStrollerAuthority.ts tests/zoo-interior-stroller-authority.test.ts
+          git diff --cached --check
+          git commit -m "Capture trusted Planner 36 proxy detector"
+          git push origin HEAD:planner/planner-36-interior-stroller-evidence
