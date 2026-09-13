@@ -269,6 +269,22 @@ function assertExactOrdinaryArray(
   ) {
     throw new Error(`${label} cannot contain extra own properties.`);
   }
+
+  for (let index = 0; index < expectedLength; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      value,
+      String(index),
+    );
+    if (
+      !descriptor ||
+      !descriptor.enumerable ||
+      !("value" in descriptor)
+    ) {
+      throw new Error(
+        `${label} requires enumerable own data element ${index}.`,
+      );
+    }
+  }
 }
 
 function validTimestamp(value: unknown) {

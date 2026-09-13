@@ -290,6 +290,26 @@ test("Planner 35 runtime boundary rejects hidden fields, symbols, and decorated 
     () => assertInteriorStairsEvidenceAuditIntegrity(decorated),
     /extra own properties/,
   );
+
+  const accessorBacked = [
+    mutableAudit(),
+  ] as unknown as InteriorStairsEvidenceAudit[];
+  let reads = 0;
+  Object.defineProperty(accessorBacked, "0", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      reads += 1;
+      return reads === 1
+        ? mutableAudit()
+        : { ...mutableAudit(), stairs: false };
+    },
+  });
+  assert.throws(
+    () => assertInteriorStairsEvidenceAuditIntegrity(accessorBacked),
+    /enumerable own data element 0/,
+  );
+  assert.equal(reads, 0);
 });
 
 test("Planner 35 evidence audit, policy, and assessments are deeply immutable", () => {
