@@ -8,10 +8,10 @@ import {
   INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT,
 } from "./zooInteriorPedestrianDirectionAuthority.ts";
 import {
-  CORRIDOR_TERRAIN_EVIDENCE,
+  classifyExactStairsAuthority,
 } from "./zooIngressTerrainAuthority.ts";
 
-const POLICY_ID = "sdz-interior-stairs-policy-v1" as const;
+const POLICY_ID = "sdz-interior-stairs-policy-v2" as const;
 const AUTHORITY_ID =
   "sdz-interior-tiger-trail-front-street-stairs" as const;
 const OBJECTIVE_SOURCE_RECORD_ID = "sdz-tiger-trail" as const;
@@ -21,35 +21,35 @@ const ACCESSIBILITY_AUTHORITY_ID =
   "sdz-interior-tiger-trail-front-street-accessibility" as const;
 const SOURCE_SNAPSHOT_ID =
   "sdz-interior-front-street-direction-source-v1" as const;
-const FRONT_STREET_TERRAIN_EVIDENCE_ID =
-  "sdz-corridor-front-street-terrain-evidence" as const;
-const STAIRS_CONTRAST_EVIDENCE_ID =
-  "sdz-corridor-fern-canyon-trail-terrain-evidence" as const;
 const SOURCE_WAY_ID = "1481425058" as const;
 const FROM_NODE_ID = "7053320515" as const;
 const TO_NODE_ID = "1619736626" as const;
-const ADOPTED_AT = "2026-09-12T15:45:00-07:00" as const;
+const ADOPTED_AT = "2026-09-13T00:39:00-07:00" as const;
+const ADA_STANDARD_URL =
+  "https://www.ada.gov/assets/pdfs/2010-design-standards.pdf" as const;
+const ADA_STANDARD_SECTION = "402.2" as const;
+const ADA_STAIRS_SEMANTIC =
+  "stairs-not-an-accessible-route-component" as const;
 
 export type InteriorStairsPolicy = {
   id: typeof POLICY_ID;
-  policyVersion: "1";
+  policyVersion: "2";
   adoptedAt: typeof ADOPTED_AT;
   scope:
-    "exact-name-matched-wheelchair-corridor-on-positive-nonstep-pedestrian-way";
-  exactWayHighwayRequirement: "pedestrian";
-  exactWaySurfaceRequirement: "asphalt";
+    "exact-segment-with-qualified-ada-accessible-route-semantic";
+  exactWayIdentityRequirement:
+    "pedestrian-asphalt-front-street-source-context";
+  exactWayIdentityRole:
+    "identity-context-only-not-no-stairs-authority";
   exactWayNameRequirement:
-    "must-equal-official-corridor-name";
+    "must-equal-qualified-accessibility-source-way-name";
   accessibilityRequirement:
     "exact-segment-must-already-be-accessible-true";
-  corridorTerrainRequirement: "mild";
-  corridorStairsEvidenceRequirement:
-    "not-explicitly-published";
-  controlledVocabularyContrastRequirement:
-    "same-official-map-must-explicitly-publish-stairs-on-known-stair-corridor";
-  knownStairCorridorTerrain: "steep-and-stairs";
-  knownStairCorridorStairsEvidence:
-    "explicitly-published";
+  wheelchairIndicatorRequirement: "shown";
+  mapRouteLegendRequirement: "ADA MOST ACCESSIBLE ROUTE";
+  adaStandardReferenceUrl: typeof ADA_STANDARD_URL;
+  adaStandardSection: typeof ADA_STANDARD_SECTION;
+  accessibleRouteStairsSemantics: typeof ADA_STAIRS_SEMANTIC;
   absenceOfHighwayStepsAlone:
     "insufficient-for-stairs-false";
   plannerStairs: false;
@@ -60,14 +60,13 @@ export type InteriorStairsClassificationInput = {
   exactWayHighway: string;
   exactWaySurface: string;
   exactWayName: string;
-  corridorName: string;
+  accessibilitySourceWayName: string;
   accessible: boolean;
   wheelchairIndicator: string;
   mapRouteLegend: string;
-  corridorTerrain: string;
-  corridorStairsEvidence: string;
-  knownStairCorridorTerrain: string;
-  knownStairCorridorStairsEvidence: string;
+  adaStandardReferenceUrl: string;
+  adaStandardSection: string;
+  accessibleRouteStairsSemantics: string;
 };
 
 export type InteriorStairsClassification =
@@ -75,16 +74,15 @@ export type InteriorStairsClassification =
       status: "supported";
       stairs: false;
       basis:
-        "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast";
+        "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic";
     }
   | {
       status: "blocked";
       reason:
-        | "EXACT_WAY_NOT_POSITIVE_NONSTEP_PEDESTRIAN_CLASSIFICATION"
-        | "CORRIDOR_NAME_NOT_EXACT_SOURCE_WAY_MATCH"
+        | "EXACT_WAY_IDENTITY_CONTEXT_NOT_MET"
+        | "ACCESSIBILITY_SOURCE_NAME_NOT_EXACT_SOURCE_WAY_MATCH"
         | "ACCESSIBILITY_PREREQUISITE_NOT_MET"
-        | "CORRIDOR_TERRAIN_NOT_MAPPED_BY_POLICY"
-        | "CONTROLLED_STAIRS_CONTRAST_NOT_ESTABLISHED";
+        | "ACCESSIBLE_ROUTE_STANDARD_PREREQUISITE_NOT_MET";
     };
 
 export type InteriorStairsAuthority = {
@@ -95,28 +93,24 @@ export type InteriorStairsAuthority = {
   accessibilityAuthorityId: typeof ACCESSIBILITY_AUTHORITY_ID;
   sourceSnapshotId: typeof SOURCE_SNAPSHOT_ID;
   policyId: typeof POLICY_ID;
-  frontStreetTerrainEvidenceId:
-    typeof FRONT_STREET_TERRAIN_EVIDENCE_ID;
-  stairsContrastEvidenceId:
-    typeof STAIRS_CONTRAST_EVIDENCE_ID;
   sourceWayId: typeof SOURCE_WAY_ID;
   sourceWayName: "Front Street";
   sourceFromNodeId: typeof FROM_NODE_ID;
   sourceToNodeId: typeof TO_NODE_ID;
   exactWayHighway: "pedestrian";
   exactWaySurface: "asphalt";
-  corridorTerrain: "mild";
-  corridorStairsEvidence:
-    "not-explicitly-published";
-  knownStairCorridorName: "Fern Canyon Trail";
-  knownStairCorridorTerrain: "steep-and-stairs";
-  knownStairCorridorStairsEvidence:
-    "explicitly-published";
+  wheelchairIndicator: "shown";
+  mapRouteLegend: "ADA MOST ACCESSIBLE ROUTE";
+  adaStandardReferenceUrl: typeof ADA_STANDARD_URL;
+  adaStandardSection: typeof ADA_STANDARD_SECTION;
+  accessibleRouteStairsSemantics: typeof ADA_STAIRS_SEMANTIC;
   stairs: false;
   resolutionBasis:
-    "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast";
+    "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic";
   absenceOfHighwayStepsRole:
     "non-authoritative-supporting-context-only";
+  exactWayIdentityRole:
+    "identity-context-only-not-no-stairs-authority";
   strollerAuthorityState:
     "facility-permission-not-route-suitability";
   selectionScope: "objective-only";
@@ -155,15 +149,15 @@ const POLICY_FIELDS = [
   "policyVersion",
   "adoptedAt",
   "scope",
-  "exactWayHighwayRequirement",
-  "exactWaySurfaceRequirement",
+  "exactWayIdentityRequirement",
+  "exactWayIdentityRole",
   "exactWayNameRequirement",
   "accessibilityRequirement",
-  "corridorTerrainRequirement",
-  "corridorStairsEvidenceRequirement",
-  "controlledVocabularyContrastRequirement",
-  "knownStairCorridorTerrain",
-  "knownStairCorridorStairsEvidence",
+  "wheelchairIndicatorRequirement",
+  "mapRouteLegendRequirement",
+  "adaStandardReferenceUrl",
+  "adaStandardSection",
+  "accessibleRouteStairsSemantics",
   "absenceOfHighwayStepsAlone",
   "plannerStairs",
   "authority",
@@ -176,22 +170,21 @@ const AUTHORITY_FIELDS = [
   "accessibilityAuthorityId",
   "sourceSnapshotId",
   "policyId",
-  "frontStreetTerrainEvidenceId",
-  "stairsContrastEvidenceId",
   "sourceWayId",
   "sourceWayName",
   "sourceFromNodeId",
   "sourceToNodeId",
   "exactWayHighway",
   "exactWaySurface",
-  "corridorTerrain",
-  "corridorStairsEvidence",
-  "knownStairCorridorName",
-  "knownStairCorridorTerrain",
-  "knownStairCorridorStairsEvidence",
+  "wheelchairIndicator",
+  "mapRouteLegend",
+  "adaStandardReferenceUrl",
+  "adaStandardSection",
+  "accessibleRouteStairsSemantics",
   "stairs",
   "resolutionBasis",
   "absenceOfHighwayStepsRole",
+  "exactWayIdentityRole",
   "strollerAuthorityState",
   "selectionScope",
   "globalEndpointSelection",
@@ -345,25 +338,40 @@ function validTimestamp(value: unknown) {
   );
 }
 
+function validAdaStandardsUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "www.ada.gov" &&
+      url.pathname === "/assets/pdfs/2010-design-standards.pdf"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function classifyInteriorStairs(
   input: InteriorStairsClassificationInput,
 ): InteriorStairsClassification {
   if (
     input.exactWayHighway !== "pedestrian" ||
-    input.exactWaySurface !== "asphalt"
+    input.exactWaySurface !== "asphalt" ||
+    input.exactWayName !== "Front Street"
+  ) {
+    return {
+      status: "blocked",
+      reason: "EXACT_WAY_IDENTITY_CONTEXT_NOT_MET",
+    };
+  }
+
+  if (
+    input.exactWayName !== input.accessibilitySourceWayName
   ) {
     return {
       status: "blocked",
       reason:
-        "EXACT_WAY_NOT_POSITIVE_NONSTEP_PEDESTRIAN_CLASSIFICATION",
-    };
-  }
-
-  if (input.exactWayName !== input.corridorName) {
-    return {
-      status: "blocked",
-      reason:
-        "CORRIDOR_NAME_NOT_EXACT_SOURCE_WAY_MATCH",
+        "ACCESSIBILITY_SOURCE_NAME_NOT_EXACT_SOURCE_WAY_MATCH",
     };
   }
 
@@ -379,26 +387,16 @@ export function classifyInteriorStairs(
   }
 
   if (
-    input.corridorTerrain !== "mild" ||
-    input.corridorStairsEvidence !==
-      "not-explicitly-published"
-  ) {
-    return {
-      status: "blocked",
-      reason: "CORRIDOR_TERRAIN_NOT_MAPPED_BY_POLICY",
-    };
-  }
-
-  if (
-    input.knownStairCorridorTerrain !==
-      "steep-and-stairs" ||
-    input.knownStairCorridorStairsEvidence !==
-      "explicitly-published"
+    input.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
+    !validAdaStandardsUrl(input.adaStandardReferenceUrl) ||
+    input.adaStandardSection !== ADA_STANDARD_SECTION ||
+    input.accessibleRouteStairsSemantics !==
+      ADA_STAIRS_SEMANTIC
   ) {
     return {
       status: "blocked",
       reason:
-        "CONTROLLED_STAIRS_CONTRAST_NOT_ESTABLISHED",
+        "ACCESSIBLE_ROUTE_STANDARD_PREREQUISITE_NOT_MET",
     };
   }
 
@@ -406,52 +404,41 @@ export function classifyInteriorStairs(
     status: "supported",
     stairs: false,
     basis:
-      "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast",
+      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
   };
 }
 
 const RAW_POLICY: InteriorStairsPolicy = {
   id: POLICY_ID,
-  policyVersion: "1",
+  policyVersion: "2",
   adoptedAt: ADOPTED_AT,
   scope:
-    "exact-name-matched-wheelchair-corridor-on-positive-nonstep-pedestrian-way",
-  exactWayHighwayRequirement: "pedestrian",
-  exactWaySurfaceRequirement: "asphalt",
+    "exact-segment-with-qualified-ada-accessible-route-semantic",
+  exactWayIdentityRequirement:
+    "pedestrian-asphalt-front-street-source-context",
+  exactWayIdentityRole:
+    "identity-context-only-not-no-stairs-authority",
   exactWayNameRequirement:
-    "must-equal-official-corridor-name",
+    "must-equal-qualified-accessibility-source-way-name",
   accessibilityRequirement:
     "exact-segment-must-already-be-accessible-true",
-  corridorTerrainRequirement: "mild",
-  corridorStairsEvidenceRequirement:
-    "not-explicitly-published",
-  controlledVocabularyContrastRequirement:
-    "same-official-map-must-explicitly-publish-stairs-on-known-stair-corridor",
-  knownStairCorridorTerrain: "steep-and-stairs",
-  knownStairCorridorStairsEvidence:
-    "explicitly-published",
+  wheelchairIndicatorRequirement: "shown",
+  mapRouteLegendRequirement: "ADA MOST ACCESSIBLE ROUTE",
+  adaStandardReferenceUrl: ADA_STANDARD_URL,
+  adaStandardSection: ADA_STANDARD_SECTION,
+  accessibleRouteStairsSemantics: ADA_STAIRS_SEMANTIC,
   absenceOfHighwayStepsAlone:
     "insufficient-for-stairs-false",
   plannerStairs: false,
   authority: "prospective-product-semantic-policy",
 };
 
-const frontStreetTerrain =
-  CORRIDOR_TERRAIN_EVIDENCE.find(
-    (record) =>
-      record.id === FRONT_STREET_TERRAIN_EVIDENCE_ID,
-  );
-const stairsContrast =
-  CORRIDOR_TERRAIN_EVIDENCE.find(
-    (record) =>
-      record.id === STAIRS_CONTRAST_EVIDENCE_ID,
-  );
 const accessibility =
   INTERIOR_ACCESSIBILITY_AUTHORITY[0];
 
-if (!frontStreetTerrain || !stairsContrast || !accessibility) {
+if (!accessibility) {
   throw new Error(
-    "Planner 35 prerequisites are missing qualified terrain/accessibility evidence.",
+    "Planner 35 requires the qualified Planner 33 accessibility authority.",
   );
 }
 
@@ -465,10 +452,6 @@ const RAW_AUTHORITY: InteriorStairsAuthority[] = [
       ACCESSIBILITY_AUTHORITY_ID,
     sourceSnapshotId: SOURCE_SNAPSHOT_ID,
     policyId: POLICY_ID,
-    frontStreetTerrainEvidenceId:
-      FRONT_STREET_TERRAIN_EVIDENCE_ID,
-    stairsContrastEvidenceId:
-      STAIRS_CONTRAST_EVIDENCE_ID,
     sourceWayId: SOURCE_WAY_ID,
     sourceWayName: "Front Street",
     sourceFromNodeId: FROM_NODE_ID,
@@ -477,18 +460,18 @@ const RAW_AUTHORITY: InteriorStairsAuthority[] = [
       INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT.sourceTags.highway,
     exactWaySurface:
       INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT.sourceTags.surface,
-    corridorTerrain: "mild",
-    corridorStairsEvidence:
-      "not-explicitly-published",
-    knownStairCorridorName: "Fern Canyon Trail",
-    knownStairCorridorTerrain: "steep-and-stairs",
-    knownStairCorridorStairsEvidence:
-      "explicitly-published",
+    wheelchairIndicator: accessibility.wheelchairIndicator,
+    mapRouteLegend: accessibility.mapRouteLegend,
+    adaStandardReferenceUrl: ADA_STANDARD_URL,
+    adaStandardSection: ADA_STANDARD_SECTION,
+    accessibleRouteStairsSemantics: ADA_STAIRS_SEMANTIC,
     stairs: false,
     resolutionBasis:
-      "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast",
+      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic",
     absenceOfHighwayStepsRole:
       "non-authoritative-supporting-context-only",
+    exactWayIdentityRole:
+      "identity-context-only-not-no-stairs-authority",
     strollerAuthorityState:
       "facility-permission-not-route-suitability",
     selectionScope: "objective-only",
@@ -508,26 +491,27 @@ export function assertInteriorStairsPolicyIntegrity(
 
   if (
     policy.id !== POLICY_ID ||
-    policy.policyVersion !== "1" ||
+    policy.policyVersion !== "2" ||
     policy.adoptedAt !== ADOPTED_AT ||
     !validTimestamp(policy.adoptedAt) ||
     policy.scope !==
-      "exact-name-matched-wheelchair-corridor-on-positive-nonstep-pedestrian-way" ||
-    policy.exactWayHighwayRequirement !== "pedestrian" ||
-    policy.exactWaySurfaceRequirement !== "asphalt" ||
+      "exact-segment-with-qualified-ada-accessible-route-semantic" ||
+    policy.exactWayIdentityRequirement !==
+      "pedestrian-asphalt-front-street-source-context" ||
+    policy.exactWayIdentityRole !==
+      "identity-context-only-not-no-stairs-authority" ||
     policy.exactWayNameRequirement !==
-      "must-equal-official-corridor-name" ||
+      "must-equal-qualified-accessibility-source-way-name" ||
     policy.accessibilityRequirement !==
       "exact-segment-must-already-be-accessible-true" ||
-    policy.corridorTerrainRequirement !== "mild" ||
-    policy.corridorStairsEvidenceRequirement !==
-      "not-explicitly-published" ||
-    policy.controlledVocabularyContrastRequirement !==
-      "same-official-map-must-explicitly-publish-stairs-on-known-stair-corridor" ||
-    policy.knownStairCorridorTerrain !==
-      "steep-and-stairs" ||
-    policy.knownStairCorridorStairsEvidence !==
-      "explicitly-published" ||
+    policy.wheelchairIndicatorRequirement !== "shown" ||
+    policy.mapRouteLegendRequirement !==
+      "ADA MOST ACCESSIBLE ROUTE" ||
+    policy.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
+    !validAdaStandardsUrl(policy.adaStandardReferenceUrl) ||
+    policy.adaStandardSection !== ADA_STANDARD_SECTION ||
+    policy.accessibleRouteStairsSemantics !==
+      ADA_STAIRS_SEMANTIC ||
     policy.absenceOfHighwayStepsAlone !==
       "insufficient-for-stairs-false" ||
     policy.plannerStairs !== false ||
@@ -575,16 +559,6 @@ export function assertInteriorStairsAuthorityIntegrity(
       (entry) =>
         entry.id === record.accessibilityAuthorityId,
     );
-  const currentFrontStreetTerrain =
-    CORRIDOR_TERRAIN_EVIDENCE.find(
-      (entry) =>
-        entry.id === record.frontStreetTerrainEvidenceId,
-    );
-  const currentStairsContrast =
-    CORRIDOR_TERRAIN_EVIDENCE.find(
-      (entry) =>
-        entry.id === record.stairsContrastEvidenceId,
-    );
 
   if (
     record.id !== AUTHORITY_ID ||
@@ -596,30 +570,26 @@ export function assertInteriorStairsAuthorityIntegrity(
       ACCESSIBILITY_AUTHORITY_ID ||
     record.sourceSnapshotId !== SOURCE_SNAPSHOT_ID ||
     record.policyId !== POLICY_ID ||
-    record.frontStreetTerrainEvidenceId !==
-      FRONT_STREET_TERRAIN_EVIDENCE_ID ||
-    record.stairsContrastEvidenceId !==
-      STAIRS_CONTRAST_EVIDENCE_ID ||
     record.sourceWayId !== SOURCE_WAY_ID ||
     record.sourceWayName !== "Front Street" ||
     record.sourceFromNodeId !== FROM_NODE_ID ||
     record.sourceToNodeId !== TO_NODE_ID ||
     record.exactWayHighway !== "pedestrian" ||
     record.exactWaySurface !== "asphalt" ||
-    record.corridorTerrain !== "mild" ||
-    record.corridorStairsEvidence !==
-      "not-explicitly-published" ||
-    record.knownStairCorridorName !==
-      "Fern Canyon Trail" ||
-    record.knownStairCorridorTerrain !==
-      "steep-and-stairs" ||
-    record.knownStairCorridorStairsEvidence !==
-      "explicitly-published" ||
+    record.wheelchairIndicator !== "shown" ||
+    record.mapRouteLegend !==
+      "ADA MOST ACCESSIBLE ROUTE" ||
+    record.adaStandardReferenceUrl !== ADA_STANDARD_URL ||
+    record.adaStandardSection !== ADA_STANDARD_SECTION ||
+    record.accessibleRouteStairsSemantics !==
+      ADA_STAIRS_SEMANTIC ||
     record.stairs !== false ||
     record.resolutionBasis !==
-      "positive-pedestrian-asphalt-plus-exact-name-wheelchair-corridor-with-controlled-stairs-contrast" ||
+      "qualified-exact-accessible-route-plus-ada-402-2-no-stairs-component-semantic" ||
     record.absenceOfHighwayStepsRole !==
       "non-authoritative-supporting-context-only" ||
+    record.exactWayIdentityRole !==
+      "identity-context-only-not-no-stairs-authority" ||
     record.strollerAuthorityState !==
       "facility-permission-not-route-suitability" ||
     record.selectionScope !== "objective-only" ||
@@ -660,9 +630,10 @@ export function assertInteriorStairsAuthorityIntegrity(
     currentAccessibility.sourceToNodeId !==
       record.sourceToNodeId ||
     currentAccessibility.accessible !== true ||
-    currentAccessibility.wheelchairIndicator !== "shown" ||
+    currentAccessibility.wheelchairIndicator !==
+      record.wheelchairIndicator ||
     currentAccessibility.mapRouteLegend !==
-      "ADA MOST ACCESSIBLE ROUTE"
+      record.mapRouteLegend
   ) {
     throw new Error(
       "Planner 35 stairs authority detached from Planner 33 exact accessibility evidence.",
@@ -682,31 +653,18 @@ export function assertInteriorStairsAuthorityIntegrity(
       record.sourceWayName
   ) {
     throw new Error(
-      "Planner 35 stairs authority detached from Planner 29 exact OSM source snapshot.",
+      "Planner 35 stairs authority detached from Planner 29 exact OSM identity context.",
     );
   }
 
-  if (
-    !currentFrontStreetTerrain ||
-    currentFrontStreetTerrain.corridorName !==
-      record.sourceWayName ||
-    currentFrontStreetTerrain.publishedTerrain !==
-      record.corridorTerrain ||
-    currentFrontStreetTerrain.stairsEvidence !==
-      record.corridorStairsEvidence ||
-    currentFrontStreetTerrain.scope !== "named-corridor" ||
-    !currentStairsContrast ||
-    currentStairsContrast.corridorName !==
-      record.knownStairCorridorName ||
-    currentStairsContrast.publishedTerrain !==
-      record.knownStairCorridorTerrain ||
-    currentStairsContrast.stairsEvidence !==
-      record.knownStairCorridorStairsEvidence ||
-    currentStairsContrast.artifactId !==
-      currentFrontStreetTerrain.artifactId
-  ) {
+  const planner18 = classifyExactStairsAuthority({
+    id: record.sourceSnapshotId,
+    sourceTags:
+      INTERIOR_PEDESTRIAN_DIRECTION_SOURCE_SNAPSHOT.sourceTags,
+  });
+  if (planner18.status !== "blocked") {
     throw new Error(
-      "Planner 35 stairs authority detached from the official controlled terrain/stairs vocabulary.",
+      "Planner 35 requires Planner 18 absence-only stairs inference to remain blocked.",
     );
   }
 
@@ -714,19 +672,19 @@ export function assertInteriorStairsAuthorityIntegrity(
     exactWayHighway: record.exactWayHighway,
     exactWaySurface: record.exactWaySurface,
     exactWayName: record.sourceWayName,
-    corridorName: currentFrontStreetTerrain.corridorName,
+    accessibilitySourceWayName:
+      currentAccessibility.sourceWayName,
     accessible: currentAccessibility.accessible,
     wheelchairIndicator:
       currentAccessibility.wheelchairIndicator,
     mapRouteLegend:
       currentAccessibility.mapRouteLegend,
-    corridorTerrain: record.corridorTerrain,
-    corridorStairsEvidence:
-      record.corridorStairsEvidence,
-    knownStairCorridorTerrain:
-      record.knownStairCorridorTerrain,
-    knownStairCorridorStairsEvidence:
-      record.knownStairCorridorStairsEvidence,
+    adaStandardReferenceUrl:
+      record.adaStandardReferenceUrl,
+    adaStandardSection:
+      record.adaStandardSection,
+    accessibleRouteStairsSemantics:
+      record.accessibleRouteStairsSemantics,
   });
 
   if (
