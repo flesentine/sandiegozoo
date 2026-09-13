@@ -1,0 +1,296 @@
+name: Planner 36 proxy hardening
+
+on:
+  push:
+    branches:
+      - planner/planner-36-interior-stroller-evidence
+    paths:
+      - .github/workflows/planner36-proxy-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: planner/planner-36-interior-stroller-evidence
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.12.0
+      - name: Harden Planner 36 proxy boundaries
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("src/data/zooInteriorStrollerAuthority.ts")
+          source = source_path.read_text()
+
+          helper_start = source.index("function assertExactPlainObject(")
+          helper_end = source.index("\nfunction validTimestamp", helper_start)
+          new_helpers = '''function snapshotExactPlainObject(
+            value: unknown,
+            allowedFields: readonly string[],
+            label: string,
+          ): Readonly<Record<string, unknown>> {
+            if (
+              !value ||
+              typeof value !== "object" ||
+              Array.isArray(value) ||
+              Object.getPrototypeOf(value) !== Object.prototype
+            ) {
+              throw new Error(
+                `${label} must be a plain object with Object.prototype.`,
+              );
+            }
+
+            const ownKeys = Reflect.ownKeys(value);
+            if (ownKeys.some((key) => typeof key === "symbol")) {
+              throw new Error(`${label} cannot contain symbol fields.`);
+            }
+
+            const expected = new Set(allowedFields);
+            const stringKeys = ownKeys as string[];
+            const actual = new Set(stringKeys);
+            const unknown = stringKeys
+              .filter((key) => !expected.has(key))
+              .sort();
+            const missing = allowedFields.filter(
+              (key) => !actual.has(key),
+            );
+
+            if (unknown.length > 0) {
+              throw new Error(
+                `${label} cannot contain unknown field ${unknown.join(", ")}.`,
+              );
+            }
+            if (missing.length > 0) {
+              throw new Error(
+                `${label} is missing required field ${missing.join(", ")}.`,
+              );
+            }
+
+            const snapshot: Record<string, unknown> = {};
+            for (const field of allowedFields) {
+              const descriptor =
+                Object.getOwnPropertyDescriptor(value, field);
+              if (
+                !descriptor ||
+                !descriptor.enumerable ||
+                !("value" in descriptor)
+              ) {
+                throw new Error(
+                  `${label} requires enumerable own data field ${field}.`,
+                );
+              }
+              Object.defineProperty(snapshot, field, {
+                value: descriptor.value,
+                enumerable: true,
+                configurable: false,
+                writable: false,
+              });
+            }
+
+            return Object.freeze(snapshot);
+          }
+
+          function snapshotExactOrdinaryArray(
+            value: unknown,
+            expectedLength: number,
+            label: string,
+          ): readonly unknown[] {
+            if (
+              !Array.isArray(value) ||
+              Object.getPrototypeOf(value) !== Array.prototype
+            ) {
+              throw new Error(
+                `${label} must be an ordinary array of length ${expectedLength}.`,
+              );
+            }
+
+            const allowedOwnKeys = new Set([
+              ...Array.from(
+                { length: expectedLength },
+                (_, index) => String(index),
+              ),
+              "length",
+            ]);
+            const ownKeys = Reflect.ownKeys(value);
+            if (
+              ownKeys.some(
+                (key) =>
+                  typeof key !== "string" ||
+                  !allowedOwnKeys.has(key),
+              )
+            ) {
+              throw new Error(`${label} cannot contain extra own properties.`);
+            }
+
+            const lengthDescriptor =
+              Object.getOwnPropertyDescriptor(value, "length");
+            if (
+              !lengthDescriptor ||
+              !("value" in lengthDescriptor) ||
+              lengthDescriptor.value !== expectedLength
+            ) {
+              throw new Error(
+                `${label} must be an ordinary array of length ${expectedLength}.`,
+              );
+            }
+
+            const snapshot: unknown[] = [];
+            for (let index = 0; index < expectedLength; index += 1) {
+              const descriptor = Object.getOwnPropertyDescriptor(
+                value,
+                String(index),
+              );
+              if (
+                !descriptor ||
+                !descriptor.enumerable ||
+                !("value" in descriptor)
+              ) {
+                throw new Error(
+                  `${label} requires enumerable own data element ${index}.`,
+                );
+              }
+              snapshot.push(descriptor.value);
+            }
+
+            return Object.freeze(snapshot);
+          }
+'''
+          source = source[:helper_start] + new_helpers + source[helper_end:]
+
+          policy_start = source.index("export function assertInteriorStrollerEvidenceAuditPolicyIntegrity(")
+          policy_end = source.index("\nfunction assertAccessibilityGuideEvidenceIntegrity", policy_start)
+          policy = source[policy_start:policy_end]
+          old_policy_intro = '''  assertExactPlainObject(
+            policy,
+            POLICY_FIELDS,
+            "Planner 36 stroller evidence-audit policy",
+          );
+'''
+          new_policy_intro = '''  const normalizedPolicy = snapshotExactPlainObject(
+            policy,
+            POLICY_FIELDS,
+            "Planner 36 stroller evidence-audit policy",
+          ) as unknown as InteriorStrollerEvidenceAuditPolicy;
+'''
+          if old_policy_intro not in policy:
+              raise SystemExit("policy intro not found")
+          policy = policy.replace(old_policy_intro, new_policy_intro, 1)
+          policy = policy.replace("policy.", "normalizedPolicy.")
+          source = source[:policy_start] + policy + source[policy_end:]
+
+          guide_start = source.index("function assertAccessibilityGuideEvidenceIntegrity(")
+          guide_end = source.index("\nexport function assertInteriorStrollerEvidenceAuditIntegrity", guide_start)
+          guide = source[guide_start:guide_end]
+          old_guide_intro = '''  assertExactPlainObject(
+            evidence,
+            GUIDE_FIELDS,
+            "Planner 36 stroller accessibility-guide evidence",
+          );
+'''
+          new_guide_intro = '''  const normalizedEvidence = snapshotExactPlainObject(
+            evidence,
+            GUIDE_FIELDS,
+            "Planner 36 stroller accessibility-guide evidence",
+          ) as unknown as StrollerAccessibilityGuideEvidence;
+'''
+          if old_guide_intro not in guide:
+              raise SystemExit("guide intro not found")
+          guide = guide.replace(old_guide_intro, new_guide_intro, 1)
+          guide = guide.replace("evidence.", "normalizedEvidence.")
+          source = source[:guide_start] + guide + source[guide_end:]
+
+          old_audit_intro = '''  assertExactOrdinaryArray(
+            audits,
+            1,
+            "Planner 36 stroller evidence-audit collection",
+          );
+
+          const candidate: unknown = audits[0];
+          assertExactPlainObject(
+            candidate,
+            AUDIT_FIELDS,
+            "Planner 36 stroller evidence audit",
+          );
+          const record =
+            candidate as unknown as InteriorStrollerEvidenceAudit;
+'''
+          new_audit_intro = '''  const normalizedAudits = snapshotExactOrdinaryArray(
+            audits,
+            1,
+            "Planner 36 stroller evidence-audit collection",
+          );
+
+          const candidate = snapshotExactPlainObject(
+            normalizedAudits[0],
+            AUDIT_FIELDS,
+            "Planner 36 stroller evidence audit",
+          );
+          const record =
+            candidate as unknown as InteriorStrollerEvidenceAudit;
+'''
+          if old_audit_intro not in source:
+              raise SystemExit("audit intro not found")
+          source = source.replace(old_audit_intro, new_audit_intro, 1)
+          source_path.write_text(source)
+
+          test_path = Path("tests/zoo-interior-stroller-authority.test.ts")
+          tests = test_path.read_text()
+          marker = 'test("Planner 36 rejects non-string objective IDs before lookup or assessment output", () => {\n'
+          regression = '''test("Planner 36 snapshots proxy-backed audit and guide evidence without invoking get traps", () => {
+            const audit = mutableAudit();
+            const guideTarget = { ...audit.accessibilityGuideEvidence };
+            let guideReads = 0;
+            audit.accessibilityGuideEvidence = new Proxy(guideTarget, {
+              get(target, property, receiver) {
+                guideReads += 1;
+                if (property === "sourceUrl") {
+                  return guideReads === 1
+                    ? "https://sdzwa.org/sdzwa-accessibility-guide"
+                    : { stroller: true };
+                }
+                return Reflect.get(target, property, receiver);
+              },
+            }) as typeof audit.accessibilityGuideEvidence;
+
+            let auditReads = 0;
+            const proxiedAudit = new Proxy(audit, {
+              get(target, property, receiver) {
+                auditReads += 1;
+                if (property === "sourceWayId" && auditReads > 1) {
+                  return { stroller: true };
+                }
+                return Reflect.get(target, property, receiver);
+              },
+            }) as typeof audit;
+
+            assert.doesNotThrow(
+              () => assertInteriorStrollerEvidenceAuditIntegrity([proxiedAudit]),
+            );
+            assert.equal(auditReads, 0);
+            assert.equal(guideReads, 0);
+          });
+
+'''
+          if tests.count(marker) != 1:
+              raise SystemExit(f"test marker count {tests.count(marker)}")
+          tests = tests.replace(marker, regression + marker, 1)
+          test_path.write_text(tests)
+          PY
+      - run: npm install --no-audit --no-fund
+      - run: npm run test:planner
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Commit hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/zooInteriorStrollerAuthority.ts tests/zoo-interior-stroller-authority.test.ts
+          git commit -m "Harden Planner 36 proxy runtime boundary"
+          git push origin HEAD:planner/planner-36-interior-stroller-evidence
