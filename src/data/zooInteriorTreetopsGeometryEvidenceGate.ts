@@ -16,6 +16,8 @@ const SOURCE_WAY_NAME = "Treetops Way" as const;
 const BLOCK_REASON =
   "VERSION_PINNED_TREETOPS_WAY_NODE_SEQUENCE_NOT_CAPTURED" as const;
 
+const CAPTURED_STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
+
 export type InteriorTreetopsGeometryEvidenceGate = {
   id: typeof AUTHORITY_ID;
   provider: "OpenStreetMap";
@@ -106,18 +108,44 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const result = Object.create(null) as T;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !("value" in descriptor)) {
+      throw new Error("Planner 42 canonical authority requires own data fields.");
+    }
+    Object.defineProperty(result, key, descriptor);
+  }
+  return result;
+}
+
+function cloneForIntegrityValidation(value: unknown, label: string): unknown {
+  try {
+    return CAPTURED_STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(
+      `${label} must be structured-cloneable plain data and cannot be Proxy-backed.`,
+    );
+  }
+}
+
 function assertExactPlainObject(
   value: unknown,
   allowedFields: readonly string[],
   label: string,
 ): asserts value is Record<string, unknown> {
+  const prototype =
+    value && typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
   if (
     !value ||
     typeof value !== "object" ||
     Array.isArray(value) ||
-    Object.getPrototypeOf(value) !== Object.prototype
+    (prototype !== Object.prototype && prototype !== null)
   ) {
-    throw new Error(`${label} must be a plain object with Object.prototype.`);
+    throw new Error(
+      `${label} must be a plain object with Object.prototype or null prototype.`,
+    );
   }
 
   const ownKeys = Reflect.ownKeys(value);
@@ -182,14 +210,14 @@ function assertNoPrematureGeometryOrRouteMaterialization(
   label: string,
 ) {
   for (const field of FORBIDDEN_ROUTE_FIELDS) {
-    if (Object.hasOwn(value, field)) {
+    if (field in value) {
       throw new Error(`${label} cannot materialize downstream field ${field}.`);
     }
   }
 }
 
 const RAW_AUTHORITY: InteriorTreetopsGeometryEvidenceGate[] = [
-  {
+  nullPrototypeRecord({
     id: AUTHORITY_ID,
     provider: "OpenStreetMap",
     objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
@@ -206,19 +234,24 @@ const RAW_AUTHORITY: InteriorTreetopsGeometryEvidenceGate[] = [
     versionPinnedNodeSequenceStatus: "not-captured",
     nextJunctionSelection: "blocked",
     plannerMaterialization: "geometry-evidence-gate-only",
-  },
+  }),
 ];
 
 export function assertInteriorTreetopsGeometryEvidenceGateIntegrity(
   authorities: readonly InteriorTreetopsGeometryEvidenceGate[],
 ) {
-  assertExactOrdinaryArray(
+  const validationSnapshot = cloneForIntegrityValidation(
     authorities,
+    "Planner 42 Treetops geometry evidence-gate collection",
+  );
+
+  assertExactOrdinaryArray(
+    validationSnapshot,
     1,
     "Planner 42 Treetops geometry evidence-gate collection",
   );
 
-  const candidate: unknown = authorities[0];
+  const candidate: unknown = validationSnapshot[0];
   assertExactPlainObject(
     candidate,
     TOP_LEVEL_FIELDS,
