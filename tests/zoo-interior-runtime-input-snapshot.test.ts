@@ -226,3 +226,53 @@ test("Planner 41 preserves stroller routing gates under inherited setter polluti
     }
   }
 });
+
+test("Planner 41 ignores inherited optional routing controls when the caller omits them", () => {
+  const previous = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "requireStroller",
+  );
+  let getterCalls = 0;
+
+  Object.defineProperty(Object.prototype, "requireStroller", {
+    configurable: true,
+    get() {
+      getterCalls += 1;
+      return true;
+    },
+  });
+
+  try {
+    const result = routeInteriorExpandedWithRuntimeEvidence(
+      availableSnapshot(),
+      {
+        fromNodeId: FRONT_STREET_NODE,
+        toNodeId: TIGER_BRANCH_NODE,
+      },
+    );
+
+    assert.equal(
+      getterCalls,
+      0,
+      "omitted routing controls must not be inherited from Object.prototype",
+    );
+    assert.equal(
+      result.route.status,
+      "found",
+      "prototype pollution must not add a stroller requirement the caller omitted",
+    );
+  } finally {
+    if (previous) {
+      Object.defineProperty(
+        Object.prototype,
+        "requireStroller",
+        previous,
+      );
+    } else {
+      Reflect.deleteProperty(
+        Object.prototype,
+        "requireStroller",
+      );
+    }
+  }
+});
