@@ -332,7 +332,9 @@ export function findShortestRoute(
 
   const allowedModes = new Set<RouteMode>(request.allowedModes ?? ALL_MODES);
   const enabledConditionalEdgeIds = new Set(
-    request.enabledConditionalEdgeIds ?? [],
+    Object.hasOwn(request, "enabledConditionalEdgeIds")
+      ? request.enabledConditionalEdgeIds ?? []
+      : [],
   );
   const requireAccessible = request.requireAccessible ?? false;
   const requireStroller = request.requireStroller ?? false;
