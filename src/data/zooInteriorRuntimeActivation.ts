@@ -116,11 +116,11 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function assertExactPlainObject(
+function snapshotExactPlainObject(
   value: unknown,
   requiredFields: readonly string[],
   label: string,
-): asserts value is Record<string, unknown> {
+): Readonly<Record<string, unknown>> {
   if (
     !value ||
     typeof value !== "object" ||
@@ -139,11 +139,12 @@ function assertExactPlainObject(
 
   const expected = new Set(requiredFields);
   const stringKeys = ownKeys as string[];
+  const actual = new Set(stringKeys);
   const unknown = stringKeys
     .filter((key) => !expected.has(key))
     .sort();
   const missing = requiredFields.filter(
-    (key) => !Object.hasOwn(value, key),
+    (key) => !actual.has(key),
   );
 
   if (unknown.length > 0) {
@@ -157,6 +158,7 @@ function assertExactPlainObject(
     );
   }
 
+  const snapshot: Record<string, unknown> = {};
   for (const field of requiredFields) {
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
@@ -171,13 +173,21 @@ function assertExactPlainObject(
         `${label} requires enumerable own data field ${field}.`,
       );
     }
+    Object.defineProperty(snapshot, field, {
+      value: descriptor.value,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
   }
+
+  return Object.freeze(snapshot);
 }
 
-function assertOrdinaryDenseArray(
+function snapshotOrdinaryDenseArray(
   value: unknown,
   label: string,
-): asserts value is unknown[] {
+): readonly unknown[] {
   if (
     !Array.isArray(value) ||
     Object.getPrototypeOf(value) !== Array.prototype
@@ -185,9 +195,21 @@ function assertOrdinaryDenseArray(
     throw new Error(`${label} must be an ordinary array.`);
   }
 
+  const lengthDescriptor =
+    Object.getOwnPropertyDescriptor(value, "length");
+  if (
+    !lengthDescriptor ||
+    !("value" in lengthDescriptor) ||
+    !Number.isInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0
+  ) {
+    throw new Error(`${label} requires an ordinary array length.`);
+  }
+  const length = lengthDescriptor.value as number;
+
   const allowedOwnKeys = new Set([
     ...Array.from(
-      { length: value.length },
+      { length },
       (_, index) => String(index),
     ),
     "length",
@@ -205,11 +227,8 @@ function assertOrdinaryDenseArray(
     );
   }
 
-  for (
-    let index = 0;
-    index < value.length;
-    index += 1
-  ) {
+  const snapshot = new Array<unknown>(length);
+  for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
       String(index),
@@ -223,66 +242,72 @@ function assertOrdinaryDenseArray(
         `${label} requires enumerable own data element ${index}.`,
       );
     }
+    snapshot[index] = descriptor.value;
   }
+
+  return Object.freeze(snapshot);
 }
 
-function assertRuntimeSnapshot(
+function snapshotRuntimeSnapshot(
   value: unknown,
-): asserts value is InteriorExpandedRuntimeOperationalSnapshot {
-  assertExactPlainObject(
+): InteriorExpandedRuntimeOperationalSnapshot {
+  const topLevel = snapshotExactPlainObject(
     value,
     SNAPSHOT_FIELDS,
     "Planner 41 runtime snapshot",
   );
 
-  const snapshot =
-    value as unknown as InteriorExpandedRuntimeOperationalSnapshot;
-
-  assertExactPlainObject(
-    snapshot.zooHours,
+  const zooHours = snapshotExactPlainObject(
+    topLevel.zooHours,
     TIMED_EVIDENCE_FIELDS,
     "Planner 41 Zoo-hours evidence",
-  );
-  assertExactPlainObject(
-    snapshot.ingressClosureAdvisement,
+  ) as unknown as TimedRuntimeEvidence<RuntimeEvidenceStatus>;
+  const ingressClosureAdvisement = snapshotExactPlainObject(
+    topLevel.ingressClosureAdvisement,
     TIMED_EVIDENCE_FIELDS,
     "Planner 41 ingress closure-advisement evidence",
-  );
+  ) as unknown as TimedRuntimeEvidence<ClosureEvidenceStatus>;
 
-  assertOrdinaryDenseArray(
-    snapshot.ingressExactEdgeAvailability,
+  const rawIngressAvailability = snapshotOrdinaryDenseArray(
+    topLevel.ingressExactEdgeAvailability,
     "Planner 41 ingress exact-edge availability evidence",
   );
-  for (
-    const evidence of
-    snapshot.ingressExactEdgeAvailability
-  ) {
-    assertExactPlainObject(
-      evidence,
-      INGRESS_EDGE_EVIDENCE_FIELDS,
-      "Planner 41 ingress exact-edge availability record",
-    );
-  }
+  const ingressExactEdgeAvailability = Object.freeze(
+    rawIngressAvailability.map((evidence) =>
+      snapshotExactPlainObject(
+        evidence,
+        INGRESS_EDGE_EVIDENCE_FIELDS,
+        "Planner 41 ingress exact-edge availability record",
+      ) as unknown as ExactEdgeAvailabilityEvidence,
+    ),
+  );
 
-  assertOrdinaryDenseArray(
-    snapshot.interiorExactSegmentAvailability,
+  const rawInteriorAvailability = snapshotOrdinaryDenseArray(
+    topLevel.interiorExactSegmentAvailability,
     "Planner 41 interior exact-segment availability evidence",
   );
-  for (
-    const evidence of
-    snapshot.interiorExactSegmentAvailability
-  ) {
-    assertExactPlainObject(
-      evidence,
-      INTERIOR_SEGMENT_EVIDENCE_FIELDS,
-      "Planner 41 interior exact-segment availability record",
-    );
-  }
+  const interiorExactSegmentAvailability = Object.freeze(
+    rawInteriorAvailability.map((evidence) =>
+      snapshotExactPlainObject(
+        evidence,
+        INTERIOR_SEGMENT_EVIDENCE_FIELDS,
+        "Planner 41 interior exact-segment availability record",
+      ) as unknown as InteriorExactSegmentAvailabilityEvidence,
+    ),
+  );
+
+  return Object.freeze({
+    visitDate: topLevel.visitDate as string,
+    zooHours,
+    ingressClosureAdvisement,
+    ingressExactEdgeAvailability,
+    interiorExactSegmentAvailability,
+  });
 }
 
-function assertRuntimeRouteRequest(
+function snapshotRuntimeRouteRequest(
   value: unknown,
-): asserts value is InteriorExpandedRuntimeRouteRequest {
+): InteriorExpandedRuntimeRouteRequest {
   if (
     !value ||
     typeof value !== "object" ||
@@ -303,6 +328,7 @@ function assertRuntimeRouteRequest(
 
   const allowed = new Set<string>(ROUTE_REQUEST_FIELDS);
   const stringKeys = ownKeys as string[];
+  const actual = new Set(stringKeys);
   const unknown = stringKeys
     .filter((key) => !allowed.has(key))
     .sort();
@@ -314,13 +340,14 @@ function assertRuntimeRouteRequest(
   }
 
   for (const required of ["fromNodeId", "toNodeId"] as const) {
-    if (!Object.hasOwn(value, required)) {
+    if (!actual.has(required)) {
       throw new Error(
         `Planner 41 route request is missing required field ${required}.`,
       );
     }
   }
 
+  const captured: Record<string, unknown> = {};
   for (const field of stringKeys) {
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
@@ -335,7 +362,34 @@ function assertRuntimeRouteRequest(
         `Planner 41 route request requires enumerable own data field ${field}.`,
       );
     }
+    captured[field] = descriptor.value;
   }
+
+  if (actual.has("allowedModes")) {
+    captured.allowedModes = snapshotOrdinaryDenseArray(
+      captured.allowedModes,
+      "Planner 41 route request allowedModes",
+    );
+  }
+
+  const trusted: Record<string, unknown> = {
+    fromNodeId: captured.fromNodeId,
+    toNodeId: captured.toNodeId,
+  };
+  for (const optional of [
+    "optimize",
+    "allowedModes",
+    "requireAccessible",
+    "requireStroller",
+  ] as const) {
+    if (actual.has(optional)) {
+      trusted[optional] = captured[optional];
+    }
+  }
+
+  return Object.freeze(
+    trusted,
+  ) as unknown as InteriorExpandedRuntimeRouteRequest;
 }
 
 function authoritativeRouteRequest(
@@ -426,22 +480,22 @@ assertInteriorRuntimeActivationIntegrationIntegrity();
 export function resolveInteriorExpandedRuntimeActivation(
   snapshot: InteriorExpandedRuntimeOperationalSnapshot,
 ): InteriorExpandedRuntimeActivationResult {
-  assertRuntimeSnapshot(snapshot);
+  const trustedSnapshot = snapshotRuntimeSnapshot(snapshot);
 
   const ingressSnapshot: IngressRuntimeOperationalSnapshot = {
-    visitDate: snapshot.visitDate,
-    zooHours: snapshot.zooHours,
+    visitDate: trustedSnapshot.visitDate,
+    zooHours: trustedSnapshot.zooHours,
     closureAdvisement:
-      snapshot.ingressClosureAdvisement,
+      trustedSnapshot.ingressClosureAdvisement,
     exactEdgeAvailability:
-      snapshot.ingressExactEdgeAvailability,
+      trustedSnapshot.ingressExactEdgeAvailability,
   };
 
   const interiorSnapshot: InteriorRuntimeOperationalSnapshot = {
-    visitDate: snapshot.visitDate,
-    zooHours: snapshot.zooHours,
+    visitDate: trustedSnapshot.visitDate,
+    zooHours: trustedSnapshot.zooHours,
     exactSegmentAvailability:
-      snapshot.interiorExactSegmentAvailability,
+      trustedSnapshot.interiorExactSegmentAvailability,
   };
 
   const ingress = resolveIngressRuntimeActivation(
@@ -453,9 +507,9 @@ export function resolveInteriorExpandedRuntimeActivation(
   );
 
   if (
-    ingress.visitDate !== snapshot.visitDate ||
+    ingress.visitDate !== trustedSnapshot.visitDate ||
     (interior.status === "evaluated" &&
-      interior.visitDate !== snapshot.visitDate)
+      interior.visitDate !== trustedSnapshot.visitDate)
   ) {
     throw new Error(
       "Planner 41 runtime resolver visit-date binding drifted.",
@@ -501,7 +555,7 @@ export function resolveInteriorExpandedRuntimeActivation(
   }
 
   return deepFreeze({
-    visitDate: snapshot.visitDate,
+    visitDate: trustedSnapshot.visitDate,
     ingress,
     interior,
     enabledConditionalEdgeIds:
@@ -513,11 +567,11 @@ export function routeInteriorExpandedWithRuntimeEvidence(
   snapshot: InteriorExpandedRuntimeOperationalSnapshot,
   request: InteriorExpandedRuntimeRouteRequest,
 ): InteriorExpandedRuntimeRouteResult {
-  assertRuntimeRouteRequest(request);
+  const trustedRequest = snapshotRuntimeRouteRequest(request);
 
-  // Planner 41 resolves both qualified evidence domains immediately before
-  // traversal. Conditional edge IDs are derived only from those resolver
-  // decisions; callers never control the activation set.
+  // Planner 41 snapshots caller input before evaluating both qualified
+  // evidence domains immediately before traversal. Conditional edge IDs are
+  // derived only from resolver decisions; callers never control the set.
   const activation =
     resolveInteriorExpandedRuntimeActivation(snapshot);
   const graph = buildRoutingGraph(
@@ -526,7 +580,7 @@ export function routeInteriorExpandedWithRuntimeEvidence(
   const route = findShortestRoute(
     graph,
     authoritativeRouteRequest(
-      request,
+      trustedRequest,
       activation.enabledConditionalEdgeIds,
     ),
   );
