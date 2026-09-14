@@ -71,6 +71,18 @@ function unavailableSnapshot(): InteriorExpandedRuntimeOperationalSnapshot {
   };
 }
 
+function availableSnapshot(): InteriorExpandedRuntimeOperationalSnapshot {
+  const base = unavailableSnapshot();
+  return {
+    ...base,
+    interiorExactSegmentAvailability:
+      base.interiorExactSegmentAvailability.map((evidence) => ({
+        ...evidence,
+        status: "available" as const,
+      })),
+  };
+}
+
 test("Planner 41 snapshots validated snapshot fields before a Proxy can substitute different evidence during use", () => {
   const target = unavailableSnapshot();
   const forgedAvailable = {
@@ -149,4 +161,68 @@ test("Planner 41 snapshots route request fields before a Proxy can change the re
     toNodeId: TIGER_BRANCH_NODE,
     reason: "NO_ROUTE",
   });
+});
+
+test("Planner 41 preserves stroller routing gates under inherited setter pollution", () => {
+  const previous = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "requireStroller",
+  );
+  let setterCalls = 0;
+
+  Object.defineProperty(Object.prototype, "requireStroller", {
+    configurable: true,
+    set() {
+      setterCalls += 1;
+    },
+  });
+
+  try {
+    const snapshot = availableSnapshot();
+    const unrestricted = routeInteriorExpandedWithRuntimeEvidence(
+      snapshot,
+      {
+        fromNodeId: FRONT_STREET_NODE,
+        toNodeId: TIGER_BRANCH_NODE,
+      },
+    );
+    assert.equal(
+      unrestricted.route.status,
+      "found",
+      "the regression requires an otherwise-routable interior edge",
+    );
+
+    const strollerRequired = routeInteriorExpandedWithRuntimeEvidence(
+      snapshot,
+      {
+        fromNodeId: FRONT_STREET_NODE,
+        toNodeId: TIGER_BRANCH_NODE,
+        requireStroller: true,
+      },
+    );
+
+    assert.equal(
+      setterCalls,
+      0,
+      "routing-control copies must define own data properties instead of invoking inherited setters",
+    );
+    assert.equal(
+      strollerRequired.route.status,
+      "not-found",
+      "stroller:unknown must remain fail-closed when requireStroller is supplied",
+    );
+  } finally {
+    if (previous) {
+      Object.defineProperty(
+        Object.prototype,
+        "requireStroller",
+        previous,
+      );
+    } else {
+      Reflect.deleteProperty(
+        Object.prototype,
+        "requireStroller",
+      );
+    }
+  }
 });
