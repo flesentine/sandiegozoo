@@ -207,31 +207,47 @@ function snapshotOrdinaryDenseArray(
   }
   const length = lengthDescriptor.value as number;
 
-  const allowedOwnKeys = new Set([
-    ...Array.from(
-      { length },
-      (_, index) => String(index),
-    ),
-    "length",
-  ]);
-
-  if (
-    Reflect.ownKeys(value).some(
-      (key) =>
-        typeof key !== "string" ||
-        !allowedOwnKeys.has(key),
-    )
-  ) {
+  // Inspect only the keys the caller actually supplied before allocating
+  // anything proportional to the declared array length. A sparse array can
+  // legally claim a huge length with only a handful of own elements.
+  const ownKeys = Reflect.ownKeys(value);
+  if (ownKeys.some((key) => typeof key !== "string")) {
     throw new Error(
       `${label} cannot contain extra own properties.`,
     );
   }
 
+  const stringKeys = ownKeys as string[];
+  if (!stringKeys.includes("length")) {
+    throw new Error(`${label} requires an ordinary array length.`);
+  }
+
+  const indexKeys = stringKeys.filter(
+    (key) => key !== "length",
+  );
+  if (indexKeys.length !== length) {
+    throw new Error(
+      `${label} must be a dense ordinary array.`,
+    );
+  }
+
   const snapshot = new Array<unknown>(length);
-  for (let index = 0; index < length; index += 1) {
+  for (const key of indexKeys) {
+    const index = Number(key);
+    if (
+      !Number.isSafeInteger(index) ||
+      index < 0 ||
+      index >= length ||
+      String(index) !== key
+    ) {
+      throw new Error(
+        `${label} cannot contain extra own properties.`,
+      );
+    }
+
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
-      String(index),
+      key,
     );
     if (
       !descriptor ||
