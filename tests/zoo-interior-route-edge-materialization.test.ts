@@ -169,6 +169,48 @@ test("conditional interior RouteEdge is unavailable by default", () => {
   });
 });
 
+test("inherited conditional-edge activation IDs cannot bypass default-unavailable routing", () => {
+  const graph = buildRoutingGraph(INTERIOR_EXPANDED_ROUTE_GRAPH_DATA);
+  const originalDescriptor = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    "enabledConditionalEdgeIds",
+  );
+
+  try {
+    Object.defineProperty(Object.prototype, "enabledConditionalEdgeIds", {
+      value: [INTERIOR_EDGE_ID],
+      configurable: true,
+    });
+
+    const request = {
+      fromNodeId: FRONT_STREET_NODE,
+      toNodeId: TIGER_BRANCH_NODE,
+    };
+    assert.equal(
+      Object.hasOwn(request, "enabledConditionalEdgeIds"),
+      false,
+    );
+
+    assert.deepEqual(findShortestRoute(graph, request), {
+      status: "not-found",
+      fromNodeId: FRONT_STREET_NODE,
+      toNodeId: TIGER_BRANCH_NODE,
+      reason: "NO_ROUTE",
+    });
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(
+        Object.prototype,
+        "enabledConditionalEdgeIds",
+        originalDescriptor,
+      );
+    } else {
+      delete (Object.prototype as Record<string, unknown>)
+        .enabledConditionalEdgeIds;
+    }
+  }
+});
+
 test("enabling the exact interior edge creates the qualified Front Street branch route", () => {
   const graph = buildRoutingGraph(INTERIOR_EXPANDED_ROUTE_GRAPH_DATA);
   const route = findShortestRoute(graph, {
