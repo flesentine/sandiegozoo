@@ -116,6 +116,19 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function defineOwnEnumerableDataProperty(
+  target: Record<string, unknown>,
+  field: string,
+  value: unknown,
+) {
+  Object.defineProperty(target, field, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+}
+
 function snapshotExactPlainObject(
   value: unknown,
   requiredFields: readonly string[],
@@ -258,7 +271,12 @@ function snapshotOrdinaryDenseArray(
         `${label} requires enumerable own data element ${index}.`,
       );
     }
-    snapshot[index] = descriptor.value;
+    Object.defineProperty(snapshot, key, {
+      value: descriptor.value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 
   return Object.freeze(snapshot);
@@ -363,7 +381,7 @@ function snapshotRuntimeRouteRequest(
     }
   }
 
-  const captured: Record<string, unknown> = {};
+  const captured = Object.create(null) as Record<string, unknown>;
   for (const field of stringKeys) {
     const descriptor = Object.getOwnPropertyDescriptor(
       value,
@@ -378,20 +396,31 @@ function snapshotRuntimeRouteRequest(
         `Planner 41 route request requires enumerable own data field ${field}.`,
       );
     }
-    captured[field] = descriptor.value;
-  }
 
-  if (actual.has("allowedModes")) {
-    captured.allowedModes = snapshotOrdinaryDenseArray(
-      captured.allowedModes,
-      "Planner 41 route request allowedModes",
+    const capturedValue = field === "allowedModes"
+      ? snapshotOrdinaryDenseArray(
+          descriptor.value,
+          "Planner 41 route request allowedModes",
+        )
+      : descriptor.value;
+    defineOwnEnumerableDataProperty(
+      captured,
+      field,
+      capturedValue,
     );
   }
 
-  const trusted: Record<string, unknown> = {
-    fromNodeId: captured.fromNodeId,
-    toNodeId: captured.toNodeId,
-  };
+  const trusted: Record<string, unknown> = {};
+  defineOwnEnumerableDataProperty(
+    trusted,
+    "fromNodeId",
+    captured.fromNodeId,
+  );
+  defineOwnEnumerableDataProperty(
+    trusted,
+    "toNodeId",
+    captured.toNodeId,
+  );
   for (const optional of [
     "optimize",
     "allowedModes",
@@ -399,7 +428,11 @@ function snapshotRuntimeRouteRequest(
     "requireStroller",
   ] as const) {
     if (actual.has(optional)) {
-      trusted[optional] = captured[optional];
+      defineOwnEnumerableDataProperty(
+        trusted,
+        optional,
+        captured[optional],
+      );
     }
   }
 
@@ -412,23 +445,37 @@ function authoritativeRouteRequest(
   request: InteriorExpandedRuntimeRouteRequest,
   enabledConditionalEdgeIds: readonly string[],
 ): RouteRequest {
-  const result: RouteRequest = {
-    fromNodeId: request.fromNodeId,
-    toNodeId: request.toNodeId,
+  const result = {} as RouteRequest;
+  const resultRecord = result as unknown as Record<string, unknown>;
+  defineOwnEnumerableDataProperty(
+    resultRecord,
+    "fromNodeId",
+    request.fromNodeId,
+  );
+  defineOwnEnumerableDataProperty(
+    resultRecord,
+    "toNodeId",
+    request.toNodeId,
+  );
+  defineOwnEnumerableDataProperty(
+    resultRecord,
+    "enabledConditionalEdgeIds",
     enabledConditionalEdgeIds,
-  };
+  );
 
-  if (Object.hasOwn(request, "optimize")) {
-    result.optimize = request.optimize;
-  }
-  if (Object.hasOwn(request, "allowedModes")) {
-    result.allowedModes = request.allowedModes;
-  }
-  if (Object.hasOwn(request, "requireAccessible")) {
-    result.requireAccessible = request.requireAccessible;
-  }
-  if (Object.hasOwn(request, "requireStroller")) {
-    result.requireStroller = request.requireStroller;
+  for (const optional of [
+    "optimize",
+    "allowedModes",
+    "requireAccessible",
+    "requireStroller",
+  ] as const) {
+    if (Object.hasOwn(request, optional)) {
+      defineOwnEnumerableDataProperty(
+        resultRecord,
+        optional,
+        request[optional],
+      );
+    }
   }
 
   return result;
