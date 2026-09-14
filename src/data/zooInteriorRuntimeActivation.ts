@@ -445,7 +445,7 @@ function authoritativeRouteRequest(
   request: InteriorExpandedRuntimeRouteRequest,
   enabledConditionalEdgeIds: readonly string[],
 ): RouteRequest {
-  const result = {} as RouteRequest;
+  const result = Object.create(null) as RouteRequest;
   const resultRecord = result as unknown as Record<string, unknown>;
   defineOwnEnumerableDataProperty(
     resultRecord,
