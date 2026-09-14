@@ -98,6 +98,52 @@ test("Planner 42 rejects attempts to smuggle an unsourced node sequence into the
   );
 });
 
+test("Planner 42 rejects proxy-backed records before a get trap can substitute validated identity", () => {
+  let getTrapCalls = 0;
+  const target = mutableClone();
+  const proxy = new Proxy(target, {
+    get(innerTarget, property, receiver) {
+      getTrapCalls += 1;
+      if (property === "sourceWayVersion") {
+        return getTrapCalls === 1 ? 7 : 8;
+      }
+      return Reflect.get(innerTarget, property, receiver);
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorTreetopsGeometryEvidenceGateIntegrity([
+        proxy as unknown as InteriorTreetopsGeometryEvidenceGate,
+      ]),
+    /cannot be Proxy-backed|structured-cloneable plain data/,
+  );
+  assert.equal(getTrapCalls, 0);
+});
+
+test("Planner 42 blocks inherited downstream RouteEdge fields and isolates the exported gate from Object.prototype", () => {
+  Object.defineProperty(Object.prototype, "fromNodeId", {
+    configurable: true,
+    value: "polluted-route-node",
+  });
+
+  try {
+    const gate = INTERIOR_TREETOPS_GEOMETRY_EVIDENCE_GATE[0] as unknown as {
+      fromNodeId?: string;
+    };
+    assert.equal(Object.getPrototypeOf(gate), null);
+    assert.equal(gate.fromNodeId, undefined);
+
+    const forged = mutableClone();
+    assert.throws(
+      () => assertInteriorTreetopsGeometryEvidenceGateIntegrity([forged]),
+      /cannot materialize downstream field fromNodeId/,
+    );
+  } finally {
+    delete (Object.prototype as { fromNodeId?: string }).fromNodeId;
+  }
+});
+
 test("Planner 42 rejects version drift even when the connector way id remains the same", () => {
   const forged = mutableClone() as unknown as {
     sourceWayVersion: number;
