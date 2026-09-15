@@ -55,6 +55,14 @@ export type InteriorTreetopsGeometryEvidenceAssessment = {
   };
 };
 
+type DataFieldSnapshot = Readonly<{
+  field: string;
+  value: unknown;
+  enumerable: boolean;
+  configurable: boolean;
+  writable: boolean;
+}>;
+
 const TOP_LEVEL_FIELDS = [
   "id",
   "provider",
@@ -120,6 +128,21 @@ function nullPrototypeRecord<T extends object>(value: T): T {
   return result;
 }
 
+function recordFromSnapshot<T extends object>(
+  snapshot: readonly DataFieldSnapshot[],
+): T {
+  const result = Object.create(null) as T;
+  for (const field of snapshot) {
+    Object.defineProperty(result, field.field, {
+      value: field.value,
+      enumerable: field.enumerable,
+      configurable: field.configurable,
+      writable: field.writable,
+    });
+  }
+  return result;
+}
+
 function cloneForIntegrityValidation(value: unknown, label: string): unknown {
   try {
     return CAPTURED_STRUCTURED_CLONE(value);
@@ -169,6 +192,46 @@ function assertExactPlainObject(
     const descriptor = Object.getOwnPropertyDescriptor(value, field);
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(`${label} requires enumerable own data field ${field}.`);
+    }
+  }
+}
+
+function captureDataFieldSnapshot(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+  label: string,
+): readonly DataFieldSnapshot[] {
+  return fields.map((field) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error(`${label} requires enumerable own data field ${field}.`);
+    }
+    return {
+      field,
+      value: descriptor.value,
+      enumerable: descriptor.enumerable,
+      configurable: descriptor.configurable === true,
+      writable: descriptor.writable === true,
+    };
+  });
+}
+
+function assertDataFieldSnapshotUnchanged(
+  value: Record<string, unknown>,
+  snapshot: readonly DataFieldSnapshot[],
+  label: string,
+) {
+  for (const expected of snapshot) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, expected.field);
+    if (
+      !descriptor ||
+      !("value" in descriptor) ||
+      descriptor.enumerable !== expected.enumerable ||
+      (descriptor.configurable === true) !== expected.configurable ||
+      (descriptor.writable === true) !== expected.writable ||
+      !Object.is(descriptor.value, expected.value)
+    ) {
+      throw new Error(`${label} changed during proxy screening.`);
     }
   }
 }
@@ -240,38 +303,61 @@ const RAW_AUTHORITY: InteriorTreetopsGeometryEvidenceGate[] = [
 export function assertInteriorTreetopsGeometryEvidenceGateIntegrity(
   authorities: readonly InteriorTreetopsGeometryEvidenceGate[],
 ) {
-  cloneForIntegrityValidation(
-    authorities,
-    "Planner 42 Treetops geometry evidence-gate collection",
-  );
+  const collectionLabel =
+    "Planner 42 Treetops geometry evidence-gate collection";
+  const gateLabel = "Planner 42 Treetops geometry evidence gate";
 
-  assertExactOrdinaryArray(
-    authorities,
-    1,
-    "Planner 42 Treetops geometry evidence-gate collection",
-  );
+  assertExactOrdinaryArray(authorities, 1, collectionLabel);
 
-  const candidateDescriptor = Object.getOwnPropertyDescriptor(authorities, "0");
-  if (!candidateDescriptor || !("value" in candidateDescriptor)) {
+  const candidateDescriptorBefore = Object.getOwnPropertyDescriptor(
+    authorities,
+    "0",
+  );
+  if (
+    !candidateDescriptorBefore ||
+    !candidateDescriptorBefore.enumerable ||
+    !("value" in candidateDescriptorBefore)
+  ) {
     throw new Error(
-      "Planner 42 Treetops geometry evidence-gate collection requires enumerable own data element 0.",
+      `${collectionLabel} requires enumerable own data element 0.`,
     );
   }
-  const candidate: unknown = candidateDescriptor.value;
+  const candidate: unknown = candidateDescriptorBefore.value;
 
-  assertExactPlainObject(
+  assertExactPlainObject(candidate, TOP_LEVEL_FIELDS, gateLabel);
+  assertNoPrematureGeometryOrRouteMaterialization(candidate, gateLabel);
+  const candidateSnapshot = captureDataFieldSnapshot(
     candidate,
     TOP_LEVEL_FIELDS,
-    "Planner 42 Treetops geometry evidence gate",
-  );
-  assertNoPrematureGeometryOrRouteMaterialization(
-    candidate,
-    "Planner 42 Treetops geometry evidence gate",
+    gateLabel,
   );
 
-  const record = nullPrototypeRecord(
-    candidate,
-  ) as unknown as InteriorTreetopsGeometryEvidenceGate;
+  cloneForIntegrityValidation(authorities, collectionLabel);
+
+  assertExactOrdinaryArray(authorities, 1, collectionLabel);
+  const candidateDescriptorAfter = Object.getOwnPropertyDescriptor(
+    authorities,
+    "0",
+  );
+  if (
+    !candidateDescriptorAfter ||
+    !candidateDescriptorAfter.enumerable ||
+    !("value" in candidateDescriptorAfter) ||
+    !Object.is(candidateDescriptorAfter.value, candidate) ||
+    candidateDescriptorAfter.configurable !==
+      candidateDescriptorBefore.configurable ||
+    candidateDescriptorAfter.writable !== candidateDescriptorBefore.writable
+  ) {
+    throw new Error(`${collectionLabel} changed during proxy screening.`);
+  }
+
+  assertExactPlainObject(candidate, TOP_LEVEL_FIELDS, gateLabel);
+  assertNoPrematureGeometryOrRouteMaterialization(candidate, gateLabel);
+  assertDataFieldSnapshotUnchanged(candidate, candidateSnapshot, gateLabel);
+
+  const record = recordFromSnapshot<InteriorTreetopsGeometryEvidenceGate>(
+    candidateSnapshot,
+  );
   const branchSelection = INTERIOR_OBJECTIVE_BRANCH_SELECTION_AUTHORITY[0];
   const frontStreetGeometry = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
   const selectedCandidate = frontStreetGeometry.adjacentJunctionCandidates.find(
