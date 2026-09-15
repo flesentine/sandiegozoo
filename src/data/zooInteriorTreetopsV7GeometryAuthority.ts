@@ -108,7 +108,11 @@ export type InteriorTreetopsV7GeometryAssessment = {
 };
 
 const TOP_LEVEL_FIELDS = ["id","provider","objectiveSourceRecordId","anchorNodeId","sourceWayId","sourceWayUrl","sourceWayVersionUrl","sourceWayVersion","sourceWayTimestamp","sourceWayChangeset","sourceHighway","sourceName","sourceSurface","sourceWayNodeCount","orderedNodeIds","nodes","nodeVersionSelectionRule","versionPinnedNodeSequenceStatus","nextJunctionSelection","plannerMaterialization"] as const;
+const TOP_LEVEL_STRING_FIELDS = ["id","provider","objectiveSourceRecordId","anchorNodeId","sourceWayId","sourceWayUrl","sourceWayVersionUrl","sourceWayTimestamp","sourceHighway","sourceName","sourceSurface","nodeVersionSelectionRule","versionPinnedNodeSequenceStatus","nextJunctionSelection","plannerMaterialization"] as const;
+const TOP_LEVEL_NUMBER_FIELDS = ["sourceWayVersion","sourceWayChangeset","sourceWayNodeCount"] as const;
 const NODE_FIELDS = ["sourceObjectId","sourceUrl","sourceVersionUrl","sourceVersion","sourceTimestamp","sourceChangeset","lat","lng"] as const;
+const NODE_STRING_FIELDS = ["sourceObjectId","sourceUrl","sourceVersionUrl","sourceTimestamp"] as const;
+const NODE_NUMBER_FIELDS = ["sourceVersion","sourceChangeset","lat","lng"] as const;
 const FORBIDDEN_ROUTE_FIELDS = ["fromNodeId","toNodeId","mode","distanceMeters","durationMinutes","difficulty","stairs","accessible","stroller","oneWay","status","provenance","routeNodeId","nextJunctionNodeId"] as const;
 
 function deepFreeze<T>(value: T): T {
@@ -181,6 +185,33 @@ function captureArraySnapshot(value: unknown[], length: number, label: string): 
   return captureDataFieldSnapshot(value, Array.from({ length }, (_, index) => String(index)), label);
 }
 
+function snapshotField(snapshot: readonly DataFieldSnapshot[], field: string): unknown {
+  const match = snapshot.find((candidate) => candidate.field === field);
+  if (!match) throw new Error(`Planner 43 internal snapshot is missing ${field}.`);
+  return match.value;
+}
+
+function assertPrimitiveSnapshotFields(
+  snapshot: readonly DataFieldSnapshot[],
+  stringFields: readonly string[],
+  numberFields: readonly string[],
+  label: string,
+): void {
+  for (const field of stringFields) {
+    if (typeof snapshotField(snapshot, field) !== "string") throw new Error(`${label} field ${field} must be a primitive string before proxy screening.`);
+  }
+  for (const field of numberFields) {
+    const value = snapshotField(snapshot, field);
+    if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${label} field ${field} must be a finite primitive number before proxy screening.`);
+  }
+}
+
+function assertStringArraySnapshot(snapshot: readonly DataFieldSnapshot[], label: string): void {
+  for (const entry of snapshot) {
+    if (typeof entry.value !== "string") throw new Error(`${label} element ${entry.field} must be a primitive string before proxy screening.`);
+  }
+}
+
 function assertDataFieldSnapshotUnchanged(value: object, snapshot: readonly DataFieldSnapshot[], label: string): void {
   for (const expected of snapshot) {
     const descriptor = Object.getOwnPropertyDescriptor(value, expected.field);
@@ -188,12 +219,6 @@ function assertDataFieldSnapshotUnchanged(value: object, snapshot: readonly Data
       throw new Error(`${label} changed during proxy screening.`);
     }
   }
-}
-
-function snapshotField(snapshot: readonly DataFieldSnapshot[], field: string): unknown {
-  const match = snapshot.find((candidate) => candidate.field === field);
-  if (!match) throw new Error(`Planner 43 internal snapshot is missing ${field}.`);
-  return match.value;
 }
 
 function assertNoRouteFields(value: Record<string, unknown>, label: string) {
@@ -244,11 +269,13 @@ export function assertInteriorTreetopsV7GeometryAuthorityIntegrity(authorities: 
   assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
   assertNoRouteFields(record, authorityLabel);
   const authoritySnapshot = captureDataFieldSnapshot(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertPrimitiveSnapshotFields(authoritySnapshot, TOP_LEVEL_STRING_FIELDS, TOP_LEVEL_NUMBER_FIELDS, authorityLabel);
 
   const orderedNodeIdsValue = snapshotField(authoritySnapshot, "orderedNodeIds");
   assertArray(orderedNodeIdsValue, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
   const orderedNodeIds = orderedNodeIdsValue as unknown[];
   const orderedNodeSnapshot = captureArraySnapshot(orderedNodeIds, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
+  assertStringArraySnapshot(orderedNodeSnapshot, "Planner 43 ordered node sequence");
 
   const nodesValue = snapshotField(authoritySnapshot, "nodes");
   assertArray(nodesValue, SOURCE_WAY_NODE_COUNT, "Planner 43 node provenance collection");
@@ -258,7 +285,9 @@ export function assertInteriorTreetopsV7GeometryAuthorityIntegrity(authorities: 
     const candidate = entry.value;
     assertPlain(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
     assertNoRouteFields(candidate, `Planner 43 node ${index}`);
-    return captureDataFieldSnapshot(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
+    const snapshot = captureDataFieldSnapshot(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
+    assertPrimitiveSnapshotFields(snapshot, NODE_STRING_FIELDS, NODE_NUMBER_FIELDS, `Planner 43 node ${index}`);
+    return snapshot;
   });
 
   cloneForIntegrityValidation(authorities, collectionLabel);
