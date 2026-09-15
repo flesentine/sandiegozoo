@@ -121,6 +121,45 @@ test("Planner 42 rejects proxy-backed records before a get trap can substitute v
   assert.equal(getTrapCalls, 0);
 });
 
+test("Planner 42 rejects accessors on original gate records after proxy screening", () => {
+  let reads = 0;
+  const forged = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(forged, "sourceWayVersion", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      return reads === 1 ? 7 : 8;
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorTreetopsGeometryEvidenceGateIntegrity([
+        forged as unknown as InteriorTreetopsGeometryEvidenceGate,
+      ]),
+    /requires enumerable own data field sourceWayVersion/,
+  );
+  assert.equal(reads, 1);
+});
+
+test("Planner 42 rejects hidden downstream fields on the original gate record", () => {
+  const forged = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(forged, "fromNodeId", {
+    configurable: true,
+    enumerable: false,
+    value: "hidden-route-node",
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorTreetopsGeometryEvidenceGateIntegrity([
+        forged as unknown as InteriorTreetopsGeometryEvidenceGate,
+      ]),
+    /cannot contain unknown field fromNodeId|cannot materialize downstream field fromNodeId/,
+  );
+});
+
 test("Planner 42 blocks inherited downstream RouteEdge fields and isolates the exported gate from Object.prototype", () => {
   Object.defineProperty(Object.prototype, "fromNodeId", {
     configurable: true,
