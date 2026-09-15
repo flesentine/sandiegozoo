@@ -121,7 +121,7 @@ test("Planner 42 rejects proxy-backed records before a get trap can substitute v
   assert.equal(getTrapCalls, 0);
 });
 
-test("Planner 42 rejects accessors on original gate records after proxy screening", () => {
+test("Planner 42 rejects accessors before structured-clone proxy screening can invoke them", () => {
   let reads = 0;
   const forged = mutableClone() as unknown as Record<string, unknown>;
   Object.defineProperty(forged, "sourceWayVersion", {
@@ -140,7 +140,33 @@ test("Planner 42 rejects accessors on original gate records after proxy screenin
       ]),
     /requires enumerable own data field sourceWayVersion/,
   );
-  assert.equal(reads, 1);
+  assert.equal(reads, 0);
+});
+
+test("Planner 42 cannot swap in an unscreened Proxy from an accessor during proxy screening", () => {
+  const original = mutableClone() as unknown as Record<string, unknown>;
+  const replacement = new Proxy(mutableClone(), {});
+  const authorities = [
+    original as unknown as InteriorTreetopsGeometryEvidenceGate,
+  ];
+  let reads = 0;
+
+  Object.defineProperty(original, "id", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      authorities[0] = replacement;
+      return "sdz-interior-treetops-way-geometry-evidence-gate";
+    },
+  });
+
+  assert.throws(
+    () => assertInteriorTreetopsGeometryEvidenceGateIntegrity(authorities),
+    /requires enumerable own data field id/,
+  );
+  assert.equal(reads, 0);
+  assert.equal(authorities[0], original);
 });
 
 test("Planner 42 rejects hidden downstream fields on the original gate record", () => {
