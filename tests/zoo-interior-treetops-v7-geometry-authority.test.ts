@@ -142,6 +142,71 @@ test("Planner 43 validates exact ordinary array/object shapes", () => {
   assert.throws(() => assertInteriorTreetopsV7GeometryAuthorityIntegrity([hidden as unknown as InteriorTreetopsV7GeometryAuthority]), /requires enumerable own data field sourceWayChangeset/);
 });
 
+test("Planner 43 rejects top-level and nested proxies without invoking get traps", () => {
+  const topLevel = mutableClone();
+  let topLevelReads = 0;
+  const topLevelProxy = new Proxy(topLevel, {
+    get(target, property, receiver) {
+      topLevelReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([topLevelProxy]),
+    /Proxy-backed/,
+  );
+  assert.equal(topLevelReads, 0);
+
+  const nested = mutableClone();
+  let nestedReads = 0;
+  nested.nodes[0] = new Proxy(nested.nodes[0], {
+    get(target, property, receiver) {
+      nestedReads += 1;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([nested]),
+    /Proxy-backed/,
+  );
+  assert.equal(nestedReads, 0);
+});
+
+test("Planner 43 rejects accessors before structured-clone screening can invoke them", () => {
+  const authority = mutableClone() as unknown as Record<string, unknown>;
+  let reads = 0;
+  Object.defineProperty(authority, "sourceWayVersion", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      reads += 1;
+      return 7;
+    },
+  });
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([authority as unknown as InteriorTreetopsV7GeometryAuthority]),
+    /requires enumerable own data field sourceWayVersion/,
+  );
+  assert.equal(reads, 0);
+});
+
+test("Planner 43 rejects nested replacement during proxy screening", () => {
+  const authority = mutableClone();
+  const cleanReplacement = { ...authority.nodes[0] };
+  const proxy = new Proxy({ ...authority.nodes[0] }, {
+    getOwnPropertyDescriptor(target, property) {
+      authority.nodes[0] = cleanReplacement;
+      return Reflect.getOwnPropertyDescriptor(target, property);
+    },
+  });
+  authority.nodes[0] = proxy;
+
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([authority]),
+    /node provenance collection changed during proxy screening|Proxy-backed/,
+  );
+});
+
 test("Planner 43 authority and assessment are deeply immutable", () => {
   const authority = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
   assert.equal(Object.isFrozen(INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY), true);
