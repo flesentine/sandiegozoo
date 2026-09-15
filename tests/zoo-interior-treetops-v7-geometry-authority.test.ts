@@ -56,7 +56,7 @@ test("Planner 43 freezes exact historical coordinate provenance for every ordere
     assert.ok(Number.isFinite(node.lat));
     assert.ok(Number.isFinite(node.lng));
   }
-  assert.deepEqual(authority.nodes[0], {
+  assert.deepEqual({ ...authority.nodes[0] }, {
     sourceObjectId: "1619736626",
     sourceUrl: "https://www.openstreetmap.org/node/1619736626",
     sourceVersionUrl: "https://api.openstreetmap.org/api/0.6/node/1619736626/2",
