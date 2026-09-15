@@ -240,18 +240,25 @@ const RAW_AUTHORITY: InteriorTreetopsGeometryEvidenceGate[] = [
 export function assertInteriorTreetopsGeometryEvidenceGateIntegrity(
   authorities: readonly InteriorTreetopsGeometryEvidenceGate[],
 ) {
-  const validationSnapshot = cloneForIntegrityValidation(
+  cloneForIntegrityValidation(
     authorities,
     "Planner 42 Treetops geometry evidence-gate collection",
   );
 
   assertExactOrdinaryArray(
-    validationSnapshot,
+    authorities,
     1,
     "Planner 42 Treetops geometry evidence-gate collection",
   );
 
-  const candidate: unknown = validationSnapshot[0];
+  const candidateDescriptor = Object.getOwnPropertyDescriptor(authorities, "0");
+  if (!candidateDescriptor || !("value" in candidateDescriptor)) {
+    throw new Error(
+      "Planner 42 Treetops geometry evidence-gate collection requires enumerable own data element 0.",
+    );
+  }
+  const candidate: unknown = candidateDescriptor.value;
+
   assertExactPlainObject(
     candidate,
     TOP_LEVEL_FIELDS,
@@ -262,7 +269,9 @@ export function assertInteriorTreetopsGeometryEvidenceGateIntegrity(
     "Planner 42 Treetops geometry evidence gate",
   );
 
-  const record = candidate as unknown as InteriorTreetopsGeometryEvidenceGate;
+  const record = nullPrototypeRecord(
+    candidate,
+  ) as unknown as InteriorTreetopsGeometryEvidenceGate;
   const branchSelection = INTERIOR_OBJECTIVE_BRANCH_SELECTION_AUTHORITY[0];
   const frontStreetGeometry = INTERIOR_FRONT_STREET_GEOMETRY_AUTHORITY[0];
   const selectedCandidate = frontStreetGeometry.adjacentJunctionCandidates.find(
