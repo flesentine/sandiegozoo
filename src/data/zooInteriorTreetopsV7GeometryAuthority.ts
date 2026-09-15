@@ -8,8 +8,16 @@ const SOURCE_WAY_VERSION = 7 as const;
 const SOURCE_WAY_TIMESTAMP = "2026-02-21T20:28:40Z" as const;
 const SOURCE_WAY_CHANGESET = 178875711 as const;
 const SOURCE_WAY_NODE_COUNT = 34 as const;
+const CAPTURED_STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 
 type NodeTuple = readonly [string, number, string, number, number, number];
+type DataFieldSnapshot = Readonly<{
+  field: string;
+  value: unknown;
+  enumerable: boolean;
+  configurable: boolean;
+  writable: boolean;
+}>;
 
 const CAPTURED_NODES = [
   ["1619736626",2,"2013-12-23T19:47:46Z",19606502,32.735201,-117.1496375],
@@ -121,6 +129,14 @@ function nullRecord<T extends object>(value: T): T {
   return result;
 }
 
+function cloneForIntegrityValidation(value: unknown, label: string): void {
+  try {
+    CAPTURED_STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(`${label} must be structured-cloneable plain data and cannot be Proxy-backed.`);
+  }
+}
+
 function assertPlain(value: unknown, fields: readonly string[], label: string): asserts value is Record<string, unknown> {
   const prototype = value && typeof value === "object" ? Object.getPrototypeOf(value) : undefined;
   if (!value || typeof value !== "object" || Array.isArray(value) || (prototype !== Object.prototype && prototype !== null)) throw new Error(`${label} must be a plain object.`);
@@ -145,6 +161,39 @@ function assertArray(value: unknown, length: number, label: string): asserts val
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) throw new Error(`${label} requires enumerable own data element ${index}.`);
   }
+}
+
+function captureDataFieldSnapshot(value: object, fields: readonly string[], label: string): readonly DataFieldSnapshot[] {
+  return fields.map((field) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) throw new Error(`${label} requires enumerable own data field ${field}.`);
+    return {
+      field,
+      value: descriptor.value,
+      enumerable: descriptor.enumerable,
+      configurable: descriptor.configurable === true,
+      writable: descriptor.writable === true,
+    };
+  });
+}
+
+function captureArraySnapshot(value: unknown[], length: number, label: string): readonly DataFieldSnapshot[] {
+  return captureDataFieldSnapshot(value, Array.from({ length }, (_, index) => String(index)), label);
+}
+
+function assertDataFieldSnapshotUnchanged(value: object, snapshot: readonly DataFieldSnapshot[], label: string): void {
+  for (const expected of snapshot) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, expected.field);
+    if (!descriptor || !("value" in descriptor) || descriptor.enumerable !== expected.enumerable || (descriptor.configurable === true) !== expected.configurable || (descriptor.writable === true) !== expected.writable || !Object.is(descriptor.value, expected.value)) {
+      throw new Error(`${label} changed during proxy screening.`);
+    }
+  }
+}
+
+function snapshotField(snapshot: readonly DataFieldSnapshot[], field: string): unknown {
+  const match = snapshot.find((candidate) => candidate.field === field);
+  if (!match) throw new Error(`Planner 43 internal snapshot is missing ${field}.`);
+  return match.value;
 }
 
 function assertNoRouteFields(value: Record<string, unknown>, label: string) {
@@ -186,10 +235,50 @@ const RAW_AUTHORITY: InteriorTreetopsV7GeometryAuthority[] = [nullRecord({
 })];
 
 export function assertInteriorTreetopsV7GeometryAuthorityIntegrity(authorities: readonly InteriorTreetopsV7GeometryAuthority[]) {
-  assertArray(authorities, 1, "Planner 43 authority collection");
-  const record = authorities[0] as unknown;
-  assertPlain(record, TOP_LEVEL_FIELDS, "Planner 43 authority");
-  assertNoRouteFields(record, "Planner 43 authority");
+  const collectionLabel = "Planner 43 authority collection";
+  const authorityLabel = "Planner 43 authority";
+
+  assertArray(authorities, 1, collectionLabel);
+  const collectionSnapshot = captureArraySnapshot(authorities as unknown[], 1, collectionLabel);
+  const record = collectionSnapshot[0].value;
+  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertNoRouteFields(record, authorityLabel);
+  const authoritySnapshot = captureDataFieldSnapshot(record, TOP_LEVEL_FIELDS, authorityLabel);
+
+  const orderedNodeIdsValue = snapshotField(authoritySnapshot, "orderedNodeIds");
+  assertArray(orderedNodeIdsValue, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
+  const orderedNodeIds = orderedNodeIdsValue as unknown[];
+  const orderedNodeSnapshot = captureArraySnapshot(orderedNodeIds, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
+
+  const nodesValue = snapshotField(authoritySnapshot, "nodes");
+  assertArray(nodesValue, SOURCE_WAY_NODE_COUNT, "Planner 43 node provenance collection");
+  const nodeCollection = nodesValue as unknown[];
+  const nodeCollectionSnapshot = captureArraySnapshot(nodeCollection, SOURCE_WAY_NODE_COUNT, "Planner 43 node provenance collection");
+  const nodeSnapshots = nodeCollectionSnapshot.map((entry, index) => {
+    const candidate = entry.value;
+    assertPlain(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
+    assertNoRouteFields(candidate, `Planner 43 node ${index}`);
+    return captureDataFieldSnapshot(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
+  });
+
+  cloneForIntegrityValidation(authorities, collectionLabel);
+
+  assertArray(authorities, 1, collectionLabel);
+  assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
+  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertNoRouteFields(record, authorityLabel);
+  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
+  assertArray(orderedNodeIds, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
+  assertDataFieldSnapshotUnchanged(orderedNodeIds, orderedNodeSnapshot, "Planner 43 ordered node sequence");
+  assertArray(nodeCollection, SOURCE_WAY_NODE_COUNT, "Planner 43 node provenance collection");
+  assertDataFieldSnapshotUnchanged(nodeCollection, nodeCollectionSnapshot, "Planner 43 node provenance collection");
+  for (let index = 0; index < SOURCE_WAY_NODE_COUNT; index += 1) {
+    const candidate = nodeCollectionSnapshot[index].value;
+    assertPlain(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
+    assertNoRouteFields(candidate, `Planner 43 node ${index}`);
+    assertDataFieldSnapshotUnchanged(candidate, nodeSnapshots[index], `Planner 43 node ${index}`);
+  }
+
   const authority = record as unknown as InteriorTreetopsV7GeometryAuthority;
   const gate = INTERIOR_TREETOPS_GEOMETRY_EVIDENCE_GATE[0];
 
@@ -197,17 +286,12 @@ export function assertInteriorTreetopsV7GeometryAuthorityIntegrity(authorities: 
 
   if (authority.objectiveSourceRecordId !== gate.objectiveSourceRecordId || authority.anchorNodeId !== gate.anchorNodeId || authority.sourceWayId !== gate.sourceWayId || authority.sourceWayUrl !== gate.sourceWayUrl || authority.sourceWayVersionUrl !== gate.sourceWayVersionUrl || authority.sourceWayVersion !== gate.sourceWayVersion || authority.sourceWayTimestamp !== gate.sourceWayTimestamp || authority.sourceHighway !== gate.sourceHighway || authority.sourceName !== gate.sourceName || authority.sourceSurface !== gate.sourceSurface) throw new Error("Planner 43 drifted from the qualified Planner 42 source gate.");
 
-  assertArray(authority.orderedNodeIds, SOURCE_WAY_NODE_COUNT, "Planner 43 ordered node sequence");
-  assertArray(authority.nodes, SOURCE_WAY_NODE_COUNT, "Planner 43 node provenance collection");
   if (authority.orderedNodeIds[0] !== ANCHOR_NODE_ID || new Set(authority.orderedNodeIds).size !== SOURCE_WAY_NODE_COUNT) throw new Error("Planner 43 ordered node sequence lost anchor or uniqueness.");
 
   for (let index = 0; index < SOURCE_WAY_NODE_COUNT; index += 1) {
     const [id,version,timestamp,changeset,lat,lng] = CAPTURED_NODES[index];
     if (authority.orderedNodeIds[index] !== id) throw new Error(`Planner 43 ordered node sequence drifted at index ${index}.`);
-    const candidate = authority.nodes[index] as unknown;
-    assertPlain(candidate, NODE_FIELDS, `Planner 43 node ${index}`);
-    assertNoRouteFields(candidate, `Planner 43 node ${index}`);
-    const node = candidate as TreetopsV7GeometryNode;
+    const node = authority.nodes[index];
     if (node.sourceObjectId !== id || node.sourceUrl !== `https://www.openstreetmap.org/node/${id}` || node.sourceVersionUrl !== `https://api.openstreetmap.org/api/0.6/node/${id}/${version}` || node.sourceVersion !== version || node.sourceTimestamp !== timestamp || node.sourceChangeset !== changeset || node.lat !== lat || node.lng !== lng || !Number.isFinite(Date.parse(node.sourceTimestamp)) || Date.parse(node.sourceTimestamp) > Date.parse(SOURCE_WAY_TIMESTAMP)) throw new Error(`Planner 43 node ${id} drifted from captured historical provenance.`);
   }
 }
