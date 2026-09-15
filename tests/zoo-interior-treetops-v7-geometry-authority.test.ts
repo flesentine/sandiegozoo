@@ -207,6 +207,42 @@ test("Planner 43 rejects nested replacement during proxy screening", () => {
   );
 });
 
+test("Planner 43 rejects accessor-bearing scalar leaves before structured clone can traverse them", () => {
+  const nodeIdAuthority = mutableClone();
+  let nodeIdGetterReads = 0;
+  const accessorNodeId = {};
+  Object.defineProperty(accessorNodeId, "value", {
+    enumerable: true,
+    get() {
+      nodeIdGetterReads += 1;
+      return "1619736626";
+    },
+  });
+  (nodeIdAuthority.orderedNodeIds as unknown as unknown[])[0] = accessorNodeId;
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([nodeIdAuthority]),
+    /must be a primitive string before proxy screening/,
+  );
+  assert.equal(nodeIdGetterReads, 0);
+
+  const latitudeAuthority = mutableClone();
+  let latitudeGetterReads = 0;
+  const accessorLatitude = {};
+  Object.defineProperty(accessorLatitude, "value", {
+    enumerable: true,
+    get() {
+      latitudeGetterReads += 1;
+      return 32.735201;
+    },
+  });
+  (latitudeAuthority.nodes[0] as unknown as { lat: unknown }).lat = accessorLatitude;
+  assert.throws(
+    () => assertInteriorTreetopsV7GeometryAuthorityIntegrity([latitudeAuthority]),
+    /must be a finite primitive number before proxy screening/,
+  );
+  assert.equal(latitudeGetterReads, 0);
+});
+
 test("Planner 43 authority and assessment are deeply immutable", () => {
   const authority = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
   assert.equal(Object.isFrozen(INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY), true);
