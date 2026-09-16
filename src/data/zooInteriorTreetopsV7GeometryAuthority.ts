@@ -158,7 +158,9 @@ function assertPlain(value: unknown, fields: readonly string[], label: string): 
 }
 
 function assertArray(value: unknown, length: number, label: string): asserts value is unknown[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length !== length) throw new Error(`${label} must be an ordinary array of length ${length}.`);
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) throw new Error(`${label} must be an ordinary array of length ${length}.`);
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+  if (!lengthDescriptor || !("value" in lengthDescriptor) || lengthDescriptor.value !== length || lengthDescriptor.enumerable || lengthDescriptor.configurable) throw new Error(`${label} must be an ordinary array of length ${length}.`);
   const allowed = new Set([...Array.from({ length }, (_, index) => String(index)), "length"]);
   if (Reflect.ownKeys(value).some((key) => typeof key !== "string" || !allowed.has(key))) throw new Error(`${label} cannot contain extra own properties.`);
   for (let index = 0; index < length; index += 1) {
