@@ -187,6 +187,19 @@ function captureArraySnapshot(value: unknown[], length: number, label: string): 
   return captureDataFieldSnapshot(value, Array.from({ length }, (_, index) => String(index)), label);
 }
 
+function ordinaryRecordFromSnapshot(snapshot: readonly DataFieldSnapshot[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const entry of snapshot) {
+    Object.defineProperty(result, entry.field, {
+      value: entry.value,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+  return result;
+}
+
 function snapshotField(snapshot: readonly DataFieldSnapshot[], field: string): unknown {
   const match = snapshot.find((candidate) => candidate.field === field);
   if (!match) throw new Error(`Planner 43 internal snapshot is missing ${field}.`);
@@ -293,6 +306,7 @@ export function assertInteriorTreetopsV7GeometryAuthorityIntegrity(authorities: 
   });
 
   cloneForIntegrityValidation(authorities, collectionLabel);
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(authoritySnapshot), `${authorityLabel} captured snapshot`);
 
   assertArray(authorities, 1, collectionLabel);
   assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
