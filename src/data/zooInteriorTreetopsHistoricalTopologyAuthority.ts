@@ -61,7 +61,7 @@ export type InteriorTreetopsHistoricalTopologyAuthority = {
     fromTreetopsIndex: 0;
     toTreetopsIndex: typeof NEXT_JUNCTION_TREETOPS_INDEX;
     orderedNodeIds: readonly string[];
-    status: "captured";
+    provenanceStatus: "captured";
   };
   plannerMaterialization: "junction-and-segment-provenance-only";
 };
@@ -148,7 +148,7 @@ const RAW_AUTHORITY: InteriorTreetopsHistoricalTopologyAuthority[] = [nullRecord
     fromTreetopsIndex: 0,
     toTreetopsIndex: NEXT_JUNCTION_TREETOPS_INDEX,
     orderedNodeIds: [...SEGMENT_NODE_IDS],
-    status: "captured",
+    provenanceStatus: "captured",
   }),
   plannerMaterialization: "junction-and-segment-provenance-only",
 })];
@@ -210,7 +210,7 @@ function assertCanonicalAuthority(): void {
     segment.toNodeId !== NEXT_JUNCTION_NODE_ID ||
     segment.fromTreetopsIndex !== 0 ||
     segment.toTreetopsIndex !== NEXT_JUNCTION_TREETOPS_INDEX ||
-    segment.status !== "captured" ||
+    segment.provenanceStatus !== "captured" ||
     segment.orderedNodeIds.length !== SEGMENT_NODE_IDS.length ||
     segment.orderedNodeIds.some((nodeId, index) => nodeId !== SEGMENT_NODE_IDS[index])
   ) throw new Error("Planner 44 exact segment provenance drifted.");
