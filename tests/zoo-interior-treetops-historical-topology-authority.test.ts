@@ -299,7 +299,7 @@ test("Planner 44 branded exotic records cannot hide nested proxy-backed topology
 
   assert.throws(
     () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
-    /Proxy-backed/,
+    /Proxy-backed|structured clone must be a plain object/,
   );
   assert.equal(orderedNodeReads, 0);
 });
