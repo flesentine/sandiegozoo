@@ -383,3 +383,41 @@ test("Planner 44 nested proxy mutation cannot install a parent accessor before c
   );
   assert.equal(parentAccessorReads, 0);
 });
+
+
+test("Planner 44 sibling proxy mutation cannot arm an earlier leaf getter before reuse", () => {
+  const authority = mutableClone();
+  const earlierIds = authority.interveningConnections[0].orderedNodeIds as string[];
+  let earlierGetterReads = 0;
+  let selectedPrototypeChecks = 0;
+  const canonicalSelected = authority.selectedJunctionConnection;
+
+  authority.selectedJunctionConnection = new Proxy(
+    {
+      ...canonicalSelected,
+      orderedNodeIds: [...canonicalSelected.orderedNodeIds],
+    },
+    {
+      getPrototypeOf(target) {
+        selectedPrototypeChecks += 1;
+        if (selectedPrototypeChecks === 2) {
+          Object.defineProperty(earlierIds, "0", {
+            enumerable: true,
+            configurable: true,
+            get() {
+              earlierGetterReads += 1;
+              return "926024999";
+            },
+          });
+        }
+        return Reflect.getPrototypeOf(target);
+      },
+    },
+  );
+
+  assert.throws(
+    () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
+    /Proxy-backed|requires enumerable own data element 0|changed during proxy screening/,
+  );
+  assert.equal(earlierGetterReads, 0);
+});
