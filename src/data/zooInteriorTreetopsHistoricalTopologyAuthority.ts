@@ -395,56 +395,64 @@ export function assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity(
   const segmentNodeSnapshot = captureArraySnapshot(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
   assertStringArraySnapshot(segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
 
-  // Revalidate descriptor snapshots deepest-first before cloning anything.
-  // Nested Proxy descriptor traps may mutate a parent object while we inspect them;
-  // this ordering detects that mutation using descriptors only, before a containing
-  // structuredClone could traverse and execute a newly-installed accessor.
+  // Screen each nested subtree completely before touching the next sibling.
+  // A later sibling Proxy may mutate an earlier sibling, but once that later
+  // Proxy is encountered validation aborts before the earlier sibling is ever
+  // traversed again.
   assertPreparedRecordUnchanged(area, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
-  assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
-  assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
-  assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
-  assertArray(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
-  assertDataFieldSnapshotUnchanged(segmentNodeIds, segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
-  assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
-  assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
-  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
-  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
-  assertArray(authorities, 1, collectionLabel);
-  assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
-
-  // Screen leaf arrays first. A Proxy at any leaf is rejected before a clone of
-  // its containing record/collection is allowed to traverse that graph.
   cloneForIntegrityValidation(area.orderedNodeIds, "Planner 44 intervening area ordered node sequence");
-  cloneForIntegrityValidation(selected.orderedNodeIds, "Planner 44 selected junction ordered node sequence");
-  cloneForIntegrityValidation(segmentNodeIds, "Planner 44 segment ordered node sequence");
-
-  // Revalidate record descriptors after leaf screening, then clone the actual
-  // records to reject branded exotics and the reconstructed snapshots to ensure
-  // captured descriptor values themselves remain structured-cloneable plain data.
   assertPreparedRecordUnchanged(area, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
-  assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
-  assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
-  assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
   assertClonePreservesPlainRecord(area.record, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(area.snapshot), "Planner 44 intervening area captured snapshot");
-  assertClonePreservesPlainRecord(selected.record, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(selected.snapshot), "Planner 44 selected junction captured snapshot");
-  assertClonePreservesPlainRecord(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(segmentSnapshot), "Planner 44 segment captured snapshot");
 
-  // Only after every nested actual value has passed screening may containing
-  // arrays/records be cloned. Recheck parent descriptors immediately beforehand.
   assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
   assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
   cloneForIntegrityValidation(interveningConnections, "Planner 44 intervening connection collection");
 
+  assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+  cloneForIntegrityValidation(selected.orderedNodeIds, "Planner 44 selected junction ordered node sequence");
+  assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+  assertClonePreservesPlainRecord(selected.record, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(selected.snapshot), "Planner 44 selected junction captured snapshot");
+
+  assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+  assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
+  assertArray(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
+  assertDataFieldSnapshotUnchanged(segmentNodeIds, segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
+  cloneForIntegrityValidation(segmentNodeIds, "Planner 44 segment ordered node sequence");
+  assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+  assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
+  assertClonePreservesPlainRecord(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(segmentSnapshot), "Planner 44 segment captured snapshot");
+
+  const revalidateNestedState = (): void => {
+    assertPreparedRecordUnchanged(area, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
+    assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
+    assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
+    assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+    assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+    assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
+    assertArray(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
+    assertDataFieldSnapshotUnchanged(segmentNodeIds, segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
+  };
+
+  // All nested actual values above have now been proven non-Proxy and ordinary.
+  // Top-level Proxy traps can still mutate them, so revalidate the entire nested
+  // graph after top-level descriptor checks and immediately before cloning it.
   assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
   assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
+  revalidateNestedState();
   assertClonePreservesPlainRecord(record, TOP_LEVEL_FIELDS, authorityLabel);
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(authoritySnapshot), `${authorityLabel} captured snapshot`);
 
+  // The collection itself is the final possible Proxy layer. Its descriptor
+  // traps may mutate the already-proven ordinary graph, so revalidate everything
+  // once more after collection checks and immediately before the collection clone.
   assertArray(authorities, 1, collectionLabel);
   assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
+  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
+  revalidateNestedState();
   cloneForIntegrityValidation(authorities, collectionLabel);
 
   const geometry = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
