@@ -350,3 +350,36 @@ test("Planner 44 rejects branded exotics in top-level and segment records too", 
     /structured clone must be a plain object/,
   );
 });
+
+
+test("Planner 44 nested proxy mutation cannot install a parent accessor before containing clone", () => {
+  const authority = mutableClone();
+  let parentAccessorReads = 0;
+  const canonicalSelected = authority.selectedJunctionConnection;
+
+  authority.selectedJunctionConnection = new Proxy(
+    {
+      ...canonicalSelected,
+      orderedNodeIds: [...canonicalSelected.orderedNodeIds],
+    },
+    {
+      getOwnPropertyDescriptor(target, property) {
+        Object.defineProperty(authority, "id", {
+          enumerable: true,
+          configurable: true,
+          get() {
+            parentAccessorReads += 1;
+            return "sdz-interior-treetops-historical-topology";
+          },
+        });
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+    },
+  );
+
+  assert.throws(
+    () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
+    /changed during proxy screening|requires enumerable own data field id/,
+  );
+  assert.equal(parentAccessorReads, 0);
+});
