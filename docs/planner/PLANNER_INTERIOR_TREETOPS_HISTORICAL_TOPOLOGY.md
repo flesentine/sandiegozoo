@@ -26,6 +26,7 @@ The first qualifying linear branch is Treetops index 6:
 - Changeset: `178875075`
 - Tags: `highway=footway`, `name=Fern Canyon Trail`
 - Exact connected-way node sequence: `13588159625 -> 13588159626`
+- Classification remains topology-only (`first-linear-highway-connected-way-after-anchor`); the `highway=footway` source tag is not yet promoted to route mode.
 
 ## Exact Treetops segment provenance
 
@@ -33,7 +34,7 @@ Planner 44 freezes the exact Treetops v7 node sequence from the anchor through t
 
 `1619736626 -> 1619736622 -> 1619736623 -> 10303552086 -> 1619736627 -> 1619736634 -> 13588159626`
 
-This is the exact Planner 43 source-way subsequence at indices 0 through 6. No distance, duration, direction, accessibility, difficulty, stairs, stroller, operational status, RouteNode, or RouteEdge semantics are inferred here.
+This is the exact Planner 43 source-way subsequence at indices 0 through 6. No pedestrian mode, distance, duration, direction, accessibility, difficulty, stairs, stroller, operational status, RouteNode, or RouteEdge semantics are inferred here. The exported candidate-taking integrity assertion revalidates copied/supplied authority data before downstream use.
 
 ## What this clears
 
