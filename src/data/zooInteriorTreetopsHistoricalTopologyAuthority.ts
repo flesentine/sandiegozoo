@@ -395,36 +395,57 @@ export function assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity(
   const segmentNodeSnapshot = captureArraySnapshot(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
   assertStringArraySnapshot(segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
 
-  // Screen every actual/reconstructed layer only after descriptors and scalar leaf
-  // types have been captured, so rejected accessors cannot execute during cloning
-  // and branded exotic objects cannot hide nested Proxy-backed values.
-  cloneForIntegrityValidation(authorities, collectionLabel);
-  assertClonePreservesPlainRecord(record, TOP_LEVEL_FIELDS, authorityLabel);
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(authoritySnapshot), `${authorityLabel} captured snapshot`);
-  cloneForIntegrityValidation(interveningConnections, "Planner 44 intervening connection collection");
-  assertClonePreservesPlainRecord(area.record, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(area.snapshot), "Planner 44 intervening area captured snapshot");
-  cloneForIntegrityValidation(area.orderedNodeIds, "Planner 44 intervening area ordered node sequence");
-  assertClonePreservesPlainRecord(selected.record, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(selected.snapshot), "Planner 44 selected junction captured snapshot");
-  cloneForIntegrityValidation(selected.orderedNodeIds, "Planner 44 selected junction ordered node sequence");
-  assertClonePreservesPlainRecord(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
-  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(segmentSnapshot), "Planner 44 segment captured snapshot");
-  cloneForIntegrityValidation(segmentNodeIds, "Planner 44 segment ordered node sequence");
-
-  // Reject substitution or descriptor mutation that occurred during screening.
-  assertArray(authorities, 1, collectionLabel);
-  assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
-  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
-  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
-  assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
-  assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
+  // Revalidate descriptor snapshots deepest-first before cloning anything.
+  // Nested Proxy descriptor traps may mutate a parent object while we inspect them;
+  // this ordering detects that mutation using descriptors only, before a containing
+  // structuredClone could traverse and execute a newly-installed accessor.
   assertPreparedRecordUnchanged(area, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
   assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
   assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
   assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
   assertArray(segmentNodeIds, SEGMENT_NODE_IDS.length, "Planner 44 segment ordered node sequence");
   assertDataFieldSnapshotUnchanged(segmentNodeIds, segmentNodeSnapshot, "Planner 44 segment ordered node sequence");
+  assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
+  assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
+  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
+  assertArray(authorities, 1, collectionLabel);
+  assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
+
+  // Screen leaf arrays first. A Proxy at any leaf is rejected before a clone of
+  // its containing record/collection is allowed to traverse that graph.
+  cloneForIntegrityValidation(area.orderedNodeIds, "Planner 44 intervening area ordered node sequence");
+  cloneForIntegrityValidation(selected.orderedNodeIds, "Planner 44 selected junction ordered node sequence");
+  cloneForIntegrityValidation(segmentNodeIds, "Planner 44 segment ordered node sequence");
+
+  // Revalidate record descriptors after leaf screening, then clone the actual
+  // records to reject branded exotics and the reconstructed snapshots to ensure
+  // captured descriptor values themselves remain structured-cloneable plain data.
+  assertPreparedRecordUnchanged(area, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
+  assertPreparedRecordUnchanged(selected, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+  assertPlain(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+  assertDataFieldSnapshotUnchanged(segmentCandidate, segmentSnapshot, "Planner 44 segment provenance");
+  assertClonePreservesPlainRecord(area.record, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(area.snapshot), "Planner 44 intervening area captured snapshot");
+  assertClonePreservesPlainRecord(selected.record, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(selected.snapshot), "Planner 44 selected junction captured snapshot");
+  assertClonePreservesPlainRecord(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(segmentSnapshot), "Planner 44 segment captured snapshot");
+
+  // Only after every nested actual value has passed screening may containing
+  // arrays/records be cloned. Recheck parent descriptors immediately beforehand.
+  assertArray(interveningConnections, 1, "Planner 44 intervening connection collection");
+  assertDataFieldSnapshotUnchanged(interveningConnections, interveningCollectionSnapshot, "Planner 44 intervening connection collection");
+  cloneForIntegrityValidation(interveningConnections, "Planner 44 intervening connection collection");
+
+  assertPlain(record, TOP_LEVEL_FIELDS, authorityLabel);
+  assertDataFieldSnapshotUnchanged(record, authoritySnapshot, authorityLabel);
+  assertClonePreservesPlainRecord(record, TOP_LEVEL_FIELDS, authorityLabel);
+  cloneForIntegrityValidation(ordinaryRecordFromSnapshot(authoritySnapshot), `${authorityLabel} captured snapshot`);
+
+  assertArray(authorities, 1, collectionLabel);
+  assertDataFieldSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
+  cloneForIntegrityValidation(authorities, collectionLabel);
 
   const geometry = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
 
