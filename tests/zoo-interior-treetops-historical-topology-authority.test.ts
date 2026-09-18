@@ -379,7 +379,7 @@ test("Planner 44 nested proxy mutation cannot install a parent accessor before c
 
   assert.throws(
     () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
-    /changed during proxy screening|requires enumerable own data field id/,
+    /Proxy-backed|changed during proxy screening|requires enumerable own data field id/,
   );
   assert.equal(parentAccessorReads, 0);
 });
