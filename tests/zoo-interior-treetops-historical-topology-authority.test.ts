@@ -303,3 +303,50 @@ test("Planner 44 branded exotic records cannot hide nested proxy-backed topology
   );
   assert.equal(orderedNodeReads, 0);
 });
+
+
+test("Planner 44 rejects branded exotic records even without nested proxies", () => {
+  const authority = mutableClone();
+  const selected = new Date(0) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(selected, Object.prototype);
+  const canonical = authority.selectedJunctionConnection as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(canonical)) {
+    selected[key] = Array.isArray(value) ? [...value] : value;
+  }
+  authority.selectedJunctionConnection =
+    selected as unknown as InteriorTreetopsHistoricalTopologyAuthority["selectedJunctionConnection"];
+
+  assert.throws(
+    () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
+    /structured clone must be a plain object/,
+  );
+});
+
+test("Planner 44 rejects branded exotics in top-level and segment records too", () => {
+  const authority = mutableClone();
+
+  const brandedTopLevel = new Date(0) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(brandedTopLevel, Object.prototype);
+  for (const [key, value] of Object.entries(authority as unknown as Record<string, unknown>)) {
+    brandedTopLevel[key] = value;
+  }
+  assert.throws(
+    () =>
+      assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([
+        brandedTopLevel as unknown as InteriorTreetopsHistoricalTopologyAuthority,
+      ]),
+    /structured clone must be a plain object/,
+  );
+
+  const brandedSegment = new Date(0) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(brandedSegment, Object.prototype);
+  for (const [key, value] of Object.entries(authority.segmentProvenance as unknown as Record<string, unknown>)) {
+    brandedSegment[key] = Array.isArray(value) ? [...value] : value;
+  }
+  authority.segmentProvenance =
+    brandedSegment as unknown as InteriorTreetopsHistoricalTopologyAuthority["segmentProvenance"];
+  assert.throws(
+    () => assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity([authority]),
+    /structured clone must be a plain object/,
+  );
+});
