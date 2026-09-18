@@ -11,9 +11,9 @@ function run(command, args, options = {}) {
 
 run("npm", ["run", "build", "--silent"]);
 
-const preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", "4173"], {
+const preview = spawn(process.execPath, ["./node_modules/vite/bin/vite.js", "preview", "--host", "127.0.0.1", "--port", "4173"], {
   stdio: ["ignore", "pipe", "pipe"],
-  detached: false,
+  detached: true,
 });
 
 let previewOutput = "";
@@ -76,5 +76,7 @@ try {
   console.log(`renderedDomBytes=${Buffer.byteLength(dom)}`);
   console.log(`rootPreview=${rootMatch[1].replace(/\s+/g, " ").slice(0, 400)}`);
 } finally {
-  preview.kill("SIGTERM");
+  if (preview.pid) {
+    try { process.kill(-preview.pid, "SIGTERM"); } catch {}
+  }
 }
