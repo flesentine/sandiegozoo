@@ -148,6 +148,16 @@ function assertPlain(value: unknown, fields: readonly string[], label: string): 
     }
   }
 }
+function assertClonePreservesPlainRecord(value: Record<string, unknown>, fields: readonly string[], label: string): void {
+  let cloned: unknown;
+  try {
+    cloned = CAPTURED_STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(`${label} must be structured-cloneable plain data and cannot be Proxy-backed.`);
+  }
+  assertPlain(cloned, fields, `${label} structured clone`);
+}
+
 
 function assertArray(value: unknown, length: number, label: string): asserts value is unknown[] {
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
@@ -389,12 +399,16 @@ export function assertInteriorTreetopsHistoricalTopologyAuthorityIntegrity(
   // types have been captured, so rejected accessors cannot execute during cloning
   // and branded exotic objects cannot hide nested Proxy-backed values.
   cloneForIntegrityValidation(authorities, collectionLabel);
+  assertClonePreservesPlainRecord(record, TOP_LEVEL_FIELDS, authorityLabel);
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(authoritySnapshot), `${authorityLabel} captured snapshot`);
   cloneForIntegrityValidation(interveningConnections, "Planner 44 intervening connection collection");
+  assertClonePreservesPlainRecord(area.record, AREA_CONNECTION_FIELDS, "Planner 44 intervening area connection");
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(area.snapshot), "Planner 44 intervening area captured snapshot");
   cloneForIntegrityValidation(area.orderedNodeIds, "Planner 44 intervening area ordered node sequence");
+  assertClonePreservesPlainRecord(selected.record, SELECTED_CONNECTION_FIELDS, "Planner 44 selected junction connection");
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(selected.snapshot), "Planner 44 selected junction captured snapshot");
   cloneForIntegrityValidation(selected.orderedNodeIds, "Planner 44 selected junction ordered node sequence");
+  assertClonePreservesPlainRecord(segmentCandidate, SEGMENT_FIELDS, "Planner 44 segment provenance");
   cloneForIntegrityValidation(ordinaryRecordFromSnapshot(segmentSnapshot), "Planner 44 segment captured snapshot");
   cloneForIntegrityValidation(segmentNodeIds, "Planner 44 segment ordered node sequence");
 
