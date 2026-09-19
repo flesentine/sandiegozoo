@@ -29,6 +29,8 @@ This is a geodesic derivation from OSM node coordinates, not a survey-accuracy c
 
 Planner 46 promotes only `distanceMeters`.
 
+Supplied/copy authority data crosses a sanitizing boundary: descriptor-only screening rejects accessors/Proxies before clone traversal, then only the returned structured-cloned plain data is validated and trusted. This prevents intrinsic-branded objects that structuredClone normalizes from surviving as trusted originals.
+
 Still blocked:
 
 - pedestrian direction
