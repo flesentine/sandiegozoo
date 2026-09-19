@@ -468,53 +468,25 @@ const RAW_AUTHORITY: InteriorTreetopsSegmentDistanceAuthority[] = [
   },
 ];
 
-export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
+function assertSanitizedInteriorTreetopsSegmentDistanceAuthorityIntegrity(
   authorities: readonly InteriorTreetopsSegmentDistanceAuthority[],
 ): void {
-  const collectionLabel = "Planner 46 distance authority collection";
-  const authorityLabel = "Planner 46 distance authority";
-  const nodeLabel = "Planner 46 source-node sequence";
+  const collectionLabel = "Planner 46 sanitized distance authority collection";
+  const authorityLabel = "Planner 46 sanitized distance authority";
+  const nodeLabel = "Planner 46 sanitized source-node sequence";
 
   assertExactOrdinaryArray(authorities, 1, collectionLabel);
-  const collectionSnapshot = captureArraySnapshot(authorities as unknown[], 1, collectionLabel);
-  const candidate = collectionSnapshot[0].value;
+  const candidate = authorities[0] as unknown;
   assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
+  assertNoRouteMaterialization(candidate);
   const snapshot = captureSnapshot(candidate, AUTHORITY_FIELDS, authorityLabel);
   assertPrimitiveSnapshot(snapshot, STRING_FIELDS, NUMBER_FIELDS, authorityLabel);
-  assertNoRouteMaterialization(candidate);
 
   const sourceNodeIdsValue = snapshotField(snapshot, "sourceNodeIds");
   assertExactOrdinaryArray(sourceNodeIdsValue, SEGMENT_NODE_IDS.length, nodeLabel);
   const sourceNodeIds = sourceNodeIdsValue as unknown[];
   const nodeSnapshot = captureArraySnapshot(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
   assertStringArraySnapshot(nodeSnapshot, nodeLabel);
-
-  // Screen the only nested subtree first, then revalidate it after every
-  // trap-capable parent layer before any containing structured clone.
-  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
-  try {
-    CAPTURED_STRUCTURED_CLONE(sourceNodeIds);
-  } catch {
-    throw new Error(`${nodeLabel} cannot be Proxy-backed.`);
-  }
-
-  assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
-  assertSnapshotUnchanged(candidate, snapshot, authorityLabel);
-  assertExactOrdinaryArray(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
-  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
-  assertClonePreservesPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
-
-  assertExactOrdinaryArray(authorities, 1, collectionLabel);
-  assertSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
-  assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
-  assertSnapshotUnchanged(candidate, snapshot, authorityLabel);
-  assertExactOrdinaryArray(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
-  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
-  try {
-    CAPTURED_STRUCTURED_CLONE(authorities);
-  } catch {
-    throw new Error(`${collectionLabel} cannot be Proxy-backed.`);
-  }
 
   const expected: Readonly<Record<string, unknown>> = {
     id: AUTHORITY_ID,
@@ -543,7 +515,7 @@ export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
 
   for (let index = 0; index < SEGMENT_NODE_IDS.length; index += 1) {
     if (nodeSnapshot[index].value !== SEGMENT_NODE_IDS[index]) {
-      throw new Error(`Planner 46 source-node sequence drifted at index ${index}.`);
+      throw new Error(`Planner 46 sanitized source-node sequence drifted at index ${index}.`);
     }
   }
 
@@ -555,7 +527,7 @@ export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
     geometry.sourceWayTimestamp !== SOURCE_WAY_TIMESTAMP ||
     geometry.sourceWayVersionUrl !== SOURCE_WAY_VERSION_URL
   ) {
-    throw new Error("Planner 46 distance authority detached from Planner 43 geometry.");
+    throw new Error("Planner 46 sanitized distance authority detached from Planner 43 geometry.");
   }
 
   if (
@@ -569,7 +541,7 @@ export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
     topology.segmentProvenance.toTreetopsIndex !== TO_TREETOPS_INDEX ||
     topology.segmentProvenance.provenanceStatus !== "captured"
   ) {
-    throw new Error("Planner 46 distance authority detached from Planner 44 segment provenance.");
+    throw new Error("Planner 46 sanitized distance authority detached from Planner 44 segment provenance.");
   }
 
   if (
@@ -581,7 +553,7 @@ export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
     mode.sourceToNodeId !== TO_NODE_ID ||
     mode.mode !== "walk"
   ) {
-    throw new Error("Planner 46 distance authority detached from Planner 45 walk-mode authority.");
+    throw new Error("Planner 46 sanitized distance authority detached from Planner 45 walk-mode authority.");
   }
 
   const exactNodes = SEGMENT_NODE_IDS.map((sourceObjectId, index) => {
@@ -598,10 +570,76 @@ export function assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(
   }
 }
 
-assertInteriorTreetopsSegmentDistanceAuthorityIntegrity(RAW_AUTHORITY);
+
+}
+
+export function sanitizeInteriorTreetopsSegmentDistanceAuthorities(
+  authorities: readonly InteriorTreetopsSegmentDistanceAuthority[],
+): readonly InteriorTreetopsSegmentDistanceAuthority[] {
+  const collectionLabel = "Planner 46 distance authority input collection";
+  const authorityLabel = "Planner 46 distance authority input";
+  const nodeLabel = "Planner 46 source-node input sequence";
+
+  // Descriptor-only screening rejects accessors before structuredClone can
+  // invoke them. The input object itself is never trusted after this point.
+  assertExactOrdinaryArray(authorities, 1, collectionLabel);
+  const collectionSnapshot = captureArraySnapshot(authorities as unknown[], 1, collectionLabel);
+  const candidate = collectionSnapshot[0].value;
+  assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
+  const snapshot = captureSnapshot(candidate, AUTHORITY_FIELDS, authorityLabel);
+  assertPrimitiveSnapshot(snapshot, STRING_FIELDS, NUMBER_FIELDS, authorityLabel);
+  assertNoRouteMaterialization(candidate);
+
+  const sourceNodeIdsValue = snapshotField(snapshot, "sourceNodeIds");
+  assertExactOrdinaryArray(sourceNodeIdsValue, SEGMENT_NODE_IDS.length, nodeLabel);
+  const sourceNodeIds = sourceNodeIdsValue as unknown[];
+  const nodeSnapshot = captureArraySnapshot(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
+  assertStringArraySnapshot(nodeSnapshot, nodeLabel);
+
+  // A trap-capable nested value can mutate its parent, so fully screen and
+  // revalidate the nested sequence before rechecking the parent.
+  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
+  try {
+    CAPTURED_STRUCTURED_CLONE(sourceNodeIds);
+  } catch {
+    throw new Error(`${nodeLabel} cannot be Proxy-backed.`);
+  }
+
+  assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
+  assertSnapshotUnchanged(candidate, snapshot, authorityLabel);
+  assertExactOrdinaryArray(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
+  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
+
+  // The collection is the final trap-capable layer. Revalidate the entire
+  // supplied graph immediately before sanitizing it.
+  assertExactOrdinaryArray(authorities, 1, collectionLabel);
+  assertSnapshotUnchanged(authorities as unknown as object, collectionSnapshot, collectionLabel);
+  assertExactPlainRecord(candidate, AUTHORITY_FIELDS, authorityLabel);
+  assertSnapshotUnchanged(candidate, snapshot, authorityLabel);
+  assertExactOrdinaryArray(sourceNodeIds, SEGMENT_NODE_IDS.length, nodeLabel);
+  assertSnapshotUnchanged(sourceNodeIds, nodeSnapshot, nodeLabel);
+
+  let sanitized: unknown;
+  try {
+    sanitized = CAPTURED_STRUCTURED_CLONE(authorities);
+  } catch {
+    throw new Error(`${collectionLabel} cannot be Proxy-backed.`);
+  }
+
+  // From here onward only the sanitized clone is validated and returned. This
+  // deliberately handles intrinsic-branded objects that structuredClone
+  // normalizes to ordinary data: callers never receive/trust the original.
+  assertSanitizedInteriorTreetopsSegmentDistanceAuthorityIntegrity(
+    sanitized as readonly InteriorTreetopsSegmentDistanceAuthority[],
+  );
+  return deepFreeze(
+    sanitized as readonly InteriorTreetopsSegmentDistanceAuthority[],
+  );
+}
 
 export const INTERIOR_TREETOPS_SEGMENT_DISTANCE_AUTHORITY:
-  readonly InteriorTreetopsSegmentDistanceAuthority[] = deepFreeze(RAW_AUTHORITY);
+  readonly InteriorTreetopsSegmentDistanceAuthority[] =
+    sanitizeInteriorTreetopsSegmentDistanceAuthorities(RAW_AUTHORITY);
 
 export function interiorTreetopsSegmentDistanceForObjective(
   objectiveSourceRecordId: string,
