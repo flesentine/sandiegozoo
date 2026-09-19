@@ -3,7 +3,7 @@ import test from "node:test";
 import {
   INTERIOR_TREETOPS_SEGMENT_DISTANCE_AUTHORITY,
   assessInteriorTreetopsSegmentDistance,
-  assertInteriorTreetopsSegmentDistanceAuthorityIntegrity,
+  sanitizeInteriorTreetopsSegmentDistanceAuthorities,
   deriveInteriorTreetopsSegmentDistanceMeters,
   interiorTreetopsSegmentDistanceForObjective,
   type InteriorTreetopsSegmentDistanceAuthority,
@@ -117,7 +117,7 @@ test("Planner 46 rejects route semantics outside distance ownership", () => {
     forged[field] = "forged";
     assert.throws(
       () =>
-        assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([
+        sanitizeInteriorTreetopsSegmentDistanceAuthorities([
           forged as unknown as InteriorTreetopsSegmentDistanceAuthority,
         ]),
       new RegExp(`unknown field ${field}|cannot own routing field ${field}`),
@@ -129,7 +129,7 @@ test("Planner 46 rejects frozen provenance and distance drift", () => {
   const nodeDrift = mutableAuthority();
   (nodeDrift.sourceNodeIds as string[])[3] = "forged-node";
   assert.throws(
-    () => assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([nodeDrift]),
+    () => sanitizeInteriorTreetopsSegmentDistanceAuthorities([nodeDrift]),
     /source-node sequence drifted/,
   );
 
@@ -137,7 +137,7 @@ test("Planner 46 rejects frozen provenance and distance drift", () => {
   distanceDrift.distanceMeters = 48.616;
   assert.throws(
     () =>
-      assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([
+      sanitizeInteriorTreetopsSegmentDistanceAuthorities([
         distanceDrift as unknown as InteriorTreetopsSegmentDistanceAuthority,
       ]),
     /distanceMeters drifted|distance drifted/,
@@ -180,7 +180,7 @@ test("Planner 46 rejects accessors without executing them", () => {
   });
   assert.throws(
     () =>
-      assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([
+      sanitizeInteriorTreetopsSegmentDistanceAuthorities([
         authority as unknown as InteriorTreetopsSegmentDistanceAuthority,
       ]),
     /requires enumerable own data field distanceMeters/,
@@ -197,7 +197,7 @@ test("Planner 46 rejects Proxy-backed records and source-node arrays without get
     },
   });
   assert.throws(
-    () => assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([recordProxy]),
+    () => sanitizeInteriorTreetopsSegmentDistanceAuthorities([recordProxy]),
     /Proxy-backed/,
   );
   assert.equal(recordReads, 0);
@@ -211,13 +211,32 @@ test("Planner 46 rejects Proxy-backed records and source-node arrays without get
     },
   });
   assert.throws(
-    () => assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([nested]),
+    () => sanitizeInteriorTreetopsSegmentDistanceAuthorities([nested]),
     /source-node sequence cannot be Proxy-backed/,
   );
   assert.equal(nodeReads, 0);
 });
 
-test("Planner 46 rejects branded exotic authority records", () => {
+test("Planner 46 sanitizes branded exotics that structuredClone normalizes", () => {
+  const branded = new AbortController() as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(branded, Object.prototype);
+  for (const [key, value] of Object.entries(mutableAuthority() as unknown as Record<string, unknown>)) {
+    branded[key] = key === "sourceNodeIds" ? [...(value as readonly string[])] : value;
+  }
+
+  const sanitized = sanitizeInteriorTreetopsSegmentDistanceAuthorities([
+    branded as unknown as InteriorTreetopsSegmentDistanceAuthority,
+  ]);
+
+  assert.notEqual(sanitized[0], branded);
+  assert.equal(Object.getPrototypeOf(sanitized[0]), Object.prototype);
+  assert.deepEqual(sanitized[0], INTERIOR_TREETOPS_SEGMENT_DISTANCE_AUTHORITY[0]);
+  assert.equal(Object.isFrozen(sanitized), true);
+  assert.equal(Object.isFrozen(sanitized[0]), true);
+  assert.equal(Object.isFrozen(sanitized[0].sourceNodeIds), true);
+});
+
+test("Planner 46 still rejects branded exotics that structuredClone preserves", () => {
   const branded = new Date(0) as unknown as Record<string, unknown>;
   Object.setPrototypeOf(branded, Object.prototype);
   for (const [key, value] of Object.entries(mutableAuthority() as unknown as Record<string, unknown>)) {
@@ -225,10 +244,10 @@ test("Planner 46 rejects branded exotic authority records", () => {
   }
   assert.throws(
     () =>
-      assertInteriorTreetopsSegmentDistanceAuthorityIntegrity([
+      sanitizeInteriorTreetopsSegmentDistanceAuthorities([
         branded as unknown as InteriorTreetopsSegmentDistanceAuthority,
       ]),
-    /structured clone must be a plain object/,
+    /must be a plain object/,
   );
 });
 
