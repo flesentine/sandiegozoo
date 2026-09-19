@@ -342,20 +342,6 @@ function assertSnapshotUnchanged(
   }
 }
 
-function assertClonePreservesPlainRecord(
-  value: Record<string, unknown>,
-  fields: readonly string[],
-  label: string,
-): void {
-  let cloned: unknown;
-  try {
-    cloned = CAPTURED_STRUCTURED_CLONE(value);
-  } catch {
-    throw new Error(`${label} must be structured-cloneable plain data and cannot be Proxy-backed.`);
-  }
-  assertExactPlainRecord(cloned, fields, `${label} structured clone`);
-}
-
 function assertSnapshotValue(
   snapshot: readonly DataFieldSnapshot[],
   field: string,
@@ -568,9 +554,6 @@ function assertSanitizedInteriorTreetopsSegmentDistanceAuthorityIntegrity(
   if (derived !== EXPECTED_DISTANCE_METERS || snapshotField(snapshot, "distanceMeters") !== derived) {
     throw new Error("Planner 46 distance drifted from the frozen six-leg geodesic derivation.");
   }
-}
-
-
 }
 
 export function sanitizeInteriorTreetopsSegmentDistanceAuthorities(
