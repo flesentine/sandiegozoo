@@ -212,7 +212,7 @@ test("Planner 46 rejects Proxy-backed records and source-node arrays without get
   });
   assert.throws(
     () => sanitizeInteriorTreetopsSegmentDistanceAuthorities([nested]),
-    /source-node sequence cannot be Proxy-backed/,
+    /source-node (?:input )?sequence cannot be Proxy-backed/,
   );
   assert.equal(nodeReads, 0);
 });
