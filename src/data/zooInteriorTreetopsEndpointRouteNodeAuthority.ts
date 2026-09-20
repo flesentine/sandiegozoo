@@ -126,6 +126,9 @@ if (!sourceNode || !zone) {
   );
 }
 
+const qualifiedSourceNode = sourceNode;
+const qualifiedZone = zone;
+
 const RAW_PROVENANCE: SourceProvenance = {
   sourceUrl: SOURCE_VERSION_URL,
   sourceLabel:
@@ -198,13 +201,13 @@ function assertCanonicalInteriorTreetopsEndpointRouteNodeIntegrity(): void {
   }
 
   if (
-    sourceNode.sourceObjectId !== SOURCE_OBJECT_ID ||
-    sourceNode.sourceVersion !== SOURCE_VERSION ||
-    sourceNode.sourceVersionUrl !== SOURCE_VERSION_URL ||
-    sourceNode.sourceTimestamp !== SOURCE_TIMESTAMP ||
-    sourceNode.sourceChangeset !== SOURCE_CHANGESET ||
-    sourceNode.lat !== LAT ||
-    sourceNode.lng !== LNG
+    qualifiedSourceNode.sourceObjectId !== SOURCE_OBJECT_ID ||
+    qualifiedSourceNode.sourceVersion !== SOURCE_VERSION ||
+    qualifiedSourceNode.sourceVersionUrl !== SOURCE_VERSION_URL ||
+    qualifiedSourceNode.sourceTimestamp !== SOURCE_TIMESTAMP ||
+    qualifiedSourceNode.sourceChangeset !== SOURCE_CHANGESET ||
+    qualifiedSourceNode.lat !== LAT ||
+    qualifiedSourceNode.lng !== LNG
   ) {
     throw new Error(
       "Planner 55 endpoint node drifted from version-pinned Treetops geometry.",
@@ -231,7 +234,7 @@ function assertCanonicalInteriorTreetopsEndpointRouteNodeIntegrity(): void {
   }
 
   if (
-    zone.id !== ZONE_ID ||
+    qualifiedZone.id !== ZONE_ID ||
     routeNodeForSourceObjectId(SOURCE_OBJECT_ID) !== undefined
   ) {
     throw new Error(
