@@ -146,6 +146,8 @@ if (endpointAssessment.status !== "route-node-ready") {
   );
 }
 
+const qualifiedEndpointAssessment = endpointAssessment;
+
 const RAW_STAIRS_AUTHORITY =
   nullPrototypeRecord<InteriorTreetopsUnknownStairsCapability>({
     status: "supported",
@@ -222,11 +224,11 @@ export function assertInteriorTreetopsRouteEdgeContractCompletionIntegrity(): vo
   }
 
   if (
-    endpointAssessment.routeEdgeMaterialization.status !== "blocked" ||
-    endpointAssessment.routeEdgeMaterialization.reasons.length !== 2 ||
-    endpointAssessment.routeEdgeMaterialization.reasons[0] !==
+    qualifiedEndpointAssessment.routeEdgeMaterialization.status !== "blocked" ||
+    qualifiedEndpointAssessment.routeEdgeMaterialization.reasons.length !== 2 ||
+    qualifiedEndpointAssessment.routeEdgeMaterialization.reasons[0] !==
       STAIRS_UNRESOLVED_REASON ||
-    endpointAssessment.routeEdgeMaterialization.reasons[1] !==
+    qualifiedEndpointAssessment.routeEdgeMaterialization.reasons[1] !==
       STROLLER_UNRESOLVED_REASON
   ) {
     throw new Error(
