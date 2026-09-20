@@ -229,8 +229,8 @@ function assertCanonicalInteriorTreetopsProvenanceIntegrity(): void {
   if (
     geometry.sourceWayId !== SOURCE_WAY_ID ||
     geometry.sourceWayVersion !== SOURCE_WAY_VERSION ||
-    topology.sourceWayId !== SOURCE_WAY_ID ||
-    topology.sourceWayVersion !== SOURCE_WAY_VERSION
+    topology.sourceTreetopsWayId !== SOURCE_WAY_ID ||
+    topology.sourceTreetopsWayVersion !== SOURCE_WAY_VERSION
   ) {
     throw new Error(
       "Planner 54 geometry/topology lineage detached from Treetops v7.",
