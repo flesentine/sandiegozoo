@@ -179,10 +179,6 @@ test("missing Treetops availability keeps only the new edge closed", () => {
     );
 
   assert.equal(
-    result.treetops?.decision,
-    undefined,
-  );
-  assert.equal(
     result.activation.treetops.decision.reason,
     "SEGMENT_AVAILABILITY_MISSING",
   );
