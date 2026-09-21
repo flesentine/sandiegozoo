@@ -74,60 +74,71 @@ test("Planner 54 provenance is provisional while semantics remain unresolved", (
 });
 
 test("Planner 54 assessment exposes provenance without materializing graph entities", () => {
+  const assessment =
+    assessInteriorTreetopsProvenance("sdz-tiger-trail");
+
+  assert.equal(assessment.status, "provenance-ready");
+  if (assessment.status !== "provenance-ready") {
+    assert.fail("expected provenance-ready assessment");
+  }
+  assert.equal(
+    assessment.authorityId,
+    "sdz-interior-treetops-anchor-to-fern-canyon-provenance",
+  );
+  assert.equal(assessment.objectiveSourceRecordId, "sdz-tiger-trail");
+  assert.equal(assessment.sourceWayId, "148910139");
+  assert.equal(assessment.sourceWayVersion, 7);
+  assert.equal(assessment.sourceFromNodeId, "1619736626");
+  assert.equal(assessment.sourceToNodeId, "13588159626");
   assert.deepEqual(
-    assessInteriorTreetopsProvenance("sdz-tiger-trail"),
+    { ...assessment.provenance },
     {
-      status: "provenance-ready",
-      authorityId:
-        "sdz-interior-treetops-anchor-to-fern-canyon-provenance",
-      objectiveSourceRecordId: "sdz-tiger-trail",
-      sourceWayId: "148910139",
-      sourceWayVersion: 7,
-      sourceFromNodeId: "1619736626",
-      sourceToNodeId: "13588159626",
-      provenance: {
-        sourceUrl:
-          "https://api.openstreetmap.org/api/0.6/way/148910139/7",
-        sourceLabel:
-          "OpenStreetMap way 148910139 v7 with WildRoute Treetops exact-segment semantic lineage",
-        lastVerified: "2026-09-19T11:08:15-07:00",
-        confidence: "provisional",
-        effectiveFrom: "2026-09-19",
-      },
-      confidenceRationale:
-        "provenance-complete-while-stairs-and-stroller-remain-unresolved",
-      routeGraphExpansion: {
-        status: "blocked",
-        reasons: [
-          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
-          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-        ],
-      },
+      sourceUrl:
+        "https://api.openstreetmap.org/api/0.6/way/148910139/7",
+      sourceLabel:
+        "OpenStreetMap way 148910139 v7 with WildRoute Treetops exact-segment semantic lineage",
+      lastVerified: "2026-09-19T11:08:15-07:00",
+      confidence: "provisional",
+      effectiveFrom: "2026-09-19",
     },
   );
+  assert.equal(
+    assessment.confidenceRationale,
+    "provenance-complete-while-stairs-and-stroller-remain-unresolved",
+  );
+  assert.equal(assessment.routeGraphExpansion.status, "blocked");
+  assert.deepEqual(assessment.routeGraphExpansion.reasons, [
+    "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+    "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+  ]);
 
   for (const field of ["routeNodeId", "routeEdgeId", "stairs", "stroller"]) {
     assert.equal(
-      Object.hasOwn(
-        INTERIOR_TREETOPS_PROVENANCE_AUTHORITY as unknown as Record<
+      field in
+        (INTERIOR_TREETOPS_PROVENANCE_AUTHORITY as unknown as Record<
           string,
           unknown
-        >,
-        field,
-      ),
+        >),
       false,
     );
   }
 });
 
 test("Planner 54 blocks unrelated objectives", () => {
-  assert.deepEqual(
-    assessInteriorTreetopsProvenance("sdz-gorilla-tropics"),
-    {
-      status: "blocked",
-      reason: "OBJECTIVE_TREETOPS_PROVENANCE_NOT_SOURCED",
-      objectiveSourceRecordId: "sdz-gorilla-tropics",
-    },
+  const assessment =
+    assessInteriorTreetopsProvenance("sdz-gorilla-tropics");
+
+  assert.equal(assessment.status, "blocked");
+  if (assessment.status !== "blocked") {
+    assert.fail("expected blocked assessment");
+  }
+  assert.equal(
+    assessment.reason,
+    "OBJECTIVE_TREETOPS_PROVENANCE_NOT_SOURCED",
+  );
+  assert.equal(
+    assessment.objectiveSourceRecordId,
+    "sdz-gorilla-tropics",
   );
 });
 
@@ -161,5 +172,70 @@ test("Planner 54 exports and assessments are deeply immutable", () => {
       Object.isFrozen(assessment.routeGraphExpansion.reasons),
       true,
     );
+  }
+});
+
+
+test("Planner 54 provenance outputs ignore Object.prototype pollution", () => {
+  const pollutedFields = ["routeEdgeId", "stairs", "stroller"] as const;
+
+  try {
+    for (const field of pollutedFields) {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        value: "polluted",
+      });
+    }
+
+    const authority =
+      INTERIOR_TREETOPS_PROVENANCE_AUTHORITY as unknown as Record<
+        string,
+        unknown
+      >;
+    assert.equal(Object.getPrototypeOf(authority), null);
+    assert.equal(
+      Object.getPrototypeOf(INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.lineage),
+      null,
+    );
+    assert.equal(
+      Object.getPrototypeOf(INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance),
+      null,
+    );
+
+    for (const field of pollutedFields) {
+      assert.equal(field in authority, false);
+      assert.equal(authority[field], undefined);
+    }
+
+    const ready =
+      assessInteriorTreetopsProvenance("sdz-tiger-trail");
+    assert.equal(Object.getPrototypeOf(ready), null);
+    assert.equal(ready.status, "provenance-ready");
+    if (ready.status !== "provenance-ready") {
+      assert.fail("expected provenance-ready assessment");
+    }
+    assert.equal(Object.getPrototypeOf(ready.provenance), null);
+    assert.equal(Object.getPrototypeOf(ready.routeGraphExpansion), null);
+    for (const field of pollutedFields) {
+      assert.equal(
+        field in (ready as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+
+    const blocked =
+      assessInteriorTreetopsProvenance("sdz-gorilla-tropics");
+    assert.equal(Object.getPrototypeOf(blocked), null);
+    assert.equal(blocked.status, "blocked");
+    for (const field of pollutedFields) {
+      assert.equal(
+        field in (blocked as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+  } finally {
+    for (const field of pollutedFields) {
+      delete (Object.prototype as Record<string, unknown>)[field];
+    }
   }
 });
