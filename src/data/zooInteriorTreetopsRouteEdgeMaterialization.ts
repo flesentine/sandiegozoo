@@ -59,10 +59,10 @@ const PROVENANCE_AUTHORITY_ID =
 const OPERATIONAL_STATUS_AUTHORITY_ID =
   "sdz-interior-treetops-anchor-to-fern-canyon-operational-status" as const;
 
-const UNRESOLVED_CAPABILITY_EVIDENCE = [
+const UNRESOLVED_CAPABILITY_EVIDENCE = Object.freeze([
   "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
   "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-] as const;
+] as const);
 
 export type InteriorTreetopsRouteEdgeBinding = {
   objectiveSourceRecordId: typeof OBJECTIVE_SOURCE_RECORD_ID;
@@ -104,6 +104,17 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
 }
 
 function requireValue<T>(
@@ -180,7 +191,7 @@ if (contractAssessment.status !== "route-edge-contract-complete") {
 }
 const qualifiedContractAssessment = contractAssessment;
 
-const RAW_ROUTE_EDGE: RouteEdge = {
+const RAW_ROUTE_EDGE = nullPrototypeRecord<RouteEdge>({
   id: ROUTE_EDGE_ID,
   fromNodeId: FROM_ROUTE_NODE_ID,
   toNodeId: TO_ROUTE_NODE_ID,
@@ -196,33 +207,34 @@ const RAW_ROUTE_EDGE: RouteEdge = {
   oneWay: direction.oneWay,
   status: operational.status,
   provenance: INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance,
-};
+});
 
-const RAW_BINDING: InteriorTreetopsRouteEdgeBinding = {
-  objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-  sourceWayId: SOURCE_WAY_ID,
-  sourceWayVersion: SOURCE_WAY_VERSION,
-  sourceFromNodeId: SOURCE_FROM_NODE_ID,
-  sourceToNodeId: SOURCE_TO_NODE_ID,
-  fromRouteNodeId: FROM_ROUTE_NODE_ID,
-  toRouteNodeId: TO_ROUTE_NODE_ID,
-  routeEdgeId: ROUTE_EDGE_ID,
-  contractCompletionId: CONTRACT_COMPLETION_ID,
-  provenanceAuthorityId: PROVENANCE_AUTHORITY_ID,
-  operationalStatusAuthorityId: OPERATIONAL_STATUS_AUTHORITY_ID,
-  capabilityEvidenceState:
-    "unresolved-preserved-as-explicit-unknown",
-  unresolvedCapabilityEvidence: [...UNRESOLVED_CAPABILITY_EVIDENCE],
-  operationalActivation: {
+const RAW_BINDING =
+  nullPrototypeRecord<InteriorTreetopsRouteEdgeBinding>({
     objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    exactSegmentSourceWayId: SOURCE_WAY_ID,
+    sourceWayId: SOURCE_WAY_ID,
     sourceWayVersion: SOURCE_WAY_VERSION,
     sourceFromNodeId: SOURCE_FROM_NODE_ID,
     sourceToNodeId: SOURCE_TO_NODE_ID,
-    requirements: [...operational.runtimeRequirements],
-  },
-  plannerMaterialization: "route-edge",
-};
+    fromRouteNodeId: FROM_ROUTE_NODE_ID,
+    toRouteNodeId: TO_ROUTE_NODE_ID,
+    routeEdgeId: ROUTE_EDGE_ID,
+    contractCompletionId: CONTRACT_COMPLETION_ID,
+    provenanceAuthorityId: PROVENANCE_AUTHORITY_ID,
+    operationalStatusAuthorityId: OPERATIONAL_STATUS_AUTHORITY_ID,
+    capabilityEvidenceState:
+      "unresolved-preserved-as-explicit-unknown",
+    unresolvedCapabilityEvidence: [...UNRESOLVED_CAPABILITY_EVIDENCE],
+    operationalActivation: nullPrototypeRecord({
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      exactSegmentSourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      sourceFromNodeId: SOURCE_FROM_NODE_ID,
+      sourceToNodeId: SOURCE_TO_NODE_ID,
+      requirements: [...operational.runtimeRequirements],
+    }),
+    plannerMaterialization: "route-edge",
+  });
 
 const RAW_EXPANDED_ROUTE_NODES = [
   ...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.routeNodes,
@@ -234,14 +246,15 @@ const RAW_EXPANDED_ROUTE_EDGES = [
   RAW_ROUTE_EDGE,
 ];
 
-const RAW_EXPANDED_ROUTE_GRAPH_DATA: WildRouteDataPackage = {
-  schemaVersion: INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.schemaVersion,
-  zones: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.zones],
-  places: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.places],
-  routeNodes: RAW_EXPANDED_ROUTE_NODES,
-  routeEdges: RAW_EXPANDED_ROUTE_EDGES,
-  scheduleEvents: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.scheduleEvents],
-};
+const RAW_EXPANDED_ROUTE_GRAPH_DATA =
+  nullPrototypeRecord<WildRouteDataPackage>({
+    schemaVersion: INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.schemaVersion,
+    zones: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.zones],
+    places: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.places],
+    routeNodes: RAW_EXPANDED_ROUTE_NODES,
+    routeEdges: RAW_EXPANDED_ROUTE_EDGES,
+    scheduleEvents: [...INTERIOR_EXPANDED_ROUTE_GRAPH_DATA.scheduleEvents],
+  });
 
 export function assertInteriorTreetopsRouteEdgeMaterializationIntegrity(): void {
   for (const [label, authority] of [
@@ -350,6 +363,19 @@ export function assertInteriorTreetopsRouteEdgeMaterializationIntegrity(): void 
     throw new Error(
       "Planner 57 RouteEdge drifted from qualified Treetops semantics.",
     );
+  }
+
+  for (const record of [
+    RAW_ROUTE_EDGE as object,
+    RAW_BINDING as object,
+    RAW_BINDING.operationalActivation as object,
+    RAW_EXPANDED_ROUTE_GRAPH_DATA as object,
+  ]) {
+    if (Object.getPrototypeOf(record) !== null) {
+      throw new Error(
+        "Planner 57 exported records must remain isolated from Object.prototype.",
+      );
+    }
   }
 
   if (
