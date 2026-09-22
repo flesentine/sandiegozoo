@@ -155,6 +155,17 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
+}
+
 function defineOwnEnumerableDataProperty(
   target: Record<string, unknown>,
   field: string,
@@ -635,7 +646,7 @@ function snapshotRuntimeRouteRequest(
     );
   }
 
-  const trusted: Record<string, unknown> = {};
+  const trusted = Object.create(null) as Record<string, unknown>;
   defineOwnEnumerableDataProperty(
     trusted,
     "fromNodeId",
@@ -824,32 +835,35 @@ export function resolveInteriorTreetopsExpandedRuntimeActivation(
       : []),
   ];
 
-  const decision: InteriorTreetopsRuntimeActivationDecision = {
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    sourceWayId: SOURCE_WAY_ID,
-    sourceWayVersion: SOURCE_WAY_VERSION,
-    sourceFromNodeId: SOURCE_FROM_NODE_ID,
-    sourceToNodeId: SOURCE_TO_NODE_ID,
-    routeEdgeId: TREETOPS_ROUTE_EDGE_ID,
-    status: enabled ? "enabled" : "disabled",
-    reason,
-    evidenceIds,
-    ...(enabled && segmentEvidence
-      ? {
-          effectiveExpiresAt: earliestExpiry([
-            trusted.zooHours,
-            segmentEvidence,
-          ]),
-        }
-      : {}),
-  };
+  const decision =
+    nullPrototypeRecord<InteriorTreetopsRuntimeActivationDecision>({
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      sourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      sourceFromNodeId: SOURCE_FROM_NODE_ID,
+      sourceToNodeId: SOURCE_TO_NODE_ID,
+      routeEdgeId: TREETOPS_ROUTE_EDGE_ID,
+      status: enabled ? "enabled" : "disabled",
+      reason,
+      evidenceIds,
+      ...(enabled && segmentEvidence
+        ? {
+            effectiveExpiresAt: earliestExpiry([
+              trusted.zooHours,
+              segmentEvidence,
+            ]),
+          }
+        : {}),
+    });
 
-  const treetops = deepFreeze({
-    status: "evaluated" as const,
-    visitDate,
-    evaluatedAt,
-    decision,
-  });
+  const treetops = deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsRuntimeActivation>({
+      status: "evaluated",
+      visitDate,
+      evaluatedAt,
+      decision,
+    }),
+  );
 
   const enabledConditionalEdgeIds = new Set(
     prior.enabledConditionalEdgeIds,
@@ -873,13 +887,15 @@ export function resolveInteriorTreetopsExpandedRuntimeActivation(
     }
   }
 
-  return deepFreeze({
-    visitDate,
-    prior,
-    treetops,
-    enabledConditionalEdgeIds:
-      [...enabledConditionalEdgeIds].sort(),
-  });
+  return deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsExpandedRuntimeActivationResult>({
+      visitDate,
+      prior,
+      treetops,
+      enabledConditionalEdgeIds:
+        [...enabledConditionalEdgeIds].sort(),
+    }),
+  );
 }
 
 export function routeInteriorTreetopsExpandedWithRuntimeEvidence(
@@ -901,8 +917,10 @@ export function routeInteriorTreetopsExpandedWithRuntimeEvidence(
     ),
   );
 
-  return deepFreeze({
-    activation,
-    route,
-  });
+  return deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsExpandedRuntimeRouteResult>({
+      activation,
+      route,
+    }),
+  );
 }
