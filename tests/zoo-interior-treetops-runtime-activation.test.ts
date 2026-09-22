@@ -367,3 +367,72 @@ test("Planner 58 results are deeply immutable", () => {
   );
   assert.equal(Object.isFrozen(result.route), true);
 });
+
+
+test("Planner 58 runtime outputs ignore Object.prototype pollution", () => {
+  const pollutedFields = [
+    "effectiveExpiresAt",
+    "selectionScope",
+    "globalEndpointSelection",
+  ] as const;
+
+  try {
+    for (const field of pollutedFields) {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        value: "polluted",
+      });
+    }
+
+    const activation =
+      resolveInteriorTreetopsExpandedRuntimeActivation(
+        snapshot({
+          treetopsExactSegmentAvailability: [],
+        }),
+      );
+
+    assert.equal(Object.getPrototypeOf(activation), null);
+    assert.equal(Object.getPrototypeOf(activation.treetops), null);
+    assert.equal(
+      Object.getPrototypeOf(activation.treetops.decision),
+      null,
+    );
+    assert.equal(
+      "effectiveExpiresAt" in activation.treetops.decision,
+      false,
+    );
+    assert.equal(
+      (
+        activation.treetops.decision as unknown as Record<
+          string,
+          unknown
+        >
+      ).effectiveExpiresAt,
+      undefined,
+    );
+
+    const routed =
+      routeInteriorTreetopsExpandedWithRuntimeEvidence(
+        snapshot(),
+        {
+          fromNodeId: ENTRANCE_NODE,
+          toNodeId: TreetopsEndpointNode,
+        },
+      );
+
+    assert.equal(Object.getPrototypeOf(routed), null);
+    for (const field of [
+      "selectionScope",
+      "globalEndpointSelection",
+    ] as const) {
+      assert.equal(
+        field in (routed as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+  } finally {
+    for (const field of pollutedFields) {
+      delete (Object.prototype as Record<string, unknown>)[field];
+    }
+  }
+});
