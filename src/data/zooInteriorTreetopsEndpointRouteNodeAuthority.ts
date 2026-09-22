@@ -96,10 +96,10 @@ export type InteriorTreetopsEndpointRouteNodeAssessment =
       objectiveSourceRecordId: string;
     };
 
-const REMAINING_EDGE_BLOCKERS = [
+const REMAINING_EDGE_BLOCKERS = Object.freeze([
   "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
   "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-] as const;
+] as const);
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -109,6 +109,17 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
 }
 
 const geometry = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
@@ -129,60 +140,63 @@ if (!sourceNode || !zone) {
 const qualifiedSourceNode = sourceNode;
 const qualifiedZone = zone;
 
-const RAW_PROVENANCE: SourceProvenance = {
-  sourceUrl: SOURCE_VERSION_URL,
-  sourceLabel:
-    "OpenStreetMap node 13588159626 v1 selected as the Treetops Way / Fern Canyon Trail junction",
-  lastVerified:
-    INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.sourceObservedAt,
-  confidence: "provisional",
-  effectiveFrom:
-    INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance.effectiveFrom,
-};
+const RAW_PROVENANCE =
+  nullPrototypeRecord<SourceProvenance>({
+    sourceUrl: SOURCE_VERSION_URL,
+    sourceLabel:
+      "OpenStreetMap node 13588159626 v1 selected as the Treetops Way / Fern Canyon Trail junction",
+    lastVerified:
+      INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.sourceObservedAt,
+    confidence: "provisional",
+    effectiveFrom:
+      INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance.effectiveFrom,
+  });
 
-const RAW_BINDING: InteriorTreetopsEndpointRouteNodeBinding = {
-  id: BINDING_ID,
-  authorityId: AUTHORITY_ID,
-  objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-  geometryAuthorityId: GEOMETRY_AUTHORITY_ID,
-  topologyAuthorityId: TOPOLOGY_AUTHORITY_ID,
-  provenanceAuthorityId: PROVENANCE_AUTHORITY_ID,
-  sourceWayId: SOURCE_WAY_ID,
-  sourceObjectId: SOURCE_OBJECT_ID,
-  sourceVersion: SOURCE_VERSION,
-  routeNodeId: ROUTE_NODE_ID,
-  zoneId: ZONE_ID,
-  nodeRole: "junction",
-  plannerMaterialization: "route-node",
-};
+const RAW_BINDING =
+  nullPrototypeRecord<InteriorTreetopsEndpointRouteNodeBinding>({
+    id: BINDING_ID,
+    authorityId: AUTHORITY_ID,
+    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+    geometryAuthorityId: GEOMETRY_AUTHORITY_ID,
+    topologyAuthorityId: TOPOLOGY_AUTHORITY_ID,
+    provenanceAuthorityId: PROVENANCE_AUTHORITY_ID,
+    sourceWayId: SOURCE_WAY_ID,
+    sourceObjectId: SOURCE_OBJECT_ID,
+    sourceVersion: SOURCE_VERSION,
+    routeNodeId: ROUTE_NODE_ID,
+    zoneId: ZONE_ID,
+    nodeRole: "junction",
+    plannerMaterialization: "route-node",
+  });
 
-const RAW_ROUTE_NODE: RouteNode = {
+const RAW_ROUTE_NODE = nullPrototypeRecord<RouteNode>({
   id: ROUTE_NODE_ID,
   kind: "junction",
   zoneId: ZONE_ID,
   lat: LAT,
   lng: LNG,
   provenance: RAW_PROVENANCE,
-};
+});
 
-const RAW_AUTHORITY: InteriorTreetopsEndpointRouteNodeAuthority = {
-  id: AUTHORITY_ID,
-  objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-  sourceWayId: SOURCE_WAY_ID,
-  sourceObjectId: SOURCE_OBJECT_ID,
-  sourceVersion: SOURCE_VERSION,
-  sourceVersionUrl: SOURCE_VERSION_URL,
-  sourceTimestamp: SOURCE_TIMESTAMP,
-  sourceChangeset: SOURCE_CHANGESET,
-  lat: LAT,
-  lng: LNG,
-  routeNodeId: ROUTE_NODE_ID,
-  zoneId: ZONE_ID,
-  kind: "junction",
-  provenance: RAW_PROVENANCE,
-  edgeMaterialization: "blocked-until-semantic-completion",
-  plannerMaterialization: "route-node-only",
-};
+const RAW_AUTHORITY =
+  nullPrototypeRecord<InteriorTreetopsEndpointRouteNodeAuthority>({
+    id: AUTHORITY_ID,
+    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+    sourceWayId: SOURCE_WAY_ID,
+    sourceObjectId: SOURCE_OBJECT_ID,
+    sourceVersion: SOURCE_VERSION,
+    sourceVersionUrl: SOURCE_VERSION_URL,
+    sourceTimestamp: SOURCE_TIMESTAMP,
+    sourceChangeset: SOURCE_CHANGESET,
+    lat: LAT,
+    lng: LNG,
+    routeNodeId: ROUTE_NODE_ID,
+    zoneId: ZONE_ID,
+    kind: "junction",
+    provenance: RAW_PROVENANCE,
+    edgeMaterialization: "blocked-until-semantic-completion",
+    plannerMaterialization: "route-node-only",
+  });
 
 function assertCanonicalInteriorTreetopsEndpointRouteNodeIntegrity(): void {
   if (
@@ -273,6 +287,19 @@ function assertCanonicalInteriorTreetopsEndpointRouteNodeIntegrity(): void {
     );
   }
 
+  for (const record of [
+    RAW_AUTHORITY as object,
+    RAW_BINDING as object,
+    RAW_ROUTE_NODE as object,
+    RAW_PROVENANCE as object,
+  ]) {
+    if (Object.getPrototypeOf(record) !== null) {
+      throw new Error(
+        "Planner 55 exported records must remain isolated from Object.prototype.",
+      );
+    }
+  }
+
   for (const field of [
     "fromNodeId",
     "toNodeId",
@@ -287,9 +314,9 @@ function assertCanonicalInteriorTreetopsEndpointRouteNodeIntegrity(): void {
     "status",
   ] as const) {
     if (
-      Object.hasOwn(RAW_AUTHORITY, field) ||
-      Object.hasOwn(RAW_BINDING, field) ||
-      Object.hasOwn(RAW_ROUTE_NODE, field)
+      field in RAW_AUTHORITY ||
+      field in RAW_BINDING ||
+      field in RAW_ROUTE_NODE
     ) {
       throw new Error(
         `Planner 55 RouteNode authority cannot materialize RouteEdge field ${field}.`,
@@ -311,22 +338,35 @@ export function assessInteriorTreetopsEndpointRouteNode(
   objectiveSourceRecordId: string,
 ): InteriorTreetopsEndpointRouteNodeAssessment {
   if (objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID) {
-    return deepFreeze({
-      status: "blocked",
-      reason: "OBJECTIVE_TREETOPS_ENDPOINT_ROUTE_NODE_NOT_SOURCED",
-      objectiveSourceRecordId,
-    });
+    return deepFreeze(
+      nullPrototypeRecord<Extract<
+        InteriorTreetopsEndpointRouteNodeAssessment,
+        { status: "blocked" }
+      >>({
+        status: "blocked",
+        reason: "OBJECTIVE_TREETOPS_ENDPOINT_ROUTE_NODE_NOT_SOURCED",
+        objectiveSourceRecordId,
+      }),
+    );
   }
 
-  return deepFreeze({
-    status: "route-node-ready",
-    objectiveSourceRecordId,
-    routeNodeId: ROUTE_NODE_ID,
-    sourceObjectId: SOURCE_OBJECT_ID,
-    zoneId: ZONE_ID,
-    routeEdgeMaterialization: {
-      status: "blocked",
-      reasons: [...REMAINING_EDGE_BLOCKERS],
-    },
-  });
+  return deepFreeze(
+    nullPrototypeRecord<Extract<
+      InteriorTreetopsEndpointRouteNodeAssessment,
+      { status: "route-node-ready" }
+    >>({
+      status: "route-node-ready",
+      objectiveSourceRecordId,
+      routeNodeId: ROUTE_NODE_ID,
+      sourceObjectId: SOURCE_OBJECT_ID,
+      zoneId: ZONE_ID,
+      routeEdgeMaterialization: nullPrototypeRecord({
+        status: "blocked" as const,
+        reasons: [...REMAINING_EDGE_BLOCKERS] as [
+          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+        ],
+      }),
+    }),
+  );
 }
