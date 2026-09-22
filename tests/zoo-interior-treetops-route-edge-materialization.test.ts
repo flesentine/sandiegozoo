@@ -17,7 +17,7 @@ import {
 } from "../src/data/zooInteriorTreetopsRouteEdgeMaterialization.ts";
 
 test("Planner 57 materializes the exact Treetops RouteEdge", () => {
-  assert.deepEqual(INTERIOR_TREETOPS_ROUTE_EDGE, {
+  assert.deepEqual({ ...INTERIOR_TREETOPS_ROUTE_EDGE }, {
     id: "sdz-interior-treetops-anchor-to-fern-canyon-route-edge",
     fromNodeId:
       "sdz-interior-front-street-node-1619736626-route-node",
@@ -57,7 +57,7 @@ test("Planner 57 preserves unknown capability evidence explicitly", () => {
 
 test("Planner 57 binds runtime activation to exact Treetops availability", () => {
   assert.deepEqual(
-    INTERIOR_TREETOPS_ROUTE_EDGE_BINDING.operationalActivation,
+    { ...INTERIOR_TREETOPS_ROUTE_EDGE_BINDING.operationalActivation },
     {
       objectiveSourceRecordId: "sdz-tiger-trail",
       exactSegmentSourceWayId: "148910139",
@@ -145,4 +145,47 @@ test("Planner 57 RouteEdge and expanded graph are deeply immutable", () => {
     ),
     true,
   );
+});
+
+
+test("Planner 57 RouteEdge exports ignore Object.prototype pollution", () => {
+  const pollutedFields = [
+    "routeNodeId",
+    "selectionScope",
+    "globalEndpointSelection",
+  ] as const;
+
+  try {
+    for (const field of pollutedFields) {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        value: "polluted",
+      });
+    }
+
+    const records = [
+      INTERIOR_TREETOPS_ROUTE_EDGE,
+      INTERIOR_TREETOPS_ROUTE_EDGE_BINDING,
+      INTERIOR_TREETOPS_ROUTE_EDGE_BINDING.operationalActivation,
+      INTERIOR_TREETOPS_EXPANDED_ROUTE_GRAPH_DATA,
+    ] as readonly object[];
+
+    for (const record of records) {
+      assert.equal(Object.getPrototypeOf(record), null);
+      for (const field of pollutedFields) {
+        assert.equal(
+          field in (record as Record<string, unknown>),
+          false,
+        );
+        assert.equal(
+          (record as Record<string, unknown>)[field],
+          undefined,
+        );
+      }
+    }
+  } finally {
+    for (const field of pollutedFields) {
+      delete (Object.prototype as Record<string, unknown>)[field];
+    }
+  }
 });
