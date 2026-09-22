@@ -114,10 +114,10 @@ export type InteriorTreetopsProvenanceAssessment =
       objectiveSourceRecordId: string;
     };
 
-const REMAINING_BLOCK_REASONS = [
+const REMAINING_BLOCK_REASONS = Object.freeze([
   "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
   "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-] as const;
+] as const);
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -127,6 +127,17 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
 }
 
 const geometry = INTERIOR_TREETOPS_V7_GEOMETRY_AUTHORITY[0];
@@ -144,51 +155,54 @@ const operational =
 const stairs = INTERIOR_TREETOPS_STAIRS_EVIDENCE_AUDIT[0];
 const stroller = INTERIOR_TREETOPS_STROLLER_EVIDENCE_AUDIT[0];
 
-const RAW_LINEAGE: InteriorTreetopsProvenanceLineage = {
-  geometryAuthorityId: geometry.id,
-  topologyAuthorityId: topology.id,
-  modeAuthorityId: mode.id,
-  distanceAuthorityId: distance.id,
-  directionSourceSnapshotId: directionSnapshot.id,
-  directionAuthorityId: direction.id,
-  durationAuthorityId: duration.id,
-  difficultyAuthorityId: difficulty.id,
-  accessibilityAuthorityId: accessibility.id,
-  operationalStatusAuthorityId: operational.id,
-  stairsEvidenceAuditId: stairs.id,
-  strollerEvidenceAuditId: stroller.id,
-};
+const RAW_LINEAGE: InteriorTreetopsProvenanceLineage =
+  nullPrototypeRecord<InteriorTreetopsProvenanceLineage>({
+    geometryAuthorityId: geometry.id,
+    topologyAuthorityId: topology.id,
+    modeAuthorityId: mode.id,
+    distanceAuthorityId: distance.id,
+    directionSourceSnapshotId: directionSnapshot.id,
+    directionAuthorityId: direction.id,
+    durationAuthorityId: duration.id,
+    difficultyAuthorityId: difficulty.id,
+    accessibilityAuthorityId: accessibility.id,
+    operationalStatusAuthorityId: operational.id,
+    stairsEvidenceAuditId: stairs.id,
+    strollerEvidenceAuditId: stroller.id,
+  });
 
-const RAW_PROVENANCE: SourceProvenance = {
-  sourceUrl: SOURCE_WAY_VERSION_URL,
-  sourceLabel:
-    "OpenStreetMap way 148910139 v7 with WildRoute Treetops exact-segment semantic lineage",
-  lastVerified: SOURCE_OBSERVED_AT,
-  confidence: "provisional",
-  effectiveFrom: EFFECTIVE_FROM,
-};
+const RAW_PROVENANCE: SourceProvenance =
+  nullPrototypeRecord<SourceProvenance>({
+    sourceUrl: SOURCE_WAY_VERSION_URL,
+    sourceLabel:
+      "OpenStreetMap way 148910139 v7 with WildRoute Treetops exact-segment semantic lineage",
+    lastVerified: SOURCE_OBSERVED_AT,
+    confidence: "provisional",
+    effectiveFrom: EFFECTIVE_FROM,
+  });
 
-const RAW_AUTHORITY: InteriorTreetopsProvenanceAuthority = {
-  id: AUTHORITY_ID,
-  objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-  sourceWayId: SOURCE_WAY_ID,
-  sourceWayVersion: SOURCE_WAY_VERSION,
-  sourceWayVersionUrl: SOURCE_WAY_VERSION_URL,
-  sourceWayTimestamp: SOURCE_WAY_TIMESTAMP,
-  sourceWayChangeset: SOURCE_WAY_CHANGESET,
-  sourceObservedAt: SOURCE_OBSERVED_AT,
-  sourceFromNodeId: FROM_NODE_ID,
-  sourceToNodeId: TO_NODE_ID,
-  lineage: RAW_LINEAGE,
-  provenance: RAW_PROVENANCE,
-  provenanceScope:
-    "version-pinned-treetops-source-plus-qualified-semantic-lineage",
-  confidenceRationale:
-    "provenance-complete-while-stairs-and-stroller-remain-unresolved",
-  semanticCompletion: "blocked",
-  unresolvedSemanticBlockers: [...REMAINING_BLOCK_REASONS],
-  plannerMaterialization: "provenance-only",
-};
+const RAW_AUTHORITY: InteriorTreetopsProvenanceAuthority =
+  nullPrototypeRecord<InteriorTreetopsProvenanceAuthority>({
+    id: AUTHORITY_ID,
+    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+    sourceWayId: SOURCE_WAY_ID,
+    sourceWayVersion: SOURCE_WAY_VERSION,
+    sourceWayVersionUrl: SOURCE_WAY_VERSION_URL,
+    sourceWayTimestamp: SOURCE_WAY_TIMESTAMP,
+    sourceWayChangeset: SOURCE_WAY_CHANGESET,
+    sourceObservedAt: SOURCE_OBSERVED_AT,
+    sourceFromNodeId: FROM_NODE_ID,
+    sourceToNodeId: TO_NODE_ID,
+    lineage: RAW_LINEAGE,
+    provenance: RAW_PROVENANCE,
+    provenanceScope:
+      "version-pinned-treetops-source-plus-qualified-semantic-lineage",
+    confidenceRationale:
+      "provenance-complete-while-stairs-and-stroller-remain-unresolved",
+    semanticCompletion: "blocked",
+    unresolvedSemanticBlockers: REMAINING_BLOCK_REASONS,
+    plannerMaterialization: "provenance-only",
+  });
 
 function assertExactSegment(
   label: string,
@@ -331,6 +345,16 @@ function assertCanonicalInteriorTreetopsProvenanceIntegrity(): void {
     );
   }
 
+  if (
+    Object.getPrototypeOf(RAW_AUTHORITY) !== null ||
+    Object.getPrototypeOf(RAW_LINEAGE) !== null ||
+    Object.getPrototypeOf(RAW_PROVENANCE) !== null
+  ) {
+    throw new Error(
+      "Planner 54 provenance exports must remain isolated from Object.prototype.",
+    );
+  }
+
   for (const field of [
     "routeNodeId",
     "routeEdgeId",
@@ -339,7 +363,7 @@ function assertCanonicalInteriorTreetopsProvenanceIntegrity(): void {
     "stairs",
     "stroller",
   ] as const) {
-    if (Object.hasOwn(RAW_AUTHORITY, field)) {
+    if (field in RAW_AUTHORITY) {
       throw new Error(
         `Planner 54 provenance authority cannot materialize ${field}.`,
       );
@@ -357,29 +381,42 @@ export function assessInteriorTreetopsProvenance(
   objectiveSourceRecordId: string,
 ): InteriorTreetopsProvenanceAssessment {
   if (objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID) {
-    return deepFreeze({
-      status: "blocked",
-      reason: "OBJECTIVE_TREETOPS_PROVENANCE_NOT_SOURCED",
-      objectiveSourceRecordId,
-    });
+    return deepFreeze(
+      nullPrototypeRecord<Extract<
+        InteriorTreetopsProvenanceAssessment,
+        { status: "blocked" }
+      >>({
+        status: "blocked",
+        reason: "OBJECTIVE_TREETOPS_PROVENANCE_NOT_SOURCED",
+        objectiveSourceRecordId,
+      }),
+    );
   }
 
-  return deepFreeze({
-    status: "provenance-ready",
-    authorityId: INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.id,
-    objectiveSourceRecordId,
-    sourceWayId: SOURCE_WAY_ID,
-    sourceWayVersion: SOURCE_WAY_VERSION,
-    sourceFromNodeId: FROM_NODE_ID,
-    sourceToNodeId: TO_NODE_ID,
-    provenance: {
-      ...INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance,
-    },
-    confidenceRationale:
-      "provenance-complete-while-stairs-and-stroller-remain-unresolved",
-    routeGraphExpansion: {
-      status: "blocked",
-      reasons: [...REMAINING_BLOCK_REASONS],
-    },
-  });
+  return deepFreeze(
+    nullPrototypeRecord<Extract<
+      InteriorTreetopsProvenanceAssessment,
+      { status: "provenance-ready" }
+    >>({
+      status: "provenance-ready",
+      authorityId: INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.id,
+      objectiveSourceRecordId,
+      sourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      sourceFromNodeId: FROM_NODE_ID,
+      sourceToNodeId: TO_NODE_ID,
+      provenance: nullPrototypeRecord<SourceProvenance>({
+        ...INTERIOR_TREETOPS_PROVENANCE_AUTHORITY.provenance,
+      }),
+      confidenceRationale:
+        "provenance-complete-while-stairs-and-stroller-remain-unresolved",
+      routeGraphExpansion: nullPrototypeRecord({
+        status: "blocked" as const,
+        reasons: [...REMAINING_BLOCK_REASONS] as [
+          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+        ],
+      }),
+    }),
+  );
 }
