@@ -379,18 +379,20 @@ export const INTERIOR_FERN_CANYON_GEOMETRY_EVIDENCE_GATE:
 
 export function assessInteriorFernCanyonGeometryEvidence():
   InteriorFernCanyonGeometryEvidenceAssessment {
-  return deepFreeze({
-    status: "blocked",
-    reason: BLOCK_REASON,
-    authorityId: AUTHORITY_ID,
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    anchorNodeId: ANCHOR_NODE_ID,
-    sourceWayId: SOURCE_WAY_ID,
-    sourceWayVersion: SOURCE_WAY_VERSION,
-    farEndpointNodeId: FAR_ENDPOINT_NODE_ID,
-    routeGraphExpansion: {
+  return deepFreeze(
+    nullPrototypeRecord<InteriorFernCanyonGeometryEvidenceAssessment>({
       status: "blocked",
-      reasons: [...ROUTE_GRAPH_BLOCK_REASONS],
-    },
-  });
+      reason: BLOCK_REASON,
+      authorityId: AUTHORITY_ID,
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      anchorNodeId: ANCHOR_NODE_ID,
+      sourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      farEndpointNodeId: FAR_ENDPOINT_NODE_ID,
+      routeGraphExpansion: nullPrototypeRecord({
+        status: "blocked",
+        reasons: [...ROUTE_GRAPH_BLOCK_REASONS],
+      }),
+    }),
+  );
 }
