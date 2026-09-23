@@ -80,7 +80,15 @@ test("Planner 59 anchors the new branch to the materialized Treetops endpoint", 
 });
 
 test("Planner 59 remains fail-closed until the far endpoint coordinate and topology are sourced", () => {
-  assert.deepEqual(assessInteriorFernCanyonGeometryEvidence(), {
+  const assessment = assessInteriorFernCanyonGeometryEvidence();
+  assert.deepEqual(
+    {
+      ...assessment,
+      routeGraphExpansion: {
+        ...assessment.routeGraphExpansion,
+      },
+    },
+    {
     status: "blocked",
     reason:
       "VERSION_PINNED_FERN_CANYON_FAR_ENDPOINT_COORDINATE_NOT_CAPTURED",
@@ -99,7 +107,7 @@ test("Planner 59 remains fail-closed until the far endpoint coordinate and topol
         "EXACT_SEGMENT_PROVENANCE_NOT_COMPLETE",
       ],
     },
-  });
+  );
 });
 
 test("Planner 59 cannot promote source tags into RouteEdge or coordinate semantics", () => {
@@ -237,4 +245,42 @@ test("Planner 59 gate and assessment are deeply immutable", () => {
     Object.isFrozen(assessment.routeGraphExpansion.reasons),
     true,
   );
+});
+
+
+test("Planner 59 assessment ignores Object.prototype pollution", () => {
+  Object.defineProperty(Object.prototype, "routeNodeId", {
+    configurable: true,
+    value: "polluted",
+  });
+  Object.defineProperty(Object.prototype, "distanceMeters", {
+    configurable: true,
+    value: 999,
+  });
+
+  try {
+    const assessment = assessInteriorFernCanyonGeometryEvidence();
+
+    assert.equal(Object.getPrototypeOf(assessment), null);
+    assert.equal(
+      Object.getPrototypeOf(assessment.routeGraphExpansion),
+      null,
+    );
+    assert.equal(
+      "routeNodeId" in
+        (assessment as unknown as Record<string, unknown>),
+      false,
+    );
+    assert.equal(
+      "distanceMeters" in
+        (assessment.routeGraphExpansion as unknown as Record<
+          string,
+          unknown
+        >),
+      false,
+    );
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).routeNodeId;
+    delete (Object.prototype as Record<string, unknown>).distanceMeters;
+  }
 });
