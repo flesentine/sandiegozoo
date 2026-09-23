@@ -82,24 +82,25 @@ test("Planner 55 binding points only to the exact source-backed RouteNode", () =
 });
 
 test("Planner 55 still blocks RouteEdge materialization", () => {
-  assert.deepEqual(
-    assessInteriorTreetopsEndpointRouteNode("sdz-tiger-trail"),
-    {
-      status: "route-node-ready",
-      objectiveSourceRecordId: "sdz-tiger-trail",
-      routeNodeId:
-        "sdz-interior-treetops-node-13588159626-route-node",
-      sourceObjectId: "13588159626",
-      zoneId: "sdz-zone-san-diego-zoo",
-      routeEdgeMaterialization: {
-        status: "blocked",
-        reasons: [
-          "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
-          "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
-        ],
-      },
-    },
+  const assessment =
+    assessInteriorTreetopsEndpointRouteNode("sdz-tiger-trail");
+
+  assert.equal(assessment.status, "route-node-ready");
+  if (assessment.status !== "route-node-ready") {
+    assert.fail("expected route-node-ready assessment");
+  }
+  assert.equal(assessment.objectiveSourceRecordId, "sdz-tiger-trail");
+  assert.equal(
+    assessment.routeNodeId,
+    "sdz-interior-treetops-node-13588159626-route-node",
   );
+  assert.equal(assessment.sourceObjectId, "13588159626");
+  assert.equal(assessment.zoneId, "sdz-zone-san-diego-zoo");
+  assert.equal(assessment.routeEdgeMaterialization.status, "blocked");
+  assert.deepEqual(assessment.routeEdgeMaterialization.reasons, [
+    "EXACT_SEGMENT_STAIRS_NOT_SOURCED",
+    "EXACT_SEGMENT_STROLLER_NOT_SOURCED",
+  ]);
 });
 
 test("Planner 55 does not materialize RouteEdge fields", () => {
@@ -122,7 +123,7 @@ test("Planner 55 does not materialize RouteEdge fields", () => {
       "status",
     ]) {
       assert.equal(
-        Object.hasOwn(record as Record<string, unknown>, field),
+        field in (record as Record<string, unknown>),
         false,
       );
     }
@@ -159,5 +160,77 @@ test("Planner 55 exports and assessments are deeply immutable", () => {
       Object.isFrozen(assessment.routeEdgeMaterialization.reasons),
       true,
     );
+  }
+});
+
+
+test("Planner 55 RouteNode exports ignore Object.prototype pollution", () => {
+  const pollutedFields = [
+    "stairs",
+    "stroller",
+    "distanceMeters",
+  ] as const;
+
+  try {
+    for (const field of pollutedFields) {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        value: "polluted",
+      });
+    }
+
+    const records = [
+      INTERIOR_TREETOPS_ENDPOINT_ROUTE_NODE_AUTHORITY,
+      INTERIOR_TREETOPS_ENDPOINT_ROUTE_NODE_BINDING,
+      INTERIOR_TREETOPS_ENDPOINT_ROUTE_NODE,
+      INTERIOR_TREETOPS_ENDPOINT_ROUTE_NODE.provenance,
+    ] as readonly object[];
+
+    for (const record of records) {
+      assert.equal(Object.getPrototypeOf(record), null);
+      for (const field of pollutedFields) {
+        assert.equal(
+          field in (record as Record<string, unknown>),
+          false,
+        );
+        assert.equal(
+          (record as Record<string, unknown>)[field],
+          undefined,
+        );
+      }
+    }
+
+    const ready =
+      assessInteriorTreetopsEndpointRouteNode("sdz-tiger-trail");
+    assert.equal(Object.getPrototypeOf(ready), null);
+    assert.equal(ready.status, "route-node-ready");
+    if (ready.status !== "route-node-ready") {
+      assert.fail("expected route-node-ready assessment");
+    }
+    assert.equal(
+      Object.getPrototypeOf(ready.routeEdgeMaterialization),
+      null,
+    );
+    for (const field of pollutedFields) {
+      assert.equal(
+        field in (ready as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+
+    const blocked =
+      assessInteriorTreetopsEndpointRouteNode("sdz-gorilla-tropics");
+    assert.equal(Object.getPrototypeOf(blocked), null);
+    assert.equal(blocked.status, "blocked");
+    for (const field of pollutedFields) {
+      assert.equal(
+        field in (blocked as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+  } finally {
+    for (const field of pollutedFields) {
+      delete (Object.prototype as Record<string, unknown>)[field];
+    }
   }
 });
