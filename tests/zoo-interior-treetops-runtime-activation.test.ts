@@ -367,3 +367,147 @@ test("Planner 58 results are deeply immutable", () => {
   );
   assert.equal(Object.isFrozen(result.route), true);
 });
+
+
+test("Planner 58 runtime outputs ignore Object.prototype pollution", () => {
+  const pollutedFields = [
+    "effectiveExpiresAt",
+    "selectionScope",
+    "globalEndpointSelection",
+  ] as const;
+
+  try {
+    for (const field of pollutedFields) {
+      Object.defineProperty(Object.prototype, field, {
+        configurable: true,
+        value: "polluted",
+      });
+    }
+
+    const activation =
+      resolveInteriorTreetopsExpandedRuntimeActivation(
+        snapshot({
+          treetopsExactSegmentAvailability: [],
+        }),
+      );
+
+    assert.equal(Object.getPrototypeOf(activation), null);
+    assert.equal(Object.getPrototypeOf(activation.treetops), null);
+    assert.equal(
+      Object.getPrototypeOf(activation.treetops.decision),
+      null,
+    );
+    assert.equal(
+      "effectiveExpiresAt" in activation.treetops.decision,
+      false,
+    );
+    assert.equal(
+      (
+        activation.treetops.decision as unknown as Record<
+          string,
+          unknown
+        >
+      ).effectiveExpiresAt,
+      undefined,
+    );
+
+    const routed =
+      routeInteriorTreetopsExpandedWithRuntimeEvidence(
+        snapshot(),
+        {
+          fromNodeId: ENTRANCE_NODE,
+          toNodeId: TreetopsEndpointNode,
+        },
+      );
+
+    assert.equal(Object.getPrototypeOf(routed), null);
+    for (const field of [
+      "selectionScope",
+      "globalEndpointSelection",
+    ] as const) {
+      assert.equal(
+        field in (routed as unknown as Record<string, unknown>),
+        false,
+      );
+    }
+  } finally {
+    for (const field of pollutedFields) {
+      delete (Object.prototype as Record<string, unknown>)[field];
+    }
+  }
+});
+
+
+test("Planner 58 revalidates prior enabled edges at the final resolver instant", () => {
+  const originalDateNow = Date.now;
+  const boundaryNow = NOW;
+  const expiresBetweenLayers =
+    new Date(boundaryNow + 5).toISOString();
+  const observedBefore =
+    new Date(boundaryNow - 1_000).toISOString();
+  const laterExpiry =
+    new Date(boundaryNow + 60_000).toISOString();
+
+  const base = snapshot();
+  const boundarySnapshot: InteriorTreetopsExpandedRuntimeOperationalSnapshot = {
+    ...base,
+    zooHours: {
+      ...base.zooHours,
+      observedAt: observedBefore,
+      expiresAt: expiresBetweenLayers,
+    },
+    ingressClosureAdvisement: {
+      ...base.ingressClosureAdvisement,
+      observedAt: observedBefore,
+      expiresAt: laterExpiry,
+    },
+    ingressExactEdgeAvailability:
+      base.ingressExactEdgeAvailability.map((evidence) => ({
+        ...evidence,
+        observedAt: observedBefore,
+        expiresAt: laterExpiry,
+      })),
+    interiorExactSegmentAvailability:
+      base.interiorExactSegmentAvailability.map((evidence) => ({
+        ...evidence,
+        observedAt: observedBefore,
+        expiresAt: laterExpiry,
+      })),
+    treetopsExactSegmentAvailability:
+      base.treetopsExactSegmentAvailability.map((evidence) => ({
+        ...evidence,
+        observedAt: observedBefore,
+        expiresAt: laterExpiry,
+      })),
+  };
+
+  let nowReads = 0;
+  Date.now = () => {
+    nowReads += 1;
+    return nowReads <= 2
+      ? boundaryNow
+      : boundaryNow + 10;
+  };
+
+  try {
+    const result =
+      resolveInteriorTreetopsExpandedRuntimeActivation(
+        boundarySnapshot,
+      );
+
+    assert.deepEqual(
+      result.prior.enabledConditionalEdgeIds,
+      [...PRIOR_EDGE_IDS].sort(),
+    );
+    assert.equal(
+      result.treetops.decision.reason,
+      "HOURS_EVIDENCE_NOT_CURRENT",
+    );
+    assert.deepEqual(
+      result.enabledConditionalEdgeIds,
+      [],
+    );
+  } finally {
+    Date.now = originalDateNow;
+  }
+});
