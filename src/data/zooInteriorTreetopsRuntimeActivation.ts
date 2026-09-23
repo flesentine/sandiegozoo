@@ -37,6 +37,8 @@ const SOURCE_FROM_NODE_ID = "1619736626" as const;
 const SOURCE_TO_NODE_ID = "13588159626" as const;
 const TREETOPS_ROUTE_EDGE_ID =
   "sdz-interior-treetops-anchor-to-fern-canyon-route-edge" as const;
+const PRIOR_INTERIOR_ROUTE_EDGE_ID =
+  "sdz-interior-tiger-trail-front-street-route-edge" as const;
 
 const SNAPSHOT_FIELDS = [
   "visitDate",
@@ -153,6 +155,17 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+function nullPrototypeRecord<T extends object>(value: T): T {
+  const snapshot = Object.create(null) as Record<PropertyKey, unknown>;
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor) {
+      Object.defineProperty(snapshot, key, descriptor);
+    }
+  }
+  return snapshot as T;
 }
 
 function defineOwnEnumerableDataProperty(
@@ -450,6 +463,21 @@ function earliestExpiry(
     .sort((a, b) => Date.parse(a) - Date.parse(b))[0];
 }
 
+function activationDecisionStillCurrent(
+  status: "enabled" | "disabled",
+  reason: string,
+  effectiveExpiresAt: string | undefined,
+  nowMs: number,
+): boolean {
+  return (
+    status === "enabled" &&
+    reason === "ENABLED" &&
+    typeof effectiveExpiresAt === "string" &&
+    validTimestamp(effectiveExpiresAt) &&
+    nowMs <= Date.parse(effectiveExpiresAt)
+  );
+}
+
 function snapshotRuntimeSnapshot(
   value: unknown,
 ): TrustedTreetopsSnapshot {
@@ -635,7 +663,7 @@ function snapshotRuntimeRouteRequest(
     );
   }
 
-  const trusted: Record<string, unknown> = {};
+  const trusted = Object.create(null) as Record<string, unknown>;
   defineOwnEnumerableDataProperty(
     trusted,
     "fromNodeId",
@@ -824,36 +852,65 @@ export function resolveInteriorTreetopsExpandedRuntimeActivation(
       : []),
   ];
 
-  const decision: InteriorTreetopsRuntimeActivationDecision = {
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    sourceWayId: SOURCE_WAY_ID,
-    sourceWayVersion: SOURCE_WAY_VERSION,
-    sourceFromNodeId: SOURCE_FROM_NODE_ID,
-    sourceToNodeId: SOURCE_TO_NODE_ID,
-    routeEdgeId: TREETOPS_ROUTE_EDGE_ID,
-    status: enabled ? "enabled" : "disabled",
-    reason,
-    evidenceIds,
-    ...(enabled && segmentEvidence
-      ? {
-          effectiveExpiresAt: earliestExpiry([
-            trusted.zooHours,
-            segmentEvidence,
-          ]),
-        }
-      : {}),
-  };
+  const decision =
+    nullPrototypeRecord<InteriorTreetopsRuntimeActivationDecision>({
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      sourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      sourceFromNodeId: SOURCE_FROM_NODE_ID,
+      sourceToNodeId: SOURCE_TO_NODE_ID,
+      routeEdgeId: TREETOPS_ROUTE_EDGE_ID,
+      status: enabled ? "enabled" : "disabled",
+      reason,
+      evidenceIds,
+      ...(enabled && segmentEvidence
+        ? {
+            effectiveExpiresAt: earliestExpiry([
+              trusted.zooHours,
+              segmentEvidence,
+            ]),
+          }
+        : {}),
+    });
 
-  const treetops = deepFreeze({
-    status: "evaluated" as const,
-    visitDate,
-    evaluatedAt,
-    decision,
-  });
-
-  const enabledConditionalEdgeIds = new Set(
-    prior.enabledConditionalEdgeIds,
+  const treetops = deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsRuntimeActivation>({
+      status: "evaluated",
+      visitDate,
+      evaluatedAt,
+      decision,
+    }),
   );
+
+  const enabledConditionalEdgeIds = new Set<string>();
+
+  if (visitDate === currentZooDate) {
+    for (const priorDecision of prior.ingress.decisions) {
+      if (
+        activationDecisionStillCurrent(
+          priorDecision.status,
+          priorDecision.reason,
+          priorDecision.effectiveExpiresAt,
+          nowMs,
+        )
+      ) {
+        enabledConditionalEdgeIds.add(priorDecision.routeEdgeId);
+      }
+    }
+
+    if (
+      prior.interior.status === "evaluated" &&
+      activationDecisionStillCurrent(
+        prior.interior.decision.status,
+        prior.interior.decision.reason,
+        prior.interior.decision.effectiveExpiresAt,
+        nowMs,
+      )
+    ) {
+      enabledConditionalEdgeIds.add(PRIOR_INTERIOR_ROUTE_EDGE_ID);
+    }
+  }
+
   if (enabled) {
     enabledConditionalEdgeIds.add(
       TREETOPS_ROUTE_EDGE_ID,
@@ -873,13 +930,15 @@ export function resolveInteriorTreetopsExpandedRuntimeActivation(
     }
   }
 
-  return deepFreeze({
-    visitDate,
-    prior,
-    treetops,
-    enabledConditionalEdgeIds:
-      [...enabledConditionalEdgeIds].sort(),
-  });
+  return deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsExpandedRuntimeActivationResult>({
+      visitDate,
+      prior,
+      treetops,
+      enabledConditionalEdgeIds:
+        [...enabledConditionalEdgeIds].sort(),
+    }),
+  );
 }
 
 export function routeInteriorTreetopsExpandedWithRuntimeEvidence(
@@ -901,8 +960,10 @@ export function routeInteriorTreetopsExpandedWithRuntimeEvidence(
     ),
   );
 
-  return deepFreeze({
-    activation,
-    route,
-  });
+  return deepFreeze(
+    nullPrototypeRecord<InteriorTreetopsExpandedRuntimeRouteResult>({
+      activation,
+      route,
+    }),
+  );
 }
