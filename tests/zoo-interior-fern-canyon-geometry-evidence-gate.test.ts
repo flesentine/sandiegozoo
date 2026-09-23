@@ -107,6 +107,7 @@ test("Planner 59 remains fail-closed until the far endpoint coordinate and topol
         "EXACT_SEGMENT_PROVENANCE_NOT_COMPLETE",
       ],
     },
+    },
   );
 });
 
