@@ -19,6 +19,7 @@ const ANCHOR_WAY_INDEX = 1 as const;
 const FAR_ENDPOINT_WAY_INDEX = 0 as const;
 const BLOCK_REASON =
   "VERSION_PINNED_FERN_CANYON_FAR_ENDPOINT_COORDINATE_NOT_CAPTURED" as const;
+const STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 
 const ORDERED_NODE_IDS = [
   FAR_ENDPOINT_NODE_ID,
@@ -147,7 +148,7 @@ function assertStructuredCloneSafe(
   label: string,
 ): void {
   try {
-    structuredClone(value);
+    STRUCTURED_CLONE(value);
   } catch {
     throw new Error(
       `${label} cannot be Proxy-backed or otherwise uncloneable.`,
