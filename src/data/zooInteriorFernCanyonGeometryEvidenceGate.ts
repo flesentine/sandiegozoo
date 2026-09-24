@@ -142,6 +142,19 @@ function nullPrototypeRecord<T extends object>(value: T): T {
   return result;
 }
 
+function assertStructuredCloneSafe(
+  value: unknown,
+  label: string,
+): void {
+  try {
+    structuredClone(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or otherwise uncloneable.`,
+    );
+  }
+}
+
 function assertExactOrdinaryArray(
   value: unknown,
   expectedLength: number,
@@ -275,6 +288,11 @@ export function assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
     "Planner 59 Fern Canyon geometry evidence-gate collection";
   const gateLabel = "Planner 59 Fern Canyon geometry evidence gate";
 
+  // structuredClone rejects Proxy objects recursively. Screen the entire
+  // collection before any Reflect/descriptor-based validation so a Proxy
+  // cannot hide configurable forbidden fields or disguise the nested node
+  // sequence through ownKeys/has/getOwnPropertyDescriptor traps.
+  assertStructuredCloneSafe(authorities, collectionLabel);
   assertExactOrdinaryArray(authorities, 1, collectionLabel);
 
   const authorityDescriptor = Object.getOwnPropertyDescriptor(
