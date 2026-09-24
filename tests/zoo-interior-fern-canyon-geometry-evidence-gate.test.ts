@@ -285,3 +285,61 @@ test("Planner 59 assessment ignores Object.prototype pollution", () => {
     delete (Object.prototype as Record<string, unknown>).distanceMeters;
   }
 });
+
+
+test("Planner 59 rejects Proxy-backed gate records and nested node arrays", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const recordProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter(
+        (key) => key !== "routeNodeId",
+      );
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+    get(inner, property, receiver) {
+      if (property === "routeNodeId") return "hidden-route-node";
+      return Reflect.get(inner, property, receiver);
+    },
+  });
+
+  assert.equal(
+    (recordProxy as Record<string, unknown>).routeNodeId,
+    "hidden-route-node",
+  );
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonGeometryEvidenceGateIntegrity([
+        recordProxy as unknown as InteriorFernCanyonGeometryEvidenceGate,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nested = mutableClone() as unknown as {
+    orderedNodeIds: readonly [string, string];
+  };
+  nested.orderedNodeIds = new Proxy(
+    [...nested.orderedNodeIds] as [string, string],
+    {},
+  );
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonGeometryEvidenceGateIntegrity([
+        nested as unknown as InteriorFernCanyonGeometryEvidenceGate,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
