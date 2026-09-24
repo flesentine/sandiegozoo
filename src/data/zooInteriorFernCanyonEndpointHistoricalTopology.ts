@@ -483,8 +483,8 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
     inbound.sourceName !== "Fern Canyon Trail" ||
     inbound.endpointNodeIndex !== 0 ||
     inbound.connectionRole !== "inbound-qualified-segment" ||
-    inbound.orderedNodeIds[0] !== ENDPOINT_NODE_ID ||
-    inbound.orderedNodeIds[1] !== "13588159626"
+    inboundNodeIds[0] !== ENDPOINT_NODE_ID ||
+    inboundNodeIds[1] !== "13588159626"
   ) {
     throw new Error("Planner 60 inbound connection drifted.");
   }
@@ -501,9 +501,9 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
     continuation.sourceLayer !== "1" ||
     continuation.endpointNodeIndex !== 5 ||
     continuation.connectionRole !== "onward-linear-continuation" ||
-    continuation.orderedNodeIds[0] !== "13588159627" ||
-    continuation.orderedNodeIds[4] !== "13588159631" ||
-    continuation.orderedNodeIds[5] !== ENDPOINT_NODE_ID
+    continuationNodeIds[0] !== "13588159627" ||
+    continuationNodeIds[4] !== "13588159631" ||
+    continuationNodeIds[5] !== ENDPOINT_NODE_ID
   ) {
     throw new Error("Planner 60 continuation connection drifted.");
   }
