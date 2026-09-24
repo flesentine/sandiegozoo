@@ -288,11 +288,6 @@ export function assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
     "Planner 59 Fern Canyon geometry evidence-gate collection";
   const gateLabel = "Planner 59 Fern Canyon geometry evidence gate";
 
-  // structuredClone rejects Proxy objects recursively. Screen the entire
-  // collection before any Reflect/descriptor-based validation so a Proxy
-  // cannot hide configurable forbidden fields or disguise the nested node
-  // sequence through ownKeys/has/getOwnPropertyDescriptor traps.
-  assertStructuredCloneSafe(authorities, collectionLabel);
   assertExactOrdinaryArray(authorities, 1, collectionLabel);
 
   const authorityDescriptor = Object.getOwnPropertyDescriptor(
@@ -309,7 +304,28 @@ export function assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
     );
   }
 
+  // Capture the exact record identity before clone screening. structuredClone
+  // rejects Proxy objects recursively, but it also invokes enumerable getters.
+  // A hostile getter must not be able to replace authorities[0] and redirect
+  // the later validation to a different object.
   const candidate: unknown = authorityDescriptor.value;
+  assertStructuredCloneSafe(authorities, collectionLabel);
+  assertStructuredCloneSafe(candidate, gateLabel);
+
+  const currentAuthorityDescriptor = Object.getOwnPropertyDescriptor(
+    authorities,
+    "0",
+  );
+  if (
+    !currentAuthorityDescriptor ||
+    !("value" in currentAuthorityDescriptor) ||
+    currentAuthorityDescriptor.value !== candidate
+  ) {
+    throw new Error(
+      `${collectionLabel} cannot mutate element 0 during validation.`,
+    );
+  }
+
   assertExactPlainObject(candidate, TOP_LEVEL_FIELDS, gateLabel);
   assertNoDownstreamMaterialization(candidate, gateLabel);
 
@@ -382,8 +398,37 @@ export function assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
     );
   }
 
+  const orderedNodeIdsDescriptor =
+    Object.getOwnPropertyDescriptor(record, "orderedNodeIds");
+  if (
+    !orderedNodeIdsDescriptor ||
+    !("value" in orderedNodeIdsDescriptor)
+  ) {
+    throw new Error(
+      "Planner 59 Fern Canyon ordered node sequence requires an own data field.",
+    );
+  }
+
+  const orderedNodeIds = orderedNodeIdsDescriptor.value;
+  assertStructuredCloneSafe(
+    orderedNodeIds,
+    "Planner 59 Fern Canyon ordered node sequence",
+  );
+
+  const currentOrderedNodeIdsDescriptor =
+    Object.getOwnPropertyDescriptor(record, "orderedNodeIds");
+  if (
+    !currentOrderedNodeIdsDescriptor ||
+    !("value" in currentOrderedNodeIdsDescriptor) ||
+    currentOrderedNodeIdsDescriptor.value !== orderedNodeIds
+  ) {
+    throw new Error(
+      "Planner 59 Fern Canyon ordered node sequence cannot mutate during validation.",
+    );
+  }
+
   assertExactOrdinaryArray(
-    record.orderedNodeIds,
+    orderedNodeIds,
     2,
     "Planner 59 Fern Canyon ordered node sequence",
   );
