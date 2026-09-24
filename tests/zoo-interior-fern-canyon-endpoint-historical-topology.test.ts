@@ -59,7 +59,15 @@ test("Planner 60 identifies the unique onward continuation as Fern Canyon steps"
 });
 
 test("Planner 60 clears endpoint capture but keeps RouteEdge expansion fail-closed", () => {
-  assert.deepEqual(assessInteriorFernCanyonEndpointHistoricalTopology(), {
+  const assessment = assessInteriorFernCanyonEndpointHistoricalTopology();
+  assert.deepEqual(
+    {
+      ...assessment,
+      routeGraphExpansion: {
+        ...assessment.routeGraphExpansion,
+      },
+    },
+    {
     status: "endpoint-topology-sourced",
     authorityId: "sdz-interior-fern-canyon-endpoint-historical-topology",
     objectiveSourceRecordId: "sdz-tiger-trail",
@@ -75,7 +83,8 @@ test("Planner 60 clears endpoint capture but keeps RouteEdge expansion fail-clos
         "EXACT_FERN_CANYON_STEPS_SEGMENT_PROVENANCE_NOT_COMPLETE",
       ],
     },
-  });
+    },
+  );
 });
 
 test("Planner 60 does not promote topology evidence into planner route fields", () => {
@@ -177,4 +186,160 @@ test("Planner 60 authority and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(authority.connectedWays[1].orderedNodeIds), true);
   assert.equal(Object.isFrozen(assessment), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion.reasons), true);
+});
+
+
+test("Planner 60 rejects Proxy-backed authority and nested topology input", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const authorityProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter(
+        (key) => key !== "routeNodeId",
+      );
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([
+        authorityProxy as unknown as InteriorFernCanyonEndpointHistoricalTopologyAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nested = mutableClone() as unknown as {
+    connectedWays: readonly unknown[];
+  };
+  nested.connectedWays = new Proxy([...nested.connectedWays], {});
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([
+        nested as unknown as InteriorFernCanyonEndpointHistoricalTopologyAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
+
+test("Planner 60 rejects mutation during reflective validation", () => {
+  const original = mutableClone();
+  const replacement = mutableClone();
+  const collection = [original];
+
+  const connectedWaysTarget = [
+    ...original.connectedWays,
+  ] as unknown[];
+
+  const connectedWaysProxy = new Proxy(connectedWaysTarget, {
+    getPrototypeOf(inner) {
+      collection[0] = replacement;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+
+  (
+    original as unknown as { connectedWays: unknown }
+  ).connectedWays = connectedWaysProxy;
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
+        collection,
+      ),
+    /cannot be Proxy-backed or otherwise uncloneable|cannot mutate during validation/,
+  );
+});
+
+test("Planner 60 retains its captured clone primitive against caller traps", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const recordProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter(
+        (key) => key !== "routeNodeId",
+      );
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  const collection = [
+    recordProxy as unknown as InteriorFernCanyonEndpointHistoricalTopologyAuthority,
+  ];
+  const originalStructuredClone = globalThis.structuredClone;
+
+  const outerProxy = new Proxy(collection, {
+    getPrototypeOf(inner) {
+      globalThis.structuredClone = ((value: unknown) =>
+        value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
+          outerProxy,
+        ),
+      /cannot be Proxy-backed or otherwise uncloneable/,
+    );
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
+
+test("Planner 60 assessment is isolated from Object.prototype pollution", () => {
+  Object.defineProperty(Object.prototype, "routeNodeId", {
+    configurable: true,
+    value: "polluted",
+  });
+  Object.defineProperty(Object.prototype, "distanceMeters", {
+    configurable: true,
+    value: 999,
+  });
+
+  try {
+    const assessment = assessInteriorFernCanyonEndpointHistoricalTopology();
+    assert.equal(Object.getPrototypeOf(assessment), null);
+    assert.equal(Object.getPrototypeOf(assessment.routeGraphExpansion), null);
+    assert.equal(
+      "routeNodeId" in
+        (assessment as unknown as Record<string, unknown>),
+      false,
+    );
+    assert.equal(
+      "distanceMeters" in
+        (assessment.routeGraphExpansion as unknown as Record<string, unknown>),
+      false,
+    );
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).routeNodeId;
+    delete (Object.prototype as Record<string, unknown>).distanceMeters;
+  }
 });
