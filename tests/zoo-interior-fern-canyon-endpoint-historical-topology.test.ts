@@ -142,6 +142,90 @@ test("Planner 60 rejects continuation tag or node-sequence drift", () => {
   );
 });
 
+test("Planner 60 rejects drift in every continuation node position", () => {
+  for (const index of [1, 2, 3]) {
+    const forged = mutableClone();
+    const continuation =
+      forged.connectedWays[1] as unknown as {
+        orderedNodeIds: string[];
+      };
+    continuation.orderedNodeIds[index] = `forged-${index}`;
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([forged]),
+      /continuation connection drifted/,
+    );
+  }
+});
+
+test("Planner 60 rejects inbound provenance drift", () => {
+  const mutations: Array<
+    (inbound: Record<string, unknown>) => void
+  > = [
+    (inbound) => {
+      inbound.sourceWayVersion = 2;
+    },
+    (inbound) => {
+      inbound.sourceWayTimestamp = "2026-02-21T20:09:00Z";
+    },
+    (inbound) => {
+      inbound.sourceWayChangeset = 999;
+    },
+    (inbound) => {
+      inbound.sourceWayVersionUrl = "https://example.com/forged-version";
+    },
+    (inbound) => {
+      inbound.sourceWayUrl = "https://example.com/forged-way";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const forged = mutableClone();
+    const inbound =
+      forged.connectedWays[0] as unknown as Record<string, unknown>;
+    mutate(inbound);
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([forged]),
+      /inbound connection drifted/,
+    );
+  }
+});
+
+test("Planner 60 rejects endpoint and continuation URL provenance drift", () => {
+  const endpointForged = mutableClone();
+  (
+    endpointForged.endpointNode as unknown as {
+      sourceVersionUrl: string;
+    }
+  ).sourceVersionUrl = "https://example.com/forged-node";
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([
+        endpointForged,
+      ]),
+    /drifted from the captured historical evidence/,
+  );
+
+  const continuationForged = mutableClone();
+  (
+    continuationForged.connectedWays[1] as unknown as {
+      sourceWayUrl: string;
+    }
+  ).sourceWayUrl = "https://example.com/forged-continuation";
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity([
+        continuationForged,
+      ]),
+    /continuation connection drifted/,
+  );
+});
+
 test("Planner 60 rejects hidden route materialization", () => {
   const forged = mutableClone() as unknown as Record<string, unknown>;
   Object.defineProperty(forged, "stairs", {
