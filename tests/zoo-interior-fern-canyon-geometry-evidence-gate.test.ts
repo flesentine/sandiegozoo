@@ -405,3 +405,66 @@ test("Planner 59 rejects getter mutation that swaps in a hidden-field Proxy duri
     "hidden-route-node",
   );
 });
+
+
+test("Planner 59 retains the original clone primitive against outer-array Proxy traps", () => {
+  const target =
+    mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const recordProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter(
+        (key) => key !== "routeNodeId",
+      );
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+    get(inner, property, receiver) {
+      if (property === "routeNodeId") return "hidden-route-node";
+      return Reflect.get(inner, property, receiver);
+    },
+  });
+
+  const collection = [
+    recordProxy as unknown as InteriorFernCanyonGeometryEvidenceGate,
+  ];
+  const originalStructuredClone = globalThis.structuredClone;
+
+  const outerProxy = new Proxy(collection, {
+    getPrototypeOf(inner) {
+      globalThis.structuredClone = ((value: unknown) =>
+        value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
+          outerProxy,
+        ),
+      /cannot be Proxy-backed or otherwise uncloneable/,
+    );
+
+    assert.equal(
+      (
+        collection[0] as unknown as Record<string, unknown>
+      ).routeNodeId,
+      "hidden-route-node",
+    );
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
