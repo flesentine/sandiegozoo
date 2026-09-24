@@ -16,6 +16,7 @@ const ENDPOINT_LAT = 32.7353594 as const;
 const ENDPOINT_LNG = -117.1501187 as const;
 const INBOUND_WAY_ID = "1481578621" as const;
 const CONTINUATION_WAY_ID = "1481578622" as const;
+const STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 
 const INBOUND_NODE_IDS = [
   "13588159625",
@@ -184,6 +185,33 @@ function nullRecord<T extends object>(value: T): T {
   return result;
 }
 
+function assertStructuredCloneSafe(
+  value: unknown,
+  label: string,
+): void {
+  try {
+    STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or otherwise uncloneable.`,
+    );
+  }
+}
+
+function ownDataValue(
+  value: object,
+  field: string,
+  label: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+    throw new Error(
+      `${label} requires enumerable own data field ${field}.`,
+    );
+  }
+  return descriptor.value;
+}
+
 function assertPlain(
   value: unknown,
   fields: readonly string[],
@@ -332,31 +360,83 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
 ): void {
   const collectionLabel = "Planner 60 authority collection";
   const authorityLabel = "Planner 60 authority";
+  const endpointLabel = "Planner 60 endpoint node";
+  const waysLabel = "Planner 60 connected way collection";
+  const inboundLabel = "Planner 60 inbound connection";
+  const continuationLabel = "Planner 60 continuation connection";
+  const inboundNodesLabel = "Planner 60 inbound node sequence";
+  const continuationNodesLabel = "Planner 60 continuation node sequence";
+
+  // Validate the entire expected graph with descriptor-only checks before
+  // invoking the captured clone primitive. Ordinary getters/accessors are
+  // rejected without execution; Proxy objects may lie to reflection, but
+  // structuredClone rejects them recursively.
   assertArray(authorities, 1, collectionLabel);
-  const candidate = authorities[0] as unknown;
+  const candidate = ownDataValue(authorities, "0", collectionLabel);
   assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
+
+  const endpointNode = ownDataValue(
+    candidate,
+    "endpointNode",
+    authorityLabel,
+  );
+  const connectedWays = ownDataValue(
+    candidate,
+    "connectedWays",
+    authorityLabel,
+  );
+  assertPlain(endpointNode, ENDPOINT_FIELDS, endpointLabel);
+  assertArray(connectedWays, 2, waysLabel);
+
+  const inbound = ownDataValue(connectedWays, "0", waysLabel);
+  const continuation = ownDataValue(connectedWays, "1", waysLabel);
+  assertPlain(inbound, CONNECTION_BASE_FIELDS, inboundLabel);
+  assertPlain(
+    continuation,
+    [...CONNECTION_BASE_FIELDS, ...CONTINUATION_EXTRA_FIELDS],
+    continuationLabel,
+  );
+
+  const inboundNodeIds = ownDataValue(
+    inbound,
+    "orderedNodeIds",
+    inboundLabel,
+  );
+  const continuationNodeIds = ownDataValue(
+    continuation,
+    "orderedNodeIds",
+    continuationLabel,
+  );
+  assertArray(inboundNodeIds, 2, inboundNodesLabel);
+  assertArray(continuationNodeIds, 6, continuationNodesLabel);
+
+  assertStructuredCloneSafe(authorities, collectionLabel);
+
+  // A reflective trap is allowed to run during the descriptor checks above,
+  // but it must not be able to swap any validated object before screening
+  // completes. Re-check every captured identity after clone screening.
+  if (
+    ownDataValue(authorities, "0", collectionLabel) !== candidate ||
+    ownDataValue(candidate, "endpointNode", authorityLabel) !== endpointNode ||
+    ownDataValue(candidate, "connectedWays", authorityLabel) !== connectedWays ||
+    ownDataValue(connectedWays, "0", waysLabel) !== inbound ||
+    ownDataValue(connectedWays, "1", waysLabel) !== continuation ||
+    ownDataValue(inbound, "orderedNodeIds", inboundLabel) !== inboundNodeIds ||
+    ownDataValue(
+      continuation,
+      "orderedNodeIds",
+      continuationLabel,
+    ) !== continuationNodeIds
+  ) {
+    throw new Error(
+      "Planner 60 authority graph cannot mutate during validation.",
+    );
+  }
+
   assertNoRouteMaterialization(candidate, authorityLabel);
 
   const authority =
     candidate as unknown as InteriorFernCanyonEndpointHistoricalTopologyAuthority;
-  assertPlain(authority.endpointNode, ENDPOINT_FIELDS, "Planner 60 endpoint node");
-  assertArray(authority.connectedWays, 2, "Planner 60 connected way collection");
-
-  const inbound = authority.connectedWays[0];
-  const continuation = authority.connectedWays[1];
-  assertPlain(inbound, CONNECTION_BASE_FIELDS, "Planner 60 inbound connection");
-  assertPlain(
-    continuation,
-    [...CONNECTION_BASE_FIELDS, ...CONTINUATION_EXTRA_FIELDS],
-    "Planner 60 continuation connection",
-  );
-  assertArray(inbound.orderedNodeIds, 2, "Planner 60 inbound node sequence");
-  assertArray(
-    continuation.orderedNodeIds,
-    6,
-    "Planner 60 continuation node sequence",
-  );
-
   const gate = INTERIOR_FERN_CANYON_GEOMETRY_EVIDENCE_GATE[0];
   const priorEndpoint = INTERIOR_TREETOPS_ENDPOINT_ROUTE_NODE_AUTHORITY;
 
@@ -437,18 +517,20 @@ export const INTERIOR_FERN_CANYON_ENDPOINT_HISTORICAL_TOPOLOGY:
 
 export function assessInteriorFernCanyonEndpointHistoricalTopology():
   InteriorFernCanyonEndpointHistoricalTopologyAssessment {
-  return deepFreeze({
-    status: "endpoint-topology-sourced",
-    authorityId: AUTHORITY_ID,
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    endpointNodeId: ENDPOINT_NODE_ID,
-    endpointCoordinate: "captured",
-    historicalConnectedWayCount: 2,
-    selectedContinuationWayId: CONTINUATION_WAY_ID,
-    selectedContinuationHighway: "steps",
-    routeGraphExpansion: {
-      status: "blocked",
-      reasons: [...ROUTE_GRAPH_BLOCK_REASONS],
-    },
-  });
+  return deepFreeze(
+    nullRecord<InteriorFernCanyonEndpointHistoricalTopologyAssessment>({
+      status: "endpoint-topology-sourced",
+      authorityId: AUTHORITY_ID,
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      endpointNodeId: ENDPOINT_NODE_ID,
+      endpointCoordinate: "captured",
+      historicalConnectedWayCount: 2,
+      selectedContinuationWayId: CONTINUATION_WAY_ID,
+      selectedContinuationHighway: "steps",
+      routeGraphExpansion: nullRecord({
+        status: "blocked",
+        reasons: [...ROUTE_GRAPH_BLOCK_REASONS],
+      }),
+    }),
+  );
 }
