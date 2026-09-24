@@ -343,3 +343,65 @@ test("Planner 59 rejects Proxy-backed gate records and nested node arrays", () =
     /cannot be Proxy-backed or otherwise uncloneable/,
   );
 });
+
+
+test("Planner 59 rejects getter mutation that swaps in a hidden-field Proxy during screening", () => {
+  const replacementTarget =
+    mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(replacementTarget, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const replacementProxy = new Proxy(replacementTarget, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter(
+        (key) => key !== "routeNodeId",
+      );
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+    get(inner, property, receiver) {
+      if (property === "routeNodeId") return "hidden-route-node";
+      return Reflect.get(inner, property, receiver);
+    },
+  });
+
+  const getterRecord =
+    mutableClone() as unknown as Record<string, unknown>;
+  const collection = [
+    getterRecord as unknown as InteriorFernCanyonGeometryEvidenceGate,
+  ];
+
+  Object.defineProperty(getterRecord, "sourceName", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      collection[0] =
+        replacementProxy as unknown as InteriorFernCanyonGeometryEvidenceGate;
+      return "Fern Canyon Trail";
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonGeometryEvidenceGateIntegrity(
+        collection,
+      ),
+    /cannot mutate element 0 during validation/,
+  );
+
+  assert.equal(
+    (
+      collection[0] as unknown as Record<string, unknown>
+    ).routeNodeId,
+    "hidden-route-node",
+  );
+});
