@@ -449,6 +449,10 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
     authority.endpointNode.sourceVersion !== ENDPOINT_NODE_VERSION ||
     authority.endpointNode.sourceTimestamp !== TARGET_TIMESTAMP ||
     authority.endpointNode.sourceChangeset !== ENDPOINT_NODE_CHANGESET ||
+    authority.endpointNode.sourceVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/node/13588159625/1" ||
+    authority.endpointNode.sourceUrl !==
+      "https://www.openstreetmap.org/node/13588159625" ||
     authority.endpointNode.lat !== ENDPOINT_LAT ||
     authority.endpointNode.lng !== ENDPOINT_LNG ||
     authority.selectedContinuationWayId !== CONTINUATION_WAY_ID ||
@@ -479,6 +483,13 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
 
   if (
     inbound.sourceWayId !== INBOUND_WAY_ID ||
+    inbound.sourceWayVersion !== 1 ||
+    inbound.sourceWayTimestamp !== TARGET_TIMESTAMP ||
+    inbound.sourceWayChangeset !== ENDPOINT_NODE_CHANGESET ||
+    inbound.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578621/1" ||
+    inbound.sourceWayUrl !==
+      "https://www.openstreetmap.org/way/1481578621" ||
     inbound.sourceHighway !== "footway" ||
     inbound.sourceName !== "Fern Canyon Trail" ||
     inbound.endpointNodeIndex !== 0 ||
@@ -494,6 +505,10 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
     continuation.sourceWayVersion !== 1 ||
     continuation.sourceWayTimestamp !== TARGET_TIMESTAMP ||
     continuation.sourceWayChangeset !== ENDPOINT_NODE_CHANGESET ||
+    continuation.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578622/1" ||
+    continuation.sourceWayUrl !==
+      "https://www.openstreetmap.org/way/1481578622" ||
     continuation.sourceHighway !== "steps" ||
     continuation.sourceName !== "Fern Canyon Trail" ||
     continuation.sourceBridge !== "yes" ||
@@ -501,9 +516,10 @@ export function assertInteriorFernCanyonEndpointHistoricalTopologyIntegrity(
     continuation.sourceLayer !== "1" ||
     continuation.endpointNodeIndex !== 5 ||
     continuation.connectionRole !== "onward-linear-continuation" ||
-    continuationNodeIds[0] !== "13588159627" ||
-    continuationNodeIds[4] !== "13588159631" ||
-    continuationNodeIds[5] !== ENDPOINT_NODE_ID
+    continuationNodeIds.length !== CONTINUATION_NODE_IDS.length ||
+    continuationNodeIds.some(
+      (nodeId, index) => nodeId !== CONTINUATION_NODE_IDS[index],
+    )
   ) {
     throw new Error("Planner 60 continuation connection drifted.");
   }
