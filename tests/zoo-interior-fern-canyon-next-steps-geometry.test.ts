@@ -55,7 +55,15 @@ test("Planner 65 records reverse source-order traversal without inferring oneWay
 });
 
 test("Planner 65 remains blocked on far-end topology and route semantics", () => {
-  assert.deepEqual(assessInteriorFernCanyonNextStepsGeometry(), {
+  const assessment = assessInteriorFernCanyonNextStepsGeometry();
+  assert.deepEqual(
+    {
+      ...assessment,
+      routeGraphExpansion: {
+        ...assessment.routeGraphExpansion,
+      },
+    },
+    {
     status: "geometry-captured",
     authorityId: "sdz-interior-fern-canyon-next-steps-v1-geometry",
     objectiveSourceRecordId: "sdz-tiger-trail",
@@ -74,7 +82,8 @@ test("Planner 65 remains blocked on far-end topology and route semantics", () =>
         "EXACT_FERN_CANYON_NEXT_STEPS_SEGMENT_SEMANTICS_NOT_QUALIFIED",
       ],
     },
-  });
+    },
+  );
 });
 
 test("Planner 65 does not materialize RouteEdge semantics", () => {
@@ -157,4 +166,205 @@ test("Planner 65 exports and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(authority.nodes[0]), true);
   assert.equal(Object.isFrozen(assessment), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion.reasons), true);
+});
+
+
+test("Planner 65 rejects ordered-node sequence drift", () => {
+  for (const index of [0, 1]) {
+    const forged = mutableClone();
+    (
+      forged.orderedNodeIds as unknown as string[]
+    )[index] = `forged-${index}`;
+
+    assert.throws(
+      () => assertInteriorFernCanyonNextStepsGeometryIntegrity([forged]),
+      /node 1358815963[34] drifted/,
+    );
+  }
+});
+
+test("Planner 65 rejects way and node provenance URL drift", () => {
+  const wayForged = mutableClone() as unknown as {
+    sourceWayUrl: string;
+    sourceWayVersionUrl: string;
+  };
+  wayForged.sourceWayUrl = "https://example.com/forged-way";
+  wayForged.sourceWayVersionUrl = "https://example.com/forged-version";
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsGeometryIntegrity([
+        wayForged as unknown as InteriorFernCanyonNextStepsGeometryAuthority,
+      ]),
+    /geometry drifted/,
+  );
+
+  for (const index of [0, 1]) {
+    const nodeForged = mutableClone();
+    (
+      nodeForged.nodes[index] as unknown as {
+        sourceUrl: string;
+      }
+    ).sourceUrl = "https://example.com/forged-node";
+
+    assert.throws(
+      () => assertInteriorFernCanyonNextStepsGeometryIntegrity([nodeForged]),
+      /drifted from captured version-pinned geometry/,
+    );
+  }
+});
+
+test("Planner 65 rejects Proxy-backed authority and nested geometry input", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const authorityProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter((key) => key !== "routeNodeId");
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsGeometryIntegrity([
+        authorityProxy as unknown as InteriorFernCanyonNextStepsGeometryAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nestedArray = mutableClone() as unknown as {
+    nodes: readonly unknown[];
+  };
+  nestedArray.nodes = new Proxy([...nestedArray.nodes], {});
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsGeometryIntegrity([
+        nestedArray as unknown as InteriorFernCanyonNextStepsGeometryAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nestedNode = mutableClone() as unknown as {
+    nodes: unknown[];
+  };
+  nestedNode.nodes[0] = new Proxy(
+    nestedNode.nodes[0] as object,
+    {},
+  );
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsGeometryIntegrity([
+        nestedNode as unknown as InteriorFernCanyonNextStepsGeometryAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
+
+test("Planner 65 rejects mutation during nested reflective validation", () => {
+  const original = mutableClone();
+  const replacement = mutableClone();
+  const collection = [original];
+
+  const nodesTarget = [...original.nodes] as unknown[];
+  const nodesProxy = new Proxy(nodesTarget, {
+    getPrototypeOf(inner) {
+      collection[0] = replacement;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+  (original as unknown as { nodes: unknown }).nodes = nodesProxy;
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsGeometryIntegrity(collection),
+    /cannot be Proxy-backed or otherwise uncloneable|cannot mutate during validation/,
+  );
+});
+
+test("Planner 65 retains its captured clone primitive against caller traps", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const recordProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter((key) => key !== "routeNodeId");
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  const collection = [
+    recordProxy as unknown as InteriorFernCanyonNextStepsGeometryAuthority,
+  ];
+  const originalStructuredClone = globalThis.structuredClone;
+  const outerProxy = new Proxy(collection, {
+    getPrototypeOf(inner) {
+      globalThis.structuredClone = ((value: unknown) =>
+        value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsGeometryIntegrity(outerProxy),
+      /cannot be Proxy-backed or otherwise uncloneable/,
+    );
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
+
+test("Planner 65 assessment is isolated from Object.prototype pollution", () => {
+  Object.defineProperty(Object.prototype, "routeNodeId", {
+    configurable: true,
+    value: "polluted",
+  });
+  Object.defineProperty(Object.prototype, "distanceMeters", {
+    configurable: true,
+    value: 999,
+  });
+
+  try {
+    const assessment = assessInteriorFernCanyonNextStepsGeometry();
+    assert.equal(Object.getPrototypeOf(assessment), null);
+    assert.equal(Object.getPrototypeOf(assessment.routeGraphExpansion), null);
+    assert.equal(
+      "routeNodeId" in (assessment as unknown as Record<string, unknown>),
+      false,
+    );
+    assert.equal(
+      "distanceMeters" in
+        (assessment.routeGraphExpansion as unknown as Record<string, unknown>),
+      false,
+    );
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).routeNodeId;
+    delete (Object.prototype as Record<string, unknown>).distanceMeters;
+  }
 });
