@@ -10,6 +10,7 @@ const ENDPOINT_NODE_ID = "13588159633" as const;
 const INBOUND_WAY_ID = "1481578623" as const;
 const CONTINUATION_WAY_ID = "1481578624" as const;
 const SOURCE_CHANGESET = 178875075 as const;
+const STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 
 const INBOUND_NODE_IDS = [
   "13588159627",
@@ -170,6 +171,33 @@ function nullRecord<T extends object>(value: T): T {
   return result;
 }
 
+function assertStructuredCloneSafe(
+  value: unknown,
+  label: string,
+): void {
+  try {
+    STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or otherwise uncloneable.`,
+    );
+  }
+}
+
+function ownDataValue(
+  value: object,
+  field: string,
+  label: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+    throw new Error(
+      `${label} requires enumerable own data field ${field}.`,
+    );
+  }
+  return descriptor.value;
+}
+
 function assertPlain(
   value: unknown,
   fields: readonly string[],
@@ -315,39 +343,88 @@ const RAW_AUTHORITY: InteriorFernCanyonBridgeFarEndpointTopologyAuthority[] = [
 export function assertInteriorFernCanyonBridgeFarEndpointTopologyIntegrity(
   authorities: readonly InteriorFernCanyonBridgeFarEndpointTopologyAuthority[],
 ): void {
-  assertArray(authorities, 1, "Planner 64 authority collection");
-  const candidate = authorities[0] as unknown;
-  assertPlain(candidate, TOP_LEVEL_FIELDS, "Planner 64 authority");
-  assertNoRouteMaterialization(candidate, "Planner 64 authority");
+  const collectionLabel = "Planner 64 authority collection";
+  const authorityLabel = "Planner 64 authority";
+  const coordinateLabel = "Planner 64 endpoint coordinate";
+  const waysLabel = "Planner 64 connected way collection";
+  const inboundLabel = "Planner 64 inbound connection";
+  const continuationLabel = "Planner 64 continuation connection";
+  const inboundNodesLabel = "Planner 64 inbound node sequence";
+  const continuationNodesLabel = "Planner 64 continuation node sequence";
+
+  assertArray(authorities, 1, collectionLabel);
+  const candidate = ownDataValue(authorities, "0", collectionLabel);
+  assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
+
+  const endpointCoordinate = ownDataValue(
+    candidate,
+    "endpointCoordinate",
+    authorityLabel,
+  );
+  const connectedWays = ownDataValue(
+    candidate,
+    "connectedWays",
+    authorityLabel,
+  );
+  assertPlain(endpointCoordinate, COORDINATE_FIELDS, coordinateLabel);
+  assertArray(connectedWays, 2, waysLabel);
+
+  const inboundRecord = ownDataValue(connectedWays, "0", waysLabel);
+  const continuationRecord = ownDataValue(connectedWays, "1", waysLabel);
+  assertPlain(
+    inboundRecord,
+    [...CONNECTION_BASE_FIELDS, ...INBOUND_EXTRA_FIELDS],
+    inboundLabel,
+  );
+  assertPlain(
+    continuationRecord,
+    [...CONNECTION_BASE_FIELDS, ...CONTINUATION_EXTRA_FIELDS],
+    continuationLabel,
+  );
+
+  const inboundNodeIds = ownDataValue(
+    inboundRecord,
+    "orderedNodeIds",
+    inboundLabel,
+  );
+  const continuationNodeIds = ownDataValue(
+    continuationRecord,
+    "orderedNodeIds",
+    continuationLabel,
+  );
+  assertArray(inboundNodeIds, 3, inboundNodesLabel);
+  assertArray(continuationNodeIds, 2, continuationNodesLabel);
+
+  assertStructuredCloneSafe(authorities, collectionLabel);
+
+  if (
+    ownDataValue(authorities, "0", collectionLabel) !== candidate ||
+    ownDataValue(candidate, "endpointCoordinate", authorityLabel) !==
+      endpointCoordinate ||
+    ownDataValue(candidate, "connectedWays", authorityLabel) !== connectedWays ||
+    ownDataValue(connectedWays, "0", waysLabel) !== inboundRecord ||
+    ownDataValue(connectedWays, "1", waysLabel) !== continuationRecord ||
+    ownDataValue(inboundRecord, "orderedNodeIds", inboundLabel) !==
+      inboundNodeIds ||
+    ownDataValue(continuationRecord, "orderedNodeIds", continuationLabel) !==
+      continuationNodeIds
+  ) {
+    throw new Error(
+      "Planner 64 authority graph cannot mutate during validation.",
+    );
+  }
+
+  assertNoRouteMaterialization(candidate, authorityLabel);
+  assertNoRouteMaterialization(endpointCoordinate, coordinateLabel);
+  assertNoRouteMaterialization(inboundRecord, inboundLabel);
+  assertNoRouteMaterialization(continuationRecord, continuationLabel);
 
   const authority =
     candidate as unknown as InteriorFernCanyonBridgeFarEndpointTopologyAuthority;
-  assertPlain(
-    authority.endpointCoordinate,
-    COORDINATE_FIELDS,
-    "Planner 64 endpoint coordinate",
-  );
-  assertArray(authority.connectedWays, 2, "Planner 64 connected way collection");
-
-  const inbound = authority.connectedWays[0];
-  const continuation = authority.connectedWays[1];
-  assertPlain(
-    inbound,
-    [...CONNECTION_BASE_FIELDS, ...INBOUND_EXTRA_FIELDS],
-    "Planner 64 inbound connection",
-  );
-  assertPlain(
-    continuation,
-    [...CONNECTION_BASE_FIELDS, ...CONTINUATION_EXTRA_FIELDS],
-    "Planner 64 continuation connection",
-  );
-  assertArray(inbound.orderedNodeIds, 3, "Planner 64 inbound node sequence");
-  assertArray(
-    continuation.orderedNodeIds,
-    2,
-    "Planner 64 continuation node sequence",
-  );
-
+  const inbound =
+    inboundRecord as unknown as FernCanyonBridgeFarEndpointConnection;
+  const continuation =
+    continuationRecord as unknown as FernCanyonBridgeFarEndpointConnection;
   const geometry = INTERIOR_FERN_CANYON_BRIDGE_FOOTWAY_GEOMETRY[0];
   const endpointNode = geometry.nodes[2];
 
@@ -379,10 +456,27 @@ export function assertInteriorFernCanyonBridgeFarEndpointTopologyIntegrity(
 
   if (
     geometry.sourceWayId !== INBOUND_WAY_ID ||
+    geometry.sourceWayUrl !== "https://www.openstreetmap.org/way/1481578623" ||
+    geometry.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578623/1" ||
+    geometry.sourceWayVersion !== 1 ||
+    geometry.sourceWayTimestamp !== TARGET_TIMESTAMP ||
+    geometry.sourceWayChangeset !== SOURCE_CHANGESET ||
+    geometry.sourceHighway !== "footway" ||
+    geometry.sourceName !== "Fern Canyon Trail" ||
+    geometry.sourceBridge !== "yes" ||
+    geometry.sourceLayer !== "1" ||
     geometry.traversalToNodeId !== authority.endpointNodeId ||
     endpointNode.sourceObjectId !== authority.endpointNodeId ||
+    endpointNode.sourceVersion !== authority.endpointCoordinate.sourceVersion ||
+    endpointNode.sourceTimestamp !== authority.endpointCoordinate.sourceTimestamp ||
+    endpointNode.sourceChangeset !== authority.endpointCoordinate.sourceChangeset ||
     endpointNode.lat !== authority.endpointCoordinate.lat ||
-    endpointNode.lng !== authority.endpointCoordinate.lng
+    endpointNode.lng !== authority.endpointCoordinate.lng ||
+    endpointNode.sourceVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/node/13588159633/1" ||
+    endpointNode.sourceUrl !==
+      "https://www.openstreetmap.org/node/13588159633"
   ) {
     throw new Error(
       "Planner 64 detached from Planner 63 version-pinned bridge geometry.",
@@ -391,13 +485,22 @@ export function assertInteriorFernCanyonBridgeFarEndpointTopologyIntegrity(
 
   if (
     inbound.sourceWayId !== INBOUND_WAY_ID ||
+    inbound.sourceWayVersion !== 1 ||
+    inbound.sourceWayTimestamp !== TARGET_TIMESTAMP ||
+    inbound.sourceWayChangeset !== SOURCE_CHANGESET ||
+    inbound.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578623/1" ||
+    inbound.sourceWayUrl !== "https://www.openstreetmap.org/way/1481578623" ||
     inbound.sourceHighway !== "footway" ||
+    inbound.sourceName !== "Fern Canyon Trail" ||
     inbound.sourceBridge !== "yes" ||
     inbound.sourceLayer !== "1" ||
     inbound.endpointNodeIndex !== 2 ||
     inbound.connectionRole !== "inbound-bridge-footway-segment" ||
-    inbound.orderedNodeIds[0] !== "13588159627" ||
-    inbound.orderedNodeIds[2] !== ENDPOINT_NODE_ID
+    inboundNodeIds.length !== INBOUND_NODE_IDS.length ||
+    inboundNodeIds.some(
+      (nodeId, index) => nodeId !== INBOUND_NODE_IDS[index],
+    )
   ) {
     throw new Error("Planner 64 inbound bridge-footway connection drifted.");
   }
@@ -407,13 +510,19 @@ export function assertInteriorFernCanyonBridgeFarEndpointTopologyIntegrity(
     continuation.sourceWayVersion !== 1 ||
     continuation.sourceWayTimestamp !== TARGET_TIMESTAMP ||
     continuation.sourceWayChangeset !== SOURCE_CHANGESET ||
+    continuation.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578624/1" ||
+    continuation.sourceWayUrl !==
+      "https://www.openstreetmap.org/way/1481578624" ||
     continuation.sourceHighway !== "steps" ||
     continuation.sourceIncline !== "up" ||
     continuation.sourceName !== "Fern Canyon Trail" ||
     continuation.endpointNodeIndex !== 1 ||
     continuation.connectionRole !== "onward-steps-continuation" ||
-    continuation.orderedNodeIds[0] !== "13588159634" ||
-    continuation.orderedNodeIds[1] !== ENDPOINT_NODE_ID
+    continuationNodeIds.length !== CONTINUATION_NODE_IDS.length ||
+    continuationNodeIds.some(
+      (nodeId, index) => nodeId !== CONTINUATION_NODE_IDS[index],
+    )
   ) {
     throw new Error("Planner 64 continuation connection drifted.");
   }
@@ -427,17 +536,19 @@ export const INTERIOR_FERN_CANYON_BRIDGE_FAR_ENDPOINT_TOPOLOGY:
 
 export function assessInteriorFernCanyonBridgeFarEndpointTopology():
   InteriorFernCanyonBridgeFarEndpointTopologyAssessment {
-  return deepFreeze({
-    status: "endpoint-topology-sourced",
-    authorityId: AUTHORITY_ID,
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    endpointNodeId: ENDPOINT_NODE_ID,
-    historicalConnectedWayCount: 2,
-    selectedContinuationWayId: CONTINUATION_WAY_ID,
-    selectedContinuationHighway: "steps",
-    routeGraphExpansion: {
-      status: "blocked",
-      reasons: [...BLOCK_REASONS],
-    },
-  });
+  return deepFreeze(
+    nullRecord<InteriorFernCanyonBridgeFarEndpointTopologyAssessment>({
+      status: "endpoint-topology-sourced",
+      authorityId: AUTHORITY_ID,
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      endpointNodeId: ENDPOINT_NODE_ID,
+      historicalConnectedWayCount: 2,
+      selectedContinuationWayId: CONTINUATION_WAY_ID,
+      selectedContinuationHighway: "steps",
+      routeGraphExpansion: nullRecord({
+        status: "blocked",
+        reasons: [...BLOCK_REASONS],
+      }),
+    }),
+  );
 }
