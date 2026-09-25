@@ -11,6 +11,7 @@ const SOURCE_WAY_TIMESTAMP = "2026-02-21T20:08:08Z" as const;
 const SOURCE_WAY_CHANGESET = 178875075 as const;
 const FROM_NODE_ID = "13588159627" as const;
 const TO_NODE_ID = "13588159633" as const;
+const STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 
 const NODE_TUPLES = [
   ["13588159627", 32.7357192, -117.1500664],
@@ -157,6 +158,33 @@ function nullRecord<T extends object>(value: T): T {
   return result;
 }
 
+function assertStructuredCloneSafe(
+  value: unknown,
+  label: string,
+): void {
+  try {
+    STRUCTURED_CLONE(value);
+  } catch {
+    throw new Error(
+      `${label} cannot be Proxy-backed or otherwise uncloneable.`,
+    );
+  }
+}
+
+function ownDataValue(
+  value: object,
+  field: string,
+  label: string,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, field);
+  if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+    throw new Error(
+      `${label} requires enumerable own data field ${field}.`,
+    );
+  }
+  return descriptor.value;
+}
+
 function assertPlain(
   value: unknown,
   fields: readonly string[],
@@ -285,24 +313,62 @@ const RAW_AUTHORITY: InteriorFernCanyonBridgeFootwayGeometryAuthority[] = [
 export function assertInteriorFernCanyonBridgeFootwayGeometryIntegrity(
   authorities: readonly InteriorFernCanyonBridgeFootwayGeometryAuthority[],
 ): void {
-  assertArray(authorities, 1, "Planner 63 authority collection");
-  const candidate = authorities[0] as unknown;
-  assertPlain(candidate, TOP_LEVEL_FIELDS, "Planner 63 authority");
-  assertNoRouteMaterialization(candidate, "Planner 63 authority");
+  const collectionLabel = "Planner 63 authority collection";
+  const authorityLabel = "Planner 63 authority";
+  const orderedNodeIdsLabel = "Planner 63 ordered node sequence";
+  const nodesLabel = "Planner 63 node provenance collection";
 
-  const authority =
-    candidate as unknown as InteriorFernCanyonBridgeFootwayGeometryAuthority;
-  assertArray(authority.orderedNodeIds, 3, "Planner 63 ordered node sequence");
-  assertArray(authority.nodes, 3, "Planner 63 node provenance collection");
+  assertArray(authorities, 1, collectionLabel);
+  const candidate = ownDataValue(authorities, "0", collectionLabel);
+  assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
+
+  const orderedNodeIds = ownDataValue(
+    candidate,
+    "orderedNodeIds",
+    authorityLabel,
+  );
+  const nodes = ownDataValue(candidate, "nodes", authorityLabel);
+  assertArray(orderedNodeIds, 3, orderedNodeIdsLabel);
+  assertArray(nodes, 3, nodesLabel);
+
+  const capturedNodes: Record<string, unknown>[] = [];
+  for (let index = 0; index < 3; index += 1) {
+    const nodeLabel = `Planner 63 node ${index}`;
+    const node = ownDataValue(nodes, String(index), nodesLabel);
+    assertPlain(node, NODE_FIELDS, nodeLabel);
+    capturedNodes.push(node);
+  }
+
+  assertStructuredCloneSafe(authorities, collectionLabel);
+
+  if (
+    ownDataValue(authorities, "0", collectionLabel) !== candidate ||
+    ownDataValue(candidate, "orderedNodeIds", authorityLabel) !== orderedNodeIds ||
+    ownDataValue(candidate, "nodes", authorityLabel) !== nodes
+  ) {
+    throw new Error(
+      "Planner 63 authority graph cannot mutate during validation.",
+    );
+  }
 
   for (let index = 0; index < 3; index += 1) {
-    assertPlain(authority.nodes[index], NODE_FIELDS, `Planner 63 node ${index}`);
+    if (ownDataValue(nodes, String(index), nodesLabel) !== capturedNodes[index]) {
+      throw new Error(
+        "Planner 63 authority graph cannot mutate during validation.",
+      );
+    }
+  }
+
+  assertNoRouteMaterialization(candidate, authorityLabel);
+  for (let index = 0; index < 3; index += 1) {
     assertNoRouteMaterialization(
-      authority.nodes[index] as unknown as Record<string, unknown>,
+      capturedNodes[index],
       `Planner 63 node ${index}`,
     );
   }
 
+  const authority =
+    candidate as unknown as InteriorFernCanyonBridgeFootwayGeometryAuthority;
   const prior = INTERIOR_FERN_CANYON_STEPS_FAR_ENDPOINT_TOPOLOGY[0];
   const selected = prior.connectedWays[1];
 
@@ -311,6 +377,9 @@ export function assertInteriorFernCanyonBridgeFootwayGeometryIntegrity(
     authority.provider !== "OpenStreetMap" ||
     authority.objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID ||
     authority.sourceWayId !== SOURCE_WAY_ID ||
+    authority.sourceWayUrl !== "https://www.openstreetmap.org/way/1481578623" ||
+    authority.sourceWayVersionUrl !==
+      "https://api.openstreetmap.org/api/0.6/way/1481578623/1" ||
     authority.sourceWayVersion !== SOURCE_WAY_VERSION ||
     authority.sourceWayTimestamp !== SOURCE_WAY_TIMESTAMP ||
     authority.sourceWayChangeset !== SOURCE_WAY_CHANGESET ||
@@ -334,7 +403,11 @@ export function assertInteriorFernCanyonBridgeFootwayGeometryIntegrity(
 
   if (
     prior.selectedContinuationWayId !== authority.sourceWayId ||
+    prior.selectedContinuationHighway !== authority.sourceHighway ||
+    prior.selectedContinuationName !== authority.sourceName ||
     selected.sourceWayId !== authority.sourceWayId ||
+    selected.sourceWayUrl !== authority.sourceWayUrl ||
+    selected.sourceWayVersionUrl !== authority.sourceWayVersionUrl ||
     selected.sourceWayVersion !== authority.sourceWayVersion ||
     selected.sourceWayTimestamp !== authority.sourceWayTimestamp ||
     selected.sourceWayChangeset !== authority.sourceWayChangeset ||
@@ -362,7 +435,9 @@ export function assertInteriorFernCanyonBridgeFootwayGeometryIntegrity(
       node.lat !== lat ||
       node.lng !== lng ||
       node.sourceVersionUrl !==
-        `https://api.openstreetmap.org/api/0.6/node/${id}/1`
+        `https://api.openstreetmap.org/api/0.6/node/${id}/1` ||
+      node.sourceUrl !==
+        `https://www.openstreetmap.org/node/${id}`
     ) {
       throw new Error(
         `Planner 63 node ${id} drifted from captured version-pinned geometry.`,
@@ -379,20 +454,22 @@ export const INTERIOR_FERN_CANYON_BRIDGE_FOOTWAY_GEOMETRY:
 
 export function assessInteriorFernCanyonBridgeFootwayGeometry():
   InteriorFernCanyonBridgeFootwayGeometryAssessment {
-  return deepFreeze({
-    status: "geometry-captured",
-    authorityId: AUTHORITY_ID,
-    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
-    sourceWayId: SOURCE_WAY_ID,
-    sourceWayVersion: SOURCE_WAY_VERSION,
-    sourceWayNodeCount: 3,
-    traversalFromNodeId: FROM_NODE_ID,
-    traversalToNodeId: TO_NODE_ID,
-    coordinateProvenance: "version-pinned",
-    farEndpointTopologyStatus: "not-frozen",
-    routeGraphExpansion: {
-      status: "blocked",
-      reasons: [...BLOCK_REASONS],
-    },
-  });
+  return deepFreeze(
+    nullRecord<InteriorFernCanyonBridgeFootwayGeometryAssessment>({
+      status: "geometry-captured",
+      authorityId: AUTHORITY_ID,
+      objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+      sourceWayId: SOURCE_WAY_ID,
+      sourceWayVersion: SOURCE_WAY_VERSION,
+      sourceWayNodeCount: 3,
+      traversalFromNodeId: FROM_NODE_ID,
+      traversalToNodeId: TO_NODE_ID,
+      coordinateProvenance: "version-pinned",
+      farEndpointTopologyStatus: "not-frozen",
+      routeGraphExpansion: nullRecord({
+        status: "blocked",
+        reasons: [...BLOCK_REASONS],
+      }),
+    }),
+  );
 }
