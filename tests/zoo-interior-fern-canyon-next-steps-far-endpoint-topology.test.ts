@@ -536,3 +536,37 @@ test("Planner 66 rejects route fields despite Array.prototype iterator pollution
     Array.prototype[Symbol.iterator] = originalIterator;
   }
 });
+
+
+test("Planner 66 rejects inbound extras under attacker-controlled array iteration", () => {
+  const forged = mutableClone();
+  const inbound = forged.connectedWays[0] as unknown as Record<string, unknown>;
+  inbound.unexpected = "forged";
+
+  const originalIterator = Array.prototype[Symbol.iterator];
+  Array.prototype[Symbol.iterator] = function* () {
+    yield "sourceWayId";
+    yield "sourceWayVersion";
+    yield "sourceWayTimestamp";
+    yield "sourceWayChangeset";
+    yield "sourceWayVersionUrl";
+    yield "sourceWayUrl";
+    yield "sourceHighway";
+    yield "orderedNodeIds";
+    yield "endpointNodeIndex";
+    yield "connectionRole";
+    yield "sourceName";
+    yield "sourceIncline";
+    yield "unexpected";
+  };
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /inbound connection cannot contain unknown field unexpected/,
+    );
+  } finally {
+    Array.prototype[Symbol.iterator] = originalIterator;
+  }
+});
