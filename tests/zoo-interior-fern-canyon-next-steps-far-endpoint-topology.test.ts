@@ -515,3 +515,24 @@ test("Planner 66 shape checks reject extras despite Set.prototype.has pollution"
     Set.prototype.has = originalHas;
   }
 });
+
+
+test("Planner 66 rejects route fields despite Array.prototype iterator pollution", () => {
+  const forged = mutableClone() as unknown as Record<string, unknown>;
+  forged.routeNodeId = "forged-route-node";
+
+  const originalIterator = Array.prototype[Symbol.iterator];
+  Array.prototype[Symbol.iterator] = function* () {};
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+          forged as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+        ]),
+      /cannot contain unknown field routeNodeId|cannot materialize route field routeNodeId/,
+    );
+  } finally {
+    Array.prototype[Symbol.iterator] = originalIterator;
+  }
+});
