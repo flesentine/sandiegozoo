@@ -124,6 +124,21 @@ const CONNECTION_BASE_FIELDS = [
 
 const INBOUND_EXTRA_FIELDS = ["sourceName", "sourceIncline"] as const;
 
+const INBOUND_FIELDS = [
+  "sourceWayId",
+  "sourceWayVersion",
+  "sourceWayTimestamp",
+  "sourceWayChangeset",
+  "sourceWayVersionUrl",
+  "sourceWayUrl",
+  "sourceHighway",
+  "orderedNodeIds",
+  "endpointNodeIndex",
+  "connectionRole",
+  "sourceName",
+  "sourceIncline",
+] as const;
+
 const FORBIDDEN_ROUTE_FIELDS = [
   "fromNodeId",
   "toNodeId",
@@ -393,7 +408,7 @@ export function assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(
   const continuationRecord = ownDataValue(connectedWays, "1", waysLabel);
   assertPlain(
     inboundRecord,
-    [...CONNECTION_BASE_FIELDS, ...INBOUND_EXTRA_FIELDS],
+    INBOUND_FIELDS,
     inboundLabel,
   );
   assertPlain(
