@@ -476,3 +476,42 @@ test("Planner 66 array-shape checks reject extras despite Array.prototype.some p
     Array.prototype.some = originalSome;
   }
 });
+
+
+test("Planner 66 record-shape checks reject extras despite Array.prototype.filter pollution", () => {
+  const originalFilter = Array.prototype.filter;
+  Array.prototype.filter = (() => []) as typeof Array.prototype.filter;
+
+  try {
+    const forged = mutableClone() as unknown as Record<string, unknown>;
+    forged.unexpected = "forged";
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+          forged as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+        ]),
+      /authority cannot contain unknown field unexpected/,
+    );
+  } finally {
+    Array.prototype.filter = originalFilter;
+  }
+});
+
+test("Planner 66 shape checks reject extras despite Set.prototype.has pollution", () => {
+  const originalHas = Set.prototype.has;
+  Set.prototype.has = (() => true) as typeof Set.prototype.has;
+
+  try {
+    const forged = mutableClone();
+    (
+      forged.connectedWays as unknown as unknown[] & { extra?: string }
+    ).extra = "forged";
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /connected way collection cannot contain extra own properties/,
+    );
+  } finally {
+    Set.prototype.has = originalHas;
+  }
+});
