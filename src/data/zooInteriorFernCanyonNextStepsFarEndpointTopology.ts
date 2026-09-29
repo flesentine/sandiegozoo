@@ -247,12 +247,10 @@ function assertArray(
     ...Array.from({ length }, (_, index) => String(index)),
     "length",
   ]);
-  if (
-    Reflect.ownKeys(value).some(
-      (key) => typeof key !== "string" || !allowed.has(key),
-    )
-  ) {
-    throw new Error(`${label} cannot contain extra own properties.`);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string" || !allowed.has(key)) {
+      throw new Error(`${label} cannot contain extra own properties.`);
+    }
   }
   for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
