@@ -48,7 +48,15 @@ test("Planner 66 selects the unique onward unnamed footway without inventing a n
 });
 
 test("Planner 66 keeps unnamed-footway geometry fail-closed until the new node coordinate is captured", () => {
-  assert.deepEqual(assessInteriorFernCanyonNextStepsFarEndpointTopology(), {
+  const assessment = assessInteriorFernCanyonNextStepsFarEndpointTopology();
+  assert.deepEqual(
+    {
+      ...assessment,
+      routeGraphExpansion: {
+        ...assessment.routeGraphExpansion,
+      },
+    },
+    {
     status: "endpoint-topology-sourced",
     authorityId: "sdz-interior-fern-canyon-next-steps-far-endpoint-topology",
     objectiveSourceRecordId: "sdz-tiger-trail",
@@ -64,7 +72,8 @@ test("Planner 66 keeps unnamed-footway geometry fail-closed until the new node c
         "EXACT_UNNAMED_FOOTWAY_SEGMENT_PROVENANCE_NOT_COMPLETE",
       ],
     },
-  });
+    },
+  );
 });
 
 test("Planner 66 does not materialize route semantics", () => {
@@ -155,4 +164,254 @@ test("Planner 66 authority and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(authority.connectedWays[1].orderedNodeIds), true);
   assert.equal(Object.isFrozen(assessment), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion.reasons), true);
+});
+
+
+test("Planner 66 rejects complete inbound sequence and provenance drift", () => {
+  const sequenceForged = mutableClone();
+  (
+    sequenceForged.connectedWays[0].orderedNodeIds as unknown as string[]
+  )[1] = "forged-inbound-node";
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+        sequenceForged,
+      ]),
+    /inbound steps connection drifted/,
+  );
+
+  const mutations: Array<
+    (inbound: Record<string, unknown>) => void
+  > = [
+    (inbound) => {
+      inbound.sourceWayVersion = 2;
+    },
+    (inbound) => {
+      inbound.sourceWayTimestamp = "2026-02-21T20:09:00Z";
+    },
+    (inbound) => {
+      inbound.sourceWayChangeset = 999;
+    },
+    (inbound) => {
+      inbound.sourceWayVersionUrl = "https://example.com/forged-version";
+    },
+    (inbound) => {
+      inbound.sourceWayUrl = "https://example.com/forged-way";
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const forged = mutableClone();
+    const inbound =
+      forged.connectedWays[0] as unknown as Record<string, unknown>;
+    mutate(inbound);
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /inbound steps connection drifted/,
+    );
+  }
+});
+
+test("Planner 66 rejects continuation provenance and node-sequence drift", () => {
+  const mutations: Array<
+    (continuation: Record<string, unknown>) => void
+  > = [
+    (continuation) => {
+      continuation.sourceWayVersionUrl = "https://example.com/forged-version";
+    },
+    (continuation) => {
+      continuation.sourceWayUrl = "https://example.com/forged-way";
+    },
+    (continuation) => {
+      continuation.sourceWayChangeset = 999;
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const forged = mutableClone();
+    const continuation =
+      forged.connectedWays[1] as unknown as Record<string, unknown>;
+    mutate(continuation);
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /continuation connection drifted/,
+    );
+  }
+
+  const sequenceForged = mutableClone();
+  (
+    sequenceForged.connectedWays[1].orderedNodeIds as unknown as string[]
+  )[1] = "forged-continuation-node";
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+        sequenceForged,
+      ]),
+    /continuation connection drifted/,
+  );
+});
+
+test("Planner 66 rejects Proxy-backed authority and nested topology input", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const authorityProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter((key) => key !== "routeNodeId");
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+        authorityProxy as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nestedWays = mutableClone() as unknown as {
+    connectedWays: readonly unknown[];
+  };
+  nestedWays.connectedWays = new Proxy([...nestedWays.connectedWays], {});
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+        nestedWays as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+
+  const nestedSequence = mutableClone() as unknown as {
+    connectedWays: Array<{ orderedNodeIds: readonly string[] }>;
+  };
+  nestedSequence.connectedWays[1].orderedNodeIds = new Proxy(
+    [...nestedSequence.connectedWays[1].orderedNodeIds],
+    {},
+  );
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([
+        nestedSequence as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+      ]),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
+
+test("Planner 66 rejects mutation during nested reflective validation", () => {
+  const original = mutableClone();
+  const replacement = mutableClone();
+  const collection = [original];
+
+  const waysTarget = [...original.connectedWays] as unknown[];
+  const waysProxy = new Proxy(waysTarget, {
+    getPrototypeOf(inner) {
+      collection[0] = replacement;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+  (original as unknown as { connectedWays: unknown }).connectedWays =
+    waysProxy;
+
+  assert.throws(
+    () =>
+      assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(collection),
+    /cannot be Proxy-backed or otherwise uncloneable|cannot mutate during validation/,
+  );
+});
+
+test("Planner 66 retains its captured clone primitive against caller traps", () => {
+  const target = mutableClone() as unknown as Record<string, unknown>;
+  Object.defineProperty(target, "routeNodeId", {
+    configurable: true,
+    enumerable: true,
+    value: "hidden-route-node",
+  });
+
+  const recordProxy = new Proxy(target, {
+    ownKeys(inner) {
+      return Reflect.ownKeys(inner).filter((key) => key !== "routeNodeId");
+    },
+    getOwnPropertyDescriptor(inner, property) {
+      if (property === "routeNodeId") return undefined;
+      return Reflect.getOwnPropertyDescriptor(inner, property);
+    },
+    has(inner, property) {
+      if (property === "routeNodeId") return false;
+      return Reflect.has(inner, property);
+    },
+  });
+
+  const collection = [
+    recordProxy as unknown as InteriorFernCanyonNextStepsFarEndpointTopologyAuthority,
+  ];
+  const originalStructuredClone = globalThis.structuredClone;
+  const outerProxy = new Proxy(collection, {
+    getPrototypeOf(inner) {
+      globalThis.structuredClone = ((value: unknown) =>
+        value) as typeof structuredClone;
+      return Reflect.getPrototypeOf(inner);
+    },
+  });
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(
+          outerProxy,
+        ),
+      /cannot be Proxy-backed or otherwise uncloneable/,
+    );
+  } finally {
+    globalThis.structuredClone = originalStructuredClone;
+  }
+});
+
+test("Planner 66 assessment is isolated from Object.prototype pollution", () => {
+  Object.defineProperty(Object.prototype, "routeNodeId", {
+    configurable: true,
+    value: "polluted",
+  });
+  Object.defineProperty(Object.prototype, "distanceMeters", {
+    configurable: true,
+    value: 999,
+  });
+
+  try {
+    const assessment =
+      assessInteriorFernCanyonNextStepsFarEndpointTopology();
+    assert.equal(Object.getPrototypeOf(assessment), null);
+    assert.equal(Object.getPrototypeOf(assessment.routeGraphExpansion), null);
+    assert.equal(
+      "routeNodeId" in (assessment as unknown as Record<string, unknown>),
+      false,
+    );
+    assert.equal(
+      "distanceMeters" in
+        (assessment.routeGraphExpansion as unknown as Record<string, unknown>),
+      false,
+    );
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).routeNodeId;
+    delete (Object.prototype as Record<string, unknown>).distanceMeters;
+  }
 });
