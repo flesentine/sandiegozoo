@@ -147,8 +147,9 @@ const BLOCK_REASONS = [
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const child of Object.values(value as Record<string, unknown>)) {
-      deepFreeze(child);
+    const children = Object.values(value as Record<string, unknown>);
+    for (let index = 0; index < children.length; index += 1) {
+      deepFreeze(children[index]);
     }
     Object.freeze(value);
   }
@@ -157,7 +158,9 @@ function deepFreeze<T>(value: T): T {
 
 function nullRecord<T extends object>(value: T): T {
   const result = Object.create(null) as T;
-  for (const key of Reflect.ownKeys(value)) {
+  const keys = Reflect.ownKeys(value);
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (!descriptor || !("value" in descriptor)) {
       throw new Error("Planner 66 canonical evidence requires data fields.");
@@ -210,14 +213,16 @@ function assertPlain(
     throw new Error(`${label} must be a plain object.`);
   }
 
-  for (const key of Reflect.ownKeys(value)) {
+  const keys = Reflect.ownKeys(value);
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+    const key = keys[keyIndex];
     if (typeof key !== "string") {
       throw new Error(`${label} cannot contain symbol fields.`);
     }
 
     let known = false;
-    for (const field of fields) {
-      if (field === key) {
+    for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+      if (fields[fieldIndex] === key) {
         known = true;
         break;
       }
@@ -227,7 +232,8 @@ function assertPlain(
     }
   }
 
-  for (const field of fields) {
+  for (let fieldIndex = 0; fieldIndex < fields.length; fieldIndex += 1) {
+    const field = fields[fieldIndex];
     if (!Object.hasOwn(value, field)) {
       throw new Error(`${label} is missing required field ${field}.`);
     }
@@ -251,7 +257,9 @@ function assertArray(
     throw new Error(`${label} must be an ordinary array of length ${length}.`);
   }
 
-  for (const key of Reflect.ownKeys(value)) {
+  const keys = Reflect.ownKeys(value);
+  for (let keyIndex = 0; keyIndex < keys.length; keyIndex += 1) {
+    const key = keys[keyIndex];
     if (typeof key !== "string") {
       throw new Error(`${label} cannot contain extra own properties.`);
     }
@@ -281,7 +289,12 @@ function assertNoRouteMaterialization(
   value: Record<string, unknown>,
   label: string,
 ): void {
-  for (const field of FORBIDDEN_ROUTE_FIELDS) {
+  for (
+    let fieldIndex = 0;
+    fieldIndex < FORBIDDEN_ROUTE_FIELDS.length;
+    fieldIndex += 1
+  ) {
+    const field = FORBIDDEN_ROUTE_FIELDS[fieldIndex];
     if (field in value) {
       throw new Error(`${label} cannot materialize route field ${field}.`);
     }
@@ -300,7 +313,7 @@ const INBOUND =
     sourceHighway: "steps",
     sourceName: "Fern Canyon Trail",
     sourceIncline: "up",
-    orderedNodeIds: [...INBOUND_NODE_IDS],
+    orderedNodeIds: [INBOUND_NODE_IDS[0], INBOUND_NODE_IDS[1]],
     endpointNodeIndex: 0,
     connectionRole: "inbound-steps-segment",
   });
@@ -315,7 +328,7 @@ const CONTINUATION =
       "https://api.openstreetmap.org/api/0.6/way/1481578625/1",
     sourceWayUrl: "https://www.openstreetmap.org/way/1481578625",
     sourceHighway: "footway",
-    orderedNodeIds: [...CONTINUATION_NODE_IDS],
+    orderedNodeIds: [CONTINUATION_NODE_IDS[0], CONTINUATION_NODE_IDS[1]],
     endpointNodeIndex: 0,
     connectionRole: "onward-unnamed-footway-continuation",
   });
@@ -552,7 +565,7 @@ export function assessInteriorFernCanyonNextStepsFarEndpointTopology():
       selectedContinuationNameStatus: "absent",
       routeGraphExpansion: nullRecord({
         status: "blocked",
-        reasons: [...BLOCK_REASONS],
+        reasons: [BLOCK_REASONS[0], BLOCK_REASONS[1]],
       }),
     }),
   );
