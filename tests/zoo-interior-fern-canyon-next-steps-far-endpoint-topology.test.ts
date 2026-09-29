@@ -415,3 +415,22 @@ test("Planner 66 assessment is isolated from Object.prototype pollution", () => 
     delete (Object.prototype as Record<string, unknown>).distanceMeters;
   }
 });
+
+
+test("Planner 66 rejects inherited names on the unnamed continuation", () => {
+  Object.defineProperty(Object.prototype, "sourceName", {
+    configurable: true,
+    value: "Polluted Trail",
+  });
+
+  try {
+    const forged = mutableClone();
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /continuation connection drifted/,
+    );
+  } finally {
+    delete (Object.prototype as Record<string, unknown>).sourceName;
+  }
+});
