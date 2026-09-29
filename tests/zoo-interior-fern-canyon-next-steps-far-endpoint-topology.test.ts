@@ -455,3 +455,24 @@ test("Planner 66 exact node-sequence checks ignore Array.prototype.some pollutio
     Array.prototype.some = originalSome;
   }
 });
+
+
+test("Planner 66 array-shape checks reject extras despite Array.prototype.some pollution", () => {
+  const originalSome = Array.prototype.some;
+  Array.prototype.some = (() => false) as typeof Array.prototype.some;
+
+  try {
+    const forged = mutableClone();
+    (
+      forged.connectedWays as unknown as unknown[] & { extra?: string }
+    ).extra = "forged";
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /connected way collection cannot contain extra own properties/,
+    );
+  } finally {
+    Array.prototype.some = originalSome;
+  }
+});
