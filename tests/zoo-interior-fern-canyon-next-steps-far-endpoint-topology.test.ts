@@ -434,3 +434,24 @@ test("Planner 66 rejects inherited names on the unnamed continuation", () => {
     delete (Object.prototype as Record<string, unknown>).sourceName;
   }
 });
+
+
+test("Planner 66 exact node-sequence checks ignore Array.prototype.some pollution", () => {
+  const originalSome = Array.prototype.some;
+  Array.prototype.some = (() => false) as typeof Array.prototype.some;
+
+  try {
+    const forged = mutableClone();
+    (
+      forged.connectedWays[1].orderedNodeIds as unknown as string[]
+    )[1] = "forged-continuation-node";
+
+    assert.throws(
+      () =>
+        assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity([forged]),
+      /continuation connection drifted/,
+    );
+  } finally {
+    Array.prototype.some = originalSome;
+  }
+});
