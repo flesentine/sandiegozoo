@@ -507,7 +507,7 @@ export function assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(
     continuation.sourceWayUrl !==
       "https://www.openstreetmap.org/way/1481578625" ||
     continuation.sourceHighway !== "footway" ||
-    Object.hasOwn(continuation, "sourceName") ||
+    "sourceName" in continuation ||
     continuation.endpointNodeIndex !== 0 ||
     continuation.connectionRole !== "onward-unnamed-footway-continuation" ||
     continuationNodeIds.length !== CONTINUATION_NODE_IDS.length ||
