@@ -209,21 +209,28 @@ function assertPlain(
   ) {
     throw new Error(`${label} must be a plain object.`);
   }
-  const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key === "symbol")) {
-    throw new Error(`${label} cannot contain symbol fields.`);
+
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== "string") {
+      throw new Error(`${label} cannot contain symbol fields.`);
+    }
+
+    let known = false;
+    for (const field of fields) {
+      if (field === key) {
+        known = true;
+        break;
+      }
+    }
+    if (!known) {
+      throw new Error(`${label} cannot contain unknown field ${key}.`);
+    }
   }
-  const expected = new Set(fields);
-  const stringKeys = keys as string[];
-  const unknown = stringKeys.filter((key) => !expected.has(key)).sort();
-  const missing = fields.filter((field) => !Object.hasOwn(value, field));
-  if (unknown.length) {
-    throw new Error(`${label} cannot contain unknown field ${unknown.join(", ")}.`);
-  }
-  if (missing.length) {
-    throw new Error(`${label} is missing required field ${missing.join(", ")}.`);
-  }
+
   for (const field of fields) {
+    if (!Object.hasOwn(value, field)) {
+      throw new Error(`${label} is missing required field ${field}.`);
+    }
     const descriptor = Object.getOwnPropertyDescriptor(value, field);
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(`${label} requires enumerable own data field ${field}.`);
@@ -243,15 +250,25 @@ function assertArray(
   ) {
     throw new Error(`${label} must be an ordinary array of length ${length}.`);
   }
-  const allowed = new Set([
-    ...Array.from({ length }, (_, index) => String(index)),
-    "length",
-  ]);
+
   for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== "string" || !allowed.has(key)) {
+    if (typeof key !== "string") {
+      throw new Error(`${label} cannot contain extra own properties.`);
+    }
+    if (key === "length") continue;
+
+    let allowed = false;
+    for (let index = 0; index < length; index += 1) {
+      if (key === String(index)) {
+        allowed = true;
+        break;
+      }
+    }
+    if (!allowed) {
       throw new Error(`${label} cannot contain extra own properties.`);
     }
   }
+
   for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
