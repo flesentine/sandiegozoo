@@ -490,9 +490,8 @@ export function assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(
     inbound.endpointNodeIndex !== 0 ||
     inbound.connectionRole !== "inbound-steps-segment" ||
     inboundNodeIds.length !== INBOUND_NODE_IDS.length ||
-    inboundNodeIds.some(
-      (nodeId, index) => nodeId !== INBOUND_NODE_IDS[index],
-    )
+    inboundNodeIds[0] !== INBOUND_NODE_IDS[0] ||
+    inboundNodeIds[1] !== INBOUND_NODE_IDS[1]
   ) {
     throw new Error("Planner 66 inbound steps connection drifted.");
   }
@@ -511,9 +510,8 @@ export function assertInteriorFernCanyonNextStepsFarEndpointTopologyIntegrity(
     continuation.endpointNodeIndex !== 0 ||
     continuation.connectionRole !== "onward-unnamed-footway-continuation" ||
     continuationNodeIds.length !== CONTINUATION_NODE_IDS.length ||
-    continuationNodeIds.some(
-      (nodeId, index) => nodeId !== CONTINUATION_NODE_IDS[index],
-    )
+    continuationNodeIds[0] !== CONTINUATION_NODE_IDS[0] ||
+    continuationNodeIds[1] !== CONTINUATION_NODE_IDS[1]
   ) {
     throw new Error("Planner 66 continuation connection drifted.");
   }
