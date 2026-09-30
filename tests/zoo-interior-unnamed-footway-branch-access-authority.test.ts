@@ -161,3 +161,34 @@ test("Planner 69 rejects accessor-backed authority array elements", () => {
     /requires enumerable own data element 0/,
   );
 });
+
+
+test("Planner 69 exported records are isolated from Object.prototype pollution", () => {
+  Object.defineProperty(Object.prototype, "routeNodeId", {
+    value: "forged-route-node",
+    configurable: true,
+    enumerable: true,
+  });
+  Object.defineProperty(Object.prototype, "distanceMeters", {
+    value: 999,
+    configurable: true,
+    enumerable: true,
+  });
+
+  try {
+    const authority = INTERIOR_UNNAMED_FOOTWAY_BRANCH_ACCESS_AUTHORITY[0];
+    const assessment = assessInteriorUnnamedFootwayBranchAccess();
+
+    assert.equal(Object.getPrototypeOf(authority), null);
+    assert.equal(Object.getPrototypeOf(assessment), null);
+    assert.equal(Object.getPrototypeOf(assessment.nextGeometryCapture), null);
+    assert.equal(Object.getPrototypeOf(assessment.routeEdgeMaterialization), null);
+    assert.equal("routeNodeId" in authority, false);
+    assert.equal("distanceMeters" in authority, false);
+    assert.equal("routeNodeId" in assessment, false);
+    assert.equal("distanceMeters" in assessment.routeEdgeMaterialization, false);
+  } finally {
+    delete (Object.prototype as { routeNodeId?: string }).routeNodeId;
+    delete (Object.prototype as { distanceMeters?: number }).distanceMeters;
+  }
+});
