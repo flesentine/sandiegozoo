@@ -131,3 +131,33 @@ test("Planner 69 authority and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(assessment.routeEdgeMaterialization), true);
   assert.equal(Object.isFrozen(assessment.routeEdgeMaterialization.reasons), true);
 });
+
+
+test("Planner 69 rejects accessor-backed authority array elements", () => {
+  const canonical = cloneAuthority();
+  const forged = {
+    ...canonical,
+    selectedContinuationWayId: "148910140",
+  } as unknown as InteriorUnnamedFootwayBranchAccessAuthority;
+  const accessor = [] as unknown as InteriorUnnamedFootwayBranchAccessAuthority[];
+  let reads = 0;
+  Object.defineProperty(accessor, "0", {
+    enumerable: true,
+    configurable: true,
+    get() {
+      reads += 1;
+      return reads === 1 ? canonical : forged;
+    },
+  });
+  Object.defineProperty(accessor, "length", {
+    value: 1,
+    writable: true,
+    enumerable: false,
+    configurable: false,
+  });
+
+  assert.throws(
+    () => assertInteriorUnnamedFootwayBranchAccessAuthorityIntegrity(accessor),
+    /requires enumerable own data element 0/,
+  );
+});
