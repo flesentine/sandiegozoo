@@ -218,6 +218,15 @@ function assertOrdinaryArray(
       throw new Error(label + " cannot contain extra own properties.");
     }
   }
+
+  for (let index = 0; index < expectedLength; index += 1) {
+    const descriptor = GET_DESCRIPTOR(value, String(index));
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error(
+        label + " requires enumerable own data element " + index + ".",
+      );
+    }
+  }
 }
 
 function assertNoRouteMaterialization(
