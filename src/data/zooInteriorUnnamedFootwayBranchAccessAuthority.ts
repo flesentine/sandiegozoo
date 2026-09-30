@@ -18,6 +18,8 @@ const OWN_KEYS = Reflect.ownKeys.bind(Reflect);
 const GET_PROTOTYPE_OF = Object.getPrototypeOf.bind(Object);
 const GET_DESCRIPTOR = Object.getOwnPropertyDescriptor.bind(Object);
 const HAS_OWN = Object.hasOwn.bind(Object);
+const CREATE_OBJECT = Object.create.bind(Object);
+const DEFINE_PROPERTY = Object.defineProperty.bind(Object);
 const IS_ARRAY = Array.isArray.bind(Array);
 const FREEZE = Object.freeze.bind(Object);
 const IS_FROZEN = Object.isFrozen.bind(Object);
@@ -117,6 +119,20 @@ const ROUTE_EDGE_BLOCK_REASONS = [
   "SELECTED_SEGMENT_STROLLER_NOT_SOURCED",
   "SELECTED_SEGMENT_DIRECTION_NOT_SOURCED",
 ] as const;
+
+function nullRecord<T extends object>(value: T): T {
+  const result = CREATE_OBJECT(null) as T;
+  const keys = OWN_KEYS(value);
+  for (let index = 0; index < keys.length; index += 1) {
+    const key = keys[index];
+    const descriptor = GET_DESCRIPTOR(value, key);
+    if (!descriptor || !("value" in descriptor)) {
+      throw new Error("Planner 69 canonical records require own data fields.");
+    }
+    DEFINE_PROPERTY(result, key, descriptor);
+  }
+  return result;
+}
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === "object" && !IS_FROZEN(value)) {
@@ -242,7 +258,7 @@ function assertNoRouteMaterialization(
 }
 
 const RAW_AUTHORITY: InteriorUnnamedFootwayBranchAccessAuthority[] = [
-  {
+  nullRecord({
     id: AUTHORITY_ID,
     objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
     junctionNodeId: JUNCTION_NODE_ID,
@@ -265,7 +281,7 @@ const RAW_AUTHORITY: InteriorUnnamedFootwayBranchAccessAuthority[] = [
     selectionScope: "objective-only",
     globalBranchSelection: "unresolved",
     plannerMaterialization: "objective-branch-access-selection-only",
-  },
+  }),
 ];
 
 export function assertInteriorUnnamedFootwayBranchAccessAuthorityIntegrity(
@@ -374,7 +390,8 @@ export const INTERIOR_UNNAMED_FOOTWAY_BRANCH_ACCESS_AUTHORITY:
 
 export function assessInteriorUnnamedFootwayBranchAccess():
   InteriorUnnamedFootwayBranchAccessAssessment {
-  return deepFreeze({
+  return deepFreeze(
+    nullRecord<InteriorUnnamedFootwayBranchAccessAssessment>({
     status: "objective-branch-access-selected",
     objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
     junctionNodeId: JUNCTION_NODE_ID,
@@ -383,13 +400,13 @@ export function assessInteriorUnnamedFootwayBranchAccess():
     selectedContinuationToNodeId: SELECTED_TO_NODE_ID,
     selectionScope: "objective-only",
     globalBranchSelection: "unresolved",
-    nextGeometryCapture: {
+    nextGeometryCapture: nullRecord({
       status: "ready",
       sourceWayId: SELECTED_WAY_ID,
       fromNodeId: JUNCTION_NODE_ID,
       toNodeId: SELECTED_TO_NODE_ID,
-    },
-    routeEdgeMaterialization: {
+    }),
+    routeEdgeMaterialization: nullRecord({
       status: "blocked",
       reasons: [
         ROUTE_EDGE_BLOCK_REASONS[0],
@@ -399,6 +416,7 @@ export function assessInteriorUnnamedFootwayBranchAccess():
         ROUTE_EDGE_BLOCK_REASONS[4],
         ROUTE_EDGE_BLOCK_REASONS[5],
       ],
-    },
-  });
+    }),
+  }),
+  );
 }
