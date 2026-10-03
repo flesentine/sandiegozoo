@@ -292,6 +292,15 @@ export function assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
   }
 
+  const currentDescriptor = GET_DESCRIPTOR(authorities, "0");
+  if (
+    !currentDescriptor ||
+    !("value" in currentDescriptor) ||
+    currentDescriptor.value !== candidate
+  ) {
+    throw new Error(collectionLabel + " cannot mutate element 0 during validation.");
+  }
+
   assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
   assertNoDownstreamMaterialization(candidate, authorityLabel);
 
