@@ -157,3 +157,31 @@ test("Planner 70 authority and assessment are deeply immutable", () => {
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion), true);
   assert.equal(Object.isFrozen(assessment.routeGraphExpansion.reasons), true);
 });
+
+
+test("Planner 70 rejects collection element replacement during clone screening", () => {
+  const candidate = cloneGate() as unknown as Record<string, unknown>;
+  const forged = cloneGate() as unknown as InteriorSelectedFootwayGeometryEvidenceGate;
+  const collection = [
+    candidate as unknown as InteriorSelectedFootwayGeometryEvidenceGate,
+  ];
+
+  Object.defineProperty(candidate, "sourceFee", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      Object.defineProperty(candidate, "sourceFee", {
+        configurable: true,
+        enumerable: true,
+        value: "yes",
+      });
+      collection[0] = forged;
+      return "yes";
+    },
+  });
+
+  assert.throws(
+    () => assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(collection),
+    /cannot mutate element 0 during validation/,
+  );
+});
