@@ -159,7 +159,7 @@ function assertPlain(
     !value ||
     typeof value !== "object" ||
     IS_ARRAY(value) ||
-    prototype !== Object.prototype
+    (prototype !== Object.prototype && prototype !== null)
   ) {
     throw new Error(label + " must be a plain object with Object.prototype.");
   }
