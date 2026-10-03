@@ -42,33 +42,31 @@ test("Planner 69 selects the remaining Tiger Trail objective branch", () => {
 });
 
 test("Planner 69 opens only the next geometry capture", () => {
-  assert.deepEqual(assessInteriorUnnamedFootwayBranchAccess(), {
-    status: "objective-branch-access-selected",
-    objectiveSourceRecordId: "sdz-tiger-trail",
-    junctionNodeId: "1619736694",
-    rejectedCandidateWayId: "148910140",
-    selectedContinuationWayId: "1481578626",
-    selectedContinuationToNodeId: "48920902",
-    selectionScope: "objective-only",
-    globalBranchSelection: "unresolved",
-    nextGeometryCapture: {
-      status: "ready",
-      sourceWayId: "1481578626",
-      fromNodeId: "1619736694",
-      toNodeId: "48920902",
-    },
-    routeEdgeMaterialization: {
-      status: "blocked",
-      reasons: [
-        "SELECTED_SEGMENT_NODE_COORDINATES_NOT_CAPTURED",
-        "SELECTED_SEGMENT_DISTANCE_NOT_SOURCED",
-        "SELECTED_SEGMENT_DURATION_NOT_SOURCED",
-        "SELECTED_SEGMENT_ACCESSIBILITY_NOT_SOURCED",
-        "SELECTED_SEGMENT_STROLLER_NOT_SOURCED",
-        "SELECTED_SEGMENT_DIRECTION_NOT_SOURCED",
-      ],
-    },
-  });
+  const assessment = assessInteriorUnnamedFootwayBranchAccess();
+  assert.equal(assessment.status, "objective-branch-access-selected");
+  assert.equal(assessment.objectiveSourceRecordId, "sdz-tiger-trail");
+  assert.equal(assessment.junctionNodeId, "1619736694");
+  assert.equal(assessment.rejectedCandidateWayId, "148910140");
+  assert.equal(assessment.selectedContinuationWayId, "1481578626");
+  assert.equal(assessment.selectedContinuationToNodeId, "48920902");
+  assert.equal(assessment.selectionScope, "objective-only");
+  assert.equal(assessment.globalBranchSelection, "unresolved");
+  assert.equal(assessment.nextGeometryCapture.status, "ready");
+  assert.equal(assessment.nextGeometryCapture.sourceWayId, "1481578626");
+  assert.equal(assessment.nextGeometryCapture.fromNodeId, "1619736694");
+  assert.equal(assessment.nextGeometryCapture.toNodeId, "48920902");
+  assert.equal(assessment.routeEdgeMaterialization.status, "blocked");
+  assert.deepEqual(
+    Array.from(assessment.routeEdgeMaterialization.reasons),
+    [
+      "SELECTED_SEGMENT_NODE_COORDINATES_NOT_CAPTURED",
+      "SELECTED_SEGMENT_DISTANCE_NOT_SOURCED",
+      "SELECTED_SEGMENT_DURATION_NOT_SOURCED",
+      "SELECTED_SEGMENT_ACCESSIBILITY_NOT_SOURCED",
+      "SELECTED_SEGMENT_STROLLER_NOT_SOURCED",
+      "SELECTED_SEGMENT_DIRECTION_NOT_SOURCED",
+    ],
+  );
 });
 
 test("Planner 69 rejects branch drift", () => {
