@@ -185,3 +185,31 @@ test("Planner 70 rejects collection element replacement during clone screening",
     /cannot mutate element 0 during validation/,
   );
 });
+
+
+test("Planner 70 rejects collection growth during clone screening", () => {
+  const candidate = cloneGate() as unknown as Record<string, unknown>;
+  const forged = cloneGate();
+  const collection = [
+    candidate as unknown as InteriorSelectedFootwayGeometryEvidenceGate,
+  ];
+
+  Object.defineProperty(candidate, "sourceFee", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      Object.defineProperty(candidate, "sourceFee", {
+        configurable: true,
+        enumerable: true,
+        value: "yes",
+      });
+      collection.push(forged);
+      return "yes";
+    },
+  });
+
+  assert.throws(
+    () => assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(collection),
+    /must be an ordinary array of length 1|cannot contain extra own properties/,
+  );
+});
