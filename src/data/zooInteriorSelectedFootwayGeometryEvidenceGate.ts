@@ -292,6 +292,8 @@ export function assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
   }
 
+  assertArray(authorities, 1, collectionLabel);
+
   const currentDescriptor = GET_DESCRIPTOR(authorities, "0");
   if (
     !currentDescriptor ||
