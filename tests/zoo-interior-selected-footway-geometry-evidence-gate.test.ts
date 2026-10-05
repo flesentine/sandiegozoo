@@ -213,3 +213,35 @@ test("Planner 70 rejects collection growth during clone screening", () => {
     /must be an ordinary array of length 1|cannot contain extra own properties/,
   );
 });
+
+
+test("Planner 70 rejects nested orderedNodeIds replacement during clone screening", () => {
+  const candidate = cloneGate() as unknown as Record<string, unknown>;
+  const originalNodes = candidate.orderedNodeIds as string[];
+  let reads = 0;
+
+  Object.defineProperty(candidate, "plannerMaterialization", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      if (reads === 2) {
+        candidate.orderedNodeIds = new Proxy([...originalNodes], {});
+        Object.defineProperty(candidate, "plannerMaterialization", {
+          configurable: true,
+          enumerable: true,
+          value: "geometry-evidence-gate-only",
+        });
+      }
+      return "geometry-evidence-gate-only";
+    },
+  });
+
+  assert.throws(
+    () =>
+      assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity([
+        candidate as unknown as InteriorSelectedFootwayGeometryEvidenceGate,
+      ]),
+    /cannot mutate orderedNodeIds during validation/,
+  );
+});
