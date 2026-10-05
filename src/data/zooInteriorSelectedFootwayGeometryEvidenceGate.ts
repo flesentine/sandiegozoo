@@ -285,9 +285,16 @@ export function assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(
     throw new Error(collectionLabel + " requires enumerable own data element 0.");
   }
   const candidate = descriptor.value;
+  const orderedNodeIdsDescriptor = GET_DESCRIPTOR(candidate, "orderedNodeIds");
+  if (!orderedNodeIdsDescriptor || !("value" in orderedNodeIdsDescriptor)) {
+    throw new Error(authorityLabel + " orderedNodeIds requires an own data field.");
+  }
+  const orderedNodeIdsCandidate = orderedNodeIdsDescriptor.value;
+
   try {
     STRUCTURED_CLONE(authorities);
     STRUCTURED_CLONE(candidate);
+    STRUCTURED_CLONE(orderedNodeIdsCandidate);
   } catch {
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
   }
@@ -301,6 +308,18 @@ export function assertInteriorSelectedFootwayGeometryEvidenceGateIntegrity(
     currentDescriptor.value !== candidate
   ) {
     throw new Error(collectionLabel + " cannot mutate element 0 during validation.");
+  }
+
+  const currentOrderedNodeIdsDescriptor =
+    GET_DESCRIPTOR(candidate, "orderedNodeIds");
+  if (
+    !currentOrderedNodeIdsDescriptor ||
+    !("value" in currentOrderedNodeIdsDescriptor) ||
+    currentOrderedNodeIdsDescriptor.value !== orderedNodeIdsCandidate
+  ) {
+    throw new Error(
+      authorityLabel + " cannot mutate orderedNodeIds during validation.",
+    );
   }
 
   assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
