@@ -155,3 +155,44 @@ test("Planner 71 exports null-prototype immutable records", () => {
     delete (Object.prototype as { lat?: number }).lat;
   }
 });
+
+
+test("Planner 71 rejects branded exotic objects disguised as plain records", () => {
+  const template = cloneAuthority() as unknown as Record<string, unknown>;
+  const exotic = new Date(0) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(exotic, Object.prototype);
+
+  for (const key of Reflect.ownKeys(template)) {
+    const descriptor = Object.getOwnPropertyDescriptor(template, key);
+    if (descriptor) Object.defineProperty(exotic, key, descriptor);
+  }
+
+  assert.throws(
+    () =>
+      assertInteriorSelectedFootwayEndpointHistoricalEvidenceIntegrity([
+        exotic as unknown as InteriorSelectedFootwayEndpointHistoricalEvidenceAuthority,
+      ]),
+    /must be a plain object/,
+  );
+});
+
+test("Planner 71 rejects inherited coordinates evidence", () => {
+  Object.defineProperty(Object.prototype, "coordinates", {
+    configurable: true,
+    enumerable: false,
+    value: [32.7, -117.1],
+  });
+
+  try {
+    const forged = cloneAuthority();
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointHistoricalEvidenceIntegrity([
+          forged,
+        ]),
+      /prematurely materialize field coordinates/,
+    );
+  } finally {
+    delete (Object.prototype as { coordinates?: unknown }).coordinates;
+  }
+});
