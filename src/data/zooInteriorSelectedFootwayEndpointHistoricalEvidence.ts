@@ -25,6 +25,9 @@ const HAS_OWN = Object.hasOwn.bind(Object);
 const IS_ARRAY = Array.isArray.bind(Array);
 const FREEZE = Object.freeze.bind(Object);
 const IS_FROZEN = Object.isFrozen.bind(Object);
+const OBJECT_TO_STRING = Object.prototype.toString.call.bind(
+  Object.prototype.toString,
+);
 
 export type InteriorSelectedFootwayEndpointHistoricalEvidenceAuthority = {
   id: typeof AUTHORITY_ID;
@@ -99,6 +102,7 @@ const FORBIDDEN_PROMOTED_FIELDS = [
   "sourceVersionUrl",
   "lat",
   "lng",
+  "coordinates",
   "connectedWays",
   "selectedContinuationWayId",
   "routeNodeId",
@@ -194,7 +198,8 @@ function assertPlain(
     !value ||
     typeof value !== "object" ||
     IS_ARRAY(value) ||
-    (prototype !== Object.prototype && prototype !== null)
+    (prototype !== Object.prototype && prototype !== null) ||
+    OBJECT_TO_STRING(value) !== "[object Object]"
   ) {
     throw new Error(label + " must be a plain object.");
   }
