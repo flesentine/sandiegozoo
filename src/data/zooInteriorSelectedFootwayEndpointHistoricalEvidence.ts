@@ -25,9 +25,6 @@ const HAS_OWN = Object.hasOwn.bind(Object);
 const IS_ARRAY = Array.isArray.bind(Array);
 const FREEZE = Object.freeze.bind(Object);
 const IS_FROZEN = Object.isFrozen.bind(Object);
-const OBJECT_TO_STRING = Object.prototype.toString.call.bind(
-  Object.prototype.toString,
-);
 
 export type InteriorSelectedFootwayEndpointHistoricalEvidenceAuthority = {
   id: typeof AUTHORITY_ID;
@@ -198,8 +195,7 @@ function assertPlain(
     !value ||
     typeof value !== "object" ||
     IS_ARRAY(value) ||
-    (prototype !== Object.prototype && prototype !== null) ||
-    OBJECT_TO_STRING(value) !== "[object Object]"
+    (prototype !== Object.prototype && prototype !== null)
   ) {
     throw new Error(label + " must be a plain object.");
   }
@@ -296,13 +292,30 @@ export function assertInteriorSelectedFootwayEndpointHistoricalEvidenceIntegrity
   const requiredFieldsCandidate = fieldsDescriptor.value;
   assertArray(requiredFieldsCandidate, 6, fieldsLabel);
 
+  let clonedCandidate: unknown;
   try {
     STRUCTURED_CLONE(authorities);
-    STRUCTURED_CLONE(candidate);
+    clonedCandidate = STRUCTURED_CLONE(candidate);
     STRUCTURED_CLONE(requiredFieldsCandidate);
   } catch {
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
   }
+
+  const clonedPrototype =
+    clonedCandidate && typeof clonedCandidate === "object"
+      ? GET_PROTOTYPE_OF(clonedCandidate)
+      : undefined;
+  if (
+    !clonedCandidate ||
+    typeof clonedCandidate !== "object" ||
+    IS_ARRAY(clonedCandidate) ||
+    (clonedPrototype !== Object.prototype && clonedPrototype !== null)
+  ) {
+    throw new Error(
+      authorityLabel + " must clone as a plain object without internal-slot branding.",
+    );
+  }
+  assertPlain(clonedCandidate, TOP_LEVEL_FIELDS, authorityLabel + " clone");
 
   assertArray(authorities, 1, collectionLabel);
   const currentAuthorityDescriptor = GET_DESCRIPTOR(authorities, "0");
