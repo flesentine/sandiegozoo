@@ -196,3 +196,32 @@ test("Planner 71 rejects inherited coordinates evidence", () => {
     delete (Object.prototype as { coordinates?: unknown }).coordinates;
   }
 });
+
+
+test("Planner 71 rejects exotic records even when inherited toStringTag is polluted", () => {
+  Object.defineProperty(Object.prototype, Symbol.toStringTag, {
+    configurable: true,
+    value: "Object",
+  });
+
+  try {
+    const template = cloneAuthority() as unknown as Record<string, unknown>;
+    const exotic = new Date(0) as unknown as Record<string, unknown>;
+    Object.setPrototypeOf(exotic, Object.prototype);
+
+    for (const key of Reflect.ownKeys(template)) {
+      const descriptor = Object.getOwnPropertyDescriptor(template, key);
+      if (descriptor) Object.defineProperty(exotic, key, descriptor);
+    }
+
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointHistoricalEvidenceIntegrity([
+          exotic as unknown as InteriorSelectedFootwayEndpointHistoricalEvidenceAuthority,
+        ]),
+      /must clone as a plain object without internal-slot branding/,
+    );
+  } finally {
+    delete (Object.prototype as Record<PropertyKey, unknown>)[Symbol.toStringTag];
+  }
+});
