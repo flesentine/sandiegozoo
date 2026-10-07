@@ -61,7 +61,7 @@ test("Planner 72 remains blocked until authoritative history is captured", () =>
   );
   assert.equal(
     assessment.nextAction,
-    "capture-exact-versioned-node-record-then-promote-coordinate-and-topology",
+    "capture-latest-visible-versioned-node-record-then-promote-coordinate-only-and-source-topology-separately",
   );
 });
 
@@ -98,21 +98,12 @@ test("Planner 72 rejects Proxy-backed nested source candidates", () => {
   );
 });
 
-test("Planner 72 rejects mutation during clone screening", () => {
+test("Planner 72 rejects accessor mutation attempts before clone screening", () => {
   const forged = cloneAuthority() as unknown as Record<string, unknown>;
-  const original = forged.sourceCandidates;
   Object.defineProperty(forged, "plannerMaterialization", {
     configurable: true,
     enumerable: true,
     get() {
-      forged.sourceCandidates = [
-        ...(original as unknown[]),
-      ];
-      Object.defineProperty(forged, "plannerMaterialization", {
-        configurable: true,
-        enumerable: true,
-        value: "historical-source-resolution-only",
-      });
       return "historical-source-resolution-only";
     },
   });
@@ -122,7 +113,7 @@ test("Planner 72 rejects mutation during clone screening", () => {
       assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
         forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
       ]),
-    /authority graph cannot mutate during validation/,
+    /requires enumerable own data field plannerMaterialization/,
   );
 });
 
@@ -135,4 +126,37 @@ test("Planner 72 exports immutable null-prototype records", () => {
   assert.equal(Object.isFrozen(authority.sourceCandidates), true);
   assert.equal(Object.isFrozen(authority.sourceCandidates[0]), true);
   assert.equal(Object.isFrozen(assessment), true);
+});
+
+
+test("Planner 72 rejects branded exotic nested source candidates", () => {
+  const forged = cloneAuthority() as unknown as {
+    sourceCandidates: unknown[];
+  };
+  const template = forged.sourceCandidates[0] as Record<string, unknown>;
+  const exotic = new Date(0) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(exotic, Object.prototype);
+
+  for (const key of Reflect.ownKeys(template)) {
+    const descriptor = Object.getOwnPropertyDescriptor(template, key);
+    if (descriptor) Object.defineProperty(exotic, key, descriptor);
+  }
+
+  forged.sourceCandidates[0] = exotic;
+
+  assert.throws(
+    () =>
+      assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+        forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
+      ]),
+    /source candidate 0 must clone as a plain object/,
+  );
+});
+
+test("Planner 72 requires latest visible version selection semantics", () => {
+  const authority = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_SOURCE_RESOLUTION[0];
+  assert.equal(
+    authority.acceptedEvidenceRule,
+    "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history",
+  );
 });
