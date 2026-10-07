@@ -172,7 +172,7 @@ test("Planner 71 rejects branded exotic objects disguised as plain records", () 
       assertInteriorSelectedFootwayEndpointHistoricalEvidenceIntegrity([
         exotic as unknown as InteriorSelectedFootwayEndpointHistoricalEvidenceAuthority,
       ]),
-    /must be a plain object/,
+    /must clone as a plain object without internal-slot branding|must be a plain object/,
   );
 });
 
