@@ -50,7 +50,7 @@ export type InteriorSelectedFootwayEndpointSourceResolutionAuthority = {
     EndpointHistoricalSourceCandidate,
   ];
   acceptedEvidenceRule:
-    "exact-node-version-at-or-before-target-timestamp-from-authoritative-osm-history";
+    "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history";
   rejectedEvidenceRules: readonly [
     "current-node-coordinate-alone-is-insufficient",
     "viewer-rendered-coordinate-alone-is-insufficient",
@@ -73,7 +73,7 @@ export type InteriorSelectedFootwayEndpointSourceResolutionAssessment = {
   endpointNodeId: typeof ENDPOINT_NODE_ID;
   reason: "AUTHORITATIVE_ENDPOINT_NODE_HISTORY_NOT_CAPTURED";
   nextAction:
-    "capture-exact-versioned-node-record-then-promote-coordinate-and-topology";
+    "capture-latest-visible-versioned-node-record-then-promote-coordinate-only-and-source-topology-separately";
 };
 
 const TOP_LEVEL_FIELDS = [
@@ -227,7 +227,7 @@ const RAW_AUTHORITY: InteriorSelectedFootwayEndpointSourceResolutionAuthority[] 
       }),
     ],
     acceptedEvidenceRule:
-      "exact-node-version-at-or-before-target-timestamp-from-authoritative-osm-history",
+      "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history",
     rejectedEvidenceRules: [...REJECTED_EVIDENCE_RULES],
     requiredOutputFields: [...REQUIRED_OUTPUT_FIELDS],
     plannerMaterialization: "historical-source-resolution-only",
@@ -284,6 +284,7 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
   }
 
   let clonedCandidate: unknown;
+  const clonedSourceObjects: unknown[] = [];
   try {
     STRUCTURED_CLONE(authorities);
     clonedCandidate = STRUCTURED_CLONE(candidate);
@@ -291,7 +292,7 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
     STRUCTURED_CLONE(rejected);
     STRUCTURED_CLONE(required);
     for (let index = 0; index < sourceObjects.length; index += 1) {
-      STRUCTURED_CLONE(sourceObjects[index]);
+      clonedSourceObjects.push(STRUCTURED_CLONE(sourceObjects[index]));
     }
   } catch {
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
@@ -308,6 +309,31 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
     (clonedPrototype !== Object.prototype && clonedPrototype !== null)
   ) {
     throw new Error(authorityLabel + " must clone as a plain object.");
+  }
+  assertPlain(clonedCandidate, TOP_LEVEL_FIELDS, authorityLabel + " clone");
+
+  for (let index = 0; index < clonedSourceObjects.length; index += 1) {
+    const clonedSource = clonedSourceObjects[index];
+    const clonedSourcePrototype =
+      clonedSource && typeof clonedSource === "object"
+        ? GET_PROTOTYPE_OF(clonedSource)
+        : undefined;
+    if (
+      !clonedSource ||
+      typeof clonedSource !== "object" ||
+      IS_ARRAY(clonedSource) ||
+      (clonedSourcePrototype !== Object.prototype &&
+        clonedSourcePrototype !== null)
+    ) {
+      throw new Error(
+        "Planner 72 source candidate " + index + " must clone as a plain object.",
+      );
+    }
+    assertPlain(
+      clonedSource,
+      SOURCE_FIELDS,
+      "Planner 72 cloned source candidate " + index,
+    );
   }
 
   const currentAuthorityDescriptor = GET_DESCRIPTOR(authorities, "0");
@@ -349,7 +375,7 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
     authority.endpointNodeId !== ENDPOINT_NODE_ID ||
     authority.resolutionStatus !== "unresolved" ||
     authority.acceptedEvidenceRule !==
-      "exact-node-version-at-or-before-target-timestamp-from-authoritative-osm-history" ||
+      "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history" ||
     authority.plannerMaterialization !== "historical-source-resolution-only"
   ) {
     throw new Error("Planner 72 source resolution authority drifted.");
@@ -413,7 +439,7 @@ export function assessInteriorSelectedFootwayEndpointSourceResolution():
       endpointNodeId: ENDPOINT_NODE_ID,
       reason: "AUTHORITATIVE_ENDPOINT_NODE_HISTORY_NOT_CAPTURED",
       nextAction:
-        "capture-exact-versioned-node-record-then-promote-coordinate-and-topology",
+        "capture-latest-visible-versioned-node-record-then-promote-coordinate-only-and-source-topology-separately",
     }),
   );
 }
