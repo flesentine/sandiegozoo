@@ -105,6 +105,25 @@ const REQUIRED_OUTPUT_FIELDS = [
   "lng",
 ] as const;
 
+const FORBIDDEN_PROMOTED_FIELDS = [
+  "sourceVersion",
+  "sourceTimestamp",
+  "sourceChangeset",
+  "sourceVersionUrl",
+  "lat",
+  "lng",
+  "coordinates",
+  "connectedWays",
+  "selectedContinuationWayId",
+  "routeNodeId",
+  "routeEdgeId",
+  "distanceMeters",
+  "durationMinutes",
+  "accessible",
+  "stroller",
+  "oneWay",
+] as const;
+
 function nullRecord<T extends object>(value: T): T {
   const result = CREATE_OBJECT(null) as T;
   const keys = OWN_KEYS(value);
@@ -156,6 +175,18 @@ function assertArray(value: unknown, length: number, label: string): asserts val
     const descriptor = GET_DESCRIPTOR(value, String(i));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(label + " requires enumerable own data element " + i + ".");
+    }
+  }
+}
+
+function assertNoPrematurePromotion(
+  value: Record<string, unknown>,
+  label: string,
+): void {
+  for (let index = 0; index < FORBIDDEN_PROMOTED_FIELDS.length; index += 1) {
+    const field = FORBIDDEN_PROMOTED_FIELDS[index];
+    if (field in value) {
+      throw new Error(label + " cannot prematurely materialize field " + field + ".");
     }
   }
 }
@@ -250,6 +281,7 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
   }
   const candidate = authorityDescriptor.value;
   assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
+  assertNoPrematurePromotion(candidate, authorityLabel);
 
   const sourcesDescriptor = GET_DESCRIPTOR(candidate, "sourceCandidates");
   const rejectedDescriptor = GET_DESCRIPTOR(candidate, "rejectedEvidenceRules");
