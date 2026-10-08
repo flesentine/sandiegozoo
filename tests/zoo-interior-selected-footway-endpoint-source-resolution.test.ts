@@ -203,3 +203,50 @@ test("Planner 72 rejects inherited historical topology evidence", () => {
     delete (Object.prototype as { connectedWays?: unknown }).connectedWays;
   }
 });
+
+
+test("Planner 72 rejects inherited capture-status evidence", () => {
+  Object.defineProperty(Object.prototype, "farEndpointTopologyStatus", {
+    configurable: true,
+    enumerable: false,
+    value: "captured",
+  });
+
+  try {
+    const forged = cloneAuthority();
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+          forged,
+        ]),
+      /cannot prematurely materialize field farEndpointTopologyStatus/,
+    );
+  } finally {
+    delete (Object.prototype as { farEndpointTopologyStatus?: unknown })
+      .farEndpointTopologyStatus;
+  }
+});
+
+test("Planner 72 screens nested source candidates for inherited promoted evidence", () => {
+  Object.defineProperty(Object.prototype, "lat", {
+    configurable: true,
+    enumerable: false,
+    value: 32.7,
+  });
+
+  try {
+    const forged = cloneAuthority() as unknown as {
+      sourceCandidates: Array<Record<string, unknown>>;
+    };
+    Object.setPrototypeOf(forged, null);
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+          forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
+        ]),
+      /source candidate 0 cannot prematurely materialize field lat/,
+    );
+  } finally {
+    delete (Object.prototype as { lat?: number }).lat;
+  }
+});
