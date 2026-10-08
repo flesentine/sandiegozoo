@@ -122,6 +122,10 @@ const FORBIDDEN_PROMOTED_FIELDS = [
   "accessible",
   "stroller",
   "oneWay",
+  "endpointVersionStatus",
+  "endpointCoordinateStatus",
+  "endpointChangesetStatus",
+  "farEndpointTopologyStatus",
 ] as const;
 
 function nullRecord<T extends object>(value: T): T {
@@ -312,6 +316,10 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
     }
     const source = descriptor.value;
     assertPlain(source, SOURCE_FIELDS, "Planner 72 source candidate " + index);
+    assertNoPrematurePromotion(
+      source,
+      "Planner 72 source candidate " + index,
+    );
     sourceObjects.push(source);
   }
 
