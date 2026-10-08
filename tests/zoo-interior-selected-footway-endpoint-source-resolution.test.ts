@@ -160,3 +160,46 @@ test("Planner 72 requires latest visible version selection semantics", () => {
     "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history",
   );
 });
+
+
+test("Planner 72 rejects inherited promoted endpoint evidence", () => {
+  Object.defineProperty(Object.prototype, "lat", {
+    configurable: true,
+    enumerable: false,
+    value: 32.7,
+  });
+
+  try {
+    const forged = cloneAuthority();
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+          forged,
+        ]),
+      /cannot prematurely materialize field lat/,
+    );
+  } finally {
+    delete (Object.prototype as { lat?: number }).lat;
+  }
+});
+
+test("Planner 72 rejects inherited historical topology evidence", () => {
+  Object.defineProperty(Object.prototype, "connectedWays", {
+    configurable: true,
+    enumerable: false,
+    value: [],
+  });
+
+  try {
+    const forged = cloneAuthority();
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+          forged,
+        ]),
+      /cannot prematurely materialize field connectedWays/,
+    );
+  } finally {
+    delete (Object.prototype as { connectedWays?: unknown }).connectedWays;
+  }
+});
