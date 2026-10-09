@@ -128,3 +128,36 @@ test("Planner 73 rejects branded exotic candidate records", () => {
     /must clone as a plain object/,
   );
 });
+
+
+test("Planner 73 rejects duplicate source versions", () => {
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion([
+        nodeVersion(1, "2026-02-21T19:00:00Z", true),
+        nodeVersion(1, "2026-02-21T20:00:00Z", true),
+      ]),
+    /duplicate sourceVersion 1/,
+  );
+});
+
+test("Planner 73 rejects non-UTC timestamp formats", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  candidate.sourceTimestamp = "2026-02-21 20:00:00";
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([candidate]),
+    /requires a UTC ISO timestamp/,
+  );
+});
+
+test("Planner 73 rejects unknown candidate fields", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true) as
+    SelectedFootwayEndpointHistoricalNodeVersion & { connectedWays?: unknown[] };
+  candidate.connectedWays = [];
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([candidate]),
+    /cannot contain unknown field connectedWays/,
+  );
+});
