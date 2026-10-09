@@ -53,7 +53,7 @@ const TOP_LEVEL_FIELDS = [
   "plannerMaterialization",
 ] as const;
 
-const CANDIDATE_FIELDS = [
+const CANDIDATE_REQUIRED_FIELDS = [
   "sourceObjectId",
   "sourceVersion",
   "sourceTimestamp",
@@ -62,10 +62,17 @@ const CANDIDATE_FIELDS = [
   "visible",
 ] as const;
 
+const CANDIDATE_ALLOWED_FIELDS = [
+  ...CANDIDATE_REQUIRED_FIELDS,
+  "lat",
+  "lng",
+] as const;
+
 function assertPlainObject(
   value: unknown,
-  fields: readonly string[],
+  requiredFields: readonly string[],
   label: string,
+  allowedFields: readonly string[] = requiredFields,
 ): asserts value is Record<string, unknown> {
   const prototype =
     value && typeof value === "object" ? GET_PROTOTYPE_OF(value) : undefined;
@@ -80,13 +87,24 @@ function assertPlainObject(
 
   const keys = OWN_KEYS(value);
   for (let index = 0; index < keys.length; index += 1) {
-    if (typeof keys[index] !== "string") {
+    const key = keys[index];
+    if (typeof key !== "string") {
       throw new Error(label + " cannot contain symbol fields.");
+    }
+    let allowed = false;
+    for (let fieldIndex = 0; fieldIndex < allowedFields.length; fieldIndex += 1) {
+      if (allowedFields[fieldIndex] === key) {
+        allowed = true;
+        break;
+      }
+    }
+    if (!allowed) {
+      throw new Error(label + " cannot contain unknown field " + key + ".");
     }
   }
 
-  for (let index = 0; index < fields.length; index += 1) {
-    const field = fields[index];
+  for (let index = 0; index < requiredFields.length; index += 1) {
+    const field = requiredFields[index];
     const descriptor = GET_DESCRIPTOR(value, field);
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(label + " requires enumerable own data field " + field + ".");
@@ -110,7 +128,12 @@ function assertCandidate(
   index: number,
 ): asserts candidate is SelectedFootwayEndpointHistoricalNodeVersion {
   const label = "Planner 73 candidate " + index;
-  assertPlainObject(candidate, CANDIDATE_FIELDS, label);
+  assertPlainObject(
+    candidate,
+    CANDIDATE_REQUIRED_FIELDS,
+    label,
+    CANDIDATE_ALLOWED_FIELDS,
+  );
 
   const record = candidate as Record<string, unknown>;
   if (record.sourceObjectId !== ENDPOINT_NODE_ID) {
@@ -123,8 +146,12 @@ function assertCandidate(
   ) {
     throw new Error(label + " requires a positive integer sourceVersion.");
   }
-  if (typeof record.sourceTimestamp !== "string" || Number.isNaN(Date.parse(record.sourceTimestamp))) {
-    throw new Error(label + " requires an ISO timestamp.");
+  if (
+    typeof record.sourceTimestamp !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(record.sourceTimestamp) ||
+    Number.isNaN(Date.parse(record.sourceTimestamp))
+  ) {
+    throw new Error(label + " requires a UTC ISO timestamp.");
   }
   if (
     typeof record.sourceChangeset !== "number" ||
@@ -192,9 +219,18 @@ export function selectLatestVisibleEndpointVersion(
   const targetMillis = Date.parse(TARGET_TIMESTAMP);
   let selected: SelectedFootwayEndpointHistoricalNodeVersion | null = null;
   let selectedMillis = Number.NEGATIVE_INFINITY;
+  const seenVersions = new Set<number>();
 
   for (let index = 0; index < candidates.length; index += 1) {
     assertCandidate(candidates[index], index);
+    if (seenVersions.has(candidates[index].sourceVersion)) {
+      throw new Error(
+        "Planner 73 history cannot contain duplicate sourceVersion " +
+          candidates[index].sourceVersion +
+          ".",
+      );
+    }
+    seenVersions.add(candidates[index].sourceVersion);
     const candidate = candidates[index];
     if (!candidate.visible) continue;
 
