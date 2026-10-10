@@ -123,10 +123,30 @@ function assertFiniteCoordinate(
   }
 }
 
-function assertCandidate(
+function assertCanonicalUtcTimestamp(value: unknown, label: string): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)
+  ) {
+    throw new Error(label + " requires a UTC ISO timestamp.");
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    throw new Error(label + " requires a UTC ISO timestamp.");
+  }
+
+  const canonical = new Date(parsed).toISOString();
+  const normalizedInput = value.includes(".") ? value : value.replace("Z", ".000Z");
+  if (canonical !== normalizedInput) {
+    throw new Error(label + " requires a real UTC calendar timestamp.");
+  }
+}
+
+function validateAndCloneCandidate(
   candidate: unknown,
   index: number,
-): asserts candidate is SelectedFootwayEndpointHistoricalNodeVersion {
+): SelectedFootwayEndpointHistoricalNodeVersion {
   const label = "Planner 73 candidate " + index;
   assertPlainObject(
     candidate,
@@ -146,13 +166,7 @@ function assertCandidate(
   ) {
     throw new Error(label + " requires a positive integer sourceVersion.");
   }
-  if (
-    typeof record.sourceTimestamp !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(record.sourceTimestamp) ||
-    Number.isNaN(Date.parse(record.sourceTimestamp))
-  ) {
-    throw new Error(label + " requires a UTC ISO timestamp.");
-  }
+  assertCanonicalUtcTimestamp(record.sourceTimestamp, label);
   if (
     typeof record.sourceChangeset !== "number" ||
     !Number.isInteger(record.sourceChangeset) ||
@@ -207,6 +221,29 @@ function assertCandidate(
   ) {
     throw new Error(label + " must clone as a plain object.");
   }
+
+  assertPlainObject(
+    clone,
+    CANDIDATE_REQUIRED_FIELDS,
+    label + " clone",
+    CANDIDATE_ALLOWED_FIELDS,
+  );
+
+  const clonedRecord = clone as Record<string, unknown>;
+  if (
+    clonedRecord.sourceObjectId !== record.sourceObjectId ||
+    clonedRecord.sourceVersion !== record.sourceVersion ||
+    clonedRecord.sourceTimestamp !== record.sourceTimestamp ||
+    clonedRecord.sourceChangeset !== record.sourceChangeset ||
+    clonedRecord.sourceVersionUrl !== record.sourceVersionUrl ||
+    clonedRecord.visible !== record.visible ||
+    clonedRecord.lat !== record.lat ||
+    clonedRecord.lng !== record.lng
+  ) {
+    throw new Error(label + " cannot normalize or lose evidence during cloning.");
+  }
+
+  return clone as SelectedFootwayEndpointHistoricalNodeVersion;
 }
 
 export function selectLatestVisibleEndpointVersion(
@@ -216,22 +253,41 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates must be an ordinary array.");
   }
 
+  const arrayKeys = OWN_KEYS(candidates);
+  const allowedArrayKeys = new Set([
+    ...Array.from({ length: candidates.length }, (_, index) => String(index)),
+    "length",
+  ]);
+  for (let index = 0; index < arrayKeys.length; index += 1) {
+    const key = arrayKeys[index];
+    if (typeof key !== "string" || !allowedArrayKeys.has(key)) {
+      throw new Error("Planner 73 candidates cannot contain extra own properties.");
+    }
+  }
+
   const targetMillis = Date.parse(TARGET_TIMESTAMP);
   let selected: SelectedFootwayEndpointHistoricalNodeVersion | null = null;
   let selectedMillis = Number.NEGATIVE_INFINITY;
   const seenVersions = new Set<number>();
 
   for (let index = 0; index < candidates.length; index += 1) {
-    assertCandidate(candidates[index], index);
-    if (seenVersions.has(candidates[index].sourceVersion)) {
+    const descriptor = GET_DESCRIPTOR(candidates, String(index));
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error(
+        "Planner 73 candidate array requires enumerable own data element " + index + ".",
+      );
+    }
+
+    const candidate = validateAndCloneCandidate(descriptor.value, index);
+
+    if (seenVersions.has(candidate.sourceVersion)) {
       throw new Error(
         "Planner 73 history cannot contain duplicate sourceVersion " +
-          candidates[index].sourceVersion +
+          candidate.sourceVersion +
           ".",
       );
     }
-    seenVersions.add(candidates[index].sourceVersion);
-    const candidate = candidates[index];
+    seenVersions.add(candidate.sourceVersion);
     if (!candidate.visible) continue;
 
     const timestampMillis = Date.parse(candidate.sourceTimestamp);
