@@ -161,3 +161,52 @@ test("Planner 73 rejects unknown candidate fields", () => {
     /cannot contain unknown field connectedWays/,
   );
 });
+
+
+test("Planner 73 rejects accessor-backed candidate array entries", () => {
+  const candidates = [
+    nodeVersion(1, "2026-02-21T20:00:00Z", true),
+  ] as SelectedFootwayEndpointHistoricalNodeVersion[];
+
+  Object.defineProperty(candidates, "0", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return nodeVersion(1, "2026-02-21T20:00:00Z", true);
+    },
+  });
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion(candidates),
+    /requires enumerable own data element 0/,
+  );
+});
+
+test("Planner 73 rejects built-ins that normalize during cloning", () => {
+  const template = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  const exotic = new AbortController() as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(exotic, Object.prototype);
+
+  for (const key of Reflect.ownKeys(template)) {
+    const descriptor = Object.getOwnPropertyDescriptor(template, key);
+    if (descriptor) Object.defineProperty(exotic, key, descriptor);
+  }
+
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion([
+        exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+      ]),
+    /cannot normalize or lose evidence during cloning|must clone as a plain object/,
+  );
+});
+
+test("Planner 73 rejects impossible UTC calendar dates", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  candidate.sourceTimestamp = "2026-02-30T00:00:00Z";
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([candidate]),
+    /requires a real UTC calendar timestamp/,
+  );
+});
