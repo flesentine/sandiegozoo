@@ -218,3 +218,43 @@ test("Planner 73 rejects impossible UTC calendar dates", () => {
     /requires a real UTC calendar timestamp/,
   );
 });
+
+
+test("Planner 73 rejects Proxy-backed candidate-array containers", () => {
+  const backing = [
+    nodeVersion(1, "2026-02-21T20:00:00Z", true),
+  ];
+
+  const proxied = new Proxy(backing, {
+    get(target, property, receiver) {
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion(
+        proxied as SelectedFootwayEndpointHistoricalNodeVersion[],
+      ),
+    /cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
+
+test("Planner 73 rejects branded authority inputs", () => {
+  const authority = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR;
+  const exotic = new AbortController() as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(exotic, Object.prototype);
+
+  for (const key of Reflect.ownKeys(authority)) {
+    const descriptor = Object.getOwnPropertyDescriptor(authority, key);
+    if (descriptor) Object.defineProperty(exotic, key, descriptor);
+  }
+
+  assert.throws(
+    () =>
+      assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
+        exotic as unknown as typeof authority,
+      ),
+    /must clone as a plain object|cannot be Proxy-backed or otherwise uncloneable/,
+  );
+});
