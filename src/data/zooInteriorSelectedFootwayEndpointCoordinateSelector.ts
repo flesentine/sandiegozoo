@@ -240,7 +240,7 @@ function validateAndCloneCandidate(
     clonedRecord.lat !== record.lat ||
     clonedRecord.lng !== record.lng
   ) {
-    throw new Error(label + " cannot normalize or lose evidence during cloning.");
+    throw new Error(label + " cannot lose evidence during cloning.");
   }
 
   return clone as SelectedFootwayEndpointHistoricalNodeVersion;
