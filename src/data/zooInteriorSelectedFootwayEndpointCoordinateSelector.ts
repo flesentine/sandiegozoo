@@ -298,15 +298,33 @@ export function selectLatestVisibleEndpointVersion(
       CANDIDATE_ALLOWED_FIELDS,
     );
 
+    const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
+    const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
+
+    if (
+      latDescriptor &&
+      (!latDescriptor.enumerable || !("value" in latDescriptor))
+    ) {
+      throw new Error(
+        "Planner 73 original candidate " + index + " lat must be an enumerable own data field.",
+      );
+    }
+    if (
+      lngDescriptor &&
+      (!lngDescriptor.enumerable || !("value" in lngDescriptor))
+    ) {
+      throw new Error(
+        "Planner 73 original candidate " + index + " lng must be an enumerable own data field.",
+      );
+    }
+
     if (candidate.visible) {
-      const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
-      const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
-      if (!latDescriptor || !latDescriptor.enumerable || !("value" in latDescriptor)) {
+      if (!latDescriptor) {
         throw new Error(
           "Planner 73 original candidate " + index + " visible version requires own lat.",
         );
       }
-      if (!lngDescriptor || !lngDescriptor.enumerable || !("value" in lngDescriptor)) {
+      if (!lngDescriptor) {
         throw new Error(
           "Planner 73 original candidate " + index + " visible version requires own lng.",
         );
