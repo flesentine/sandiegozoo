@@ -281,6 +281,7 @@ export function selectLatestVisibleEndpointVersion(
     }
   }
 
+  const originalCandidateValues: unknown[] = [];
   for (let index = 0; index < originalLength; index += 1) {
     const descriptor = GET_DESCRIPTOR(candidates, String(index));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
@@ -288,6 +289,31 @@ export function selectLatestVisibleEndpointVersion(
         "Planner 73 candidate array requires enumerable own data element " + index + ".",
       );
     }
+
+    const candidate = descriptor.value;
+    assertPlainObject(
+      candidate,
+      CANDIDATE_REQUIRED_FIELDS,
+      "Planner 73 original candidate " + index,
+      CANDIDATE_ALLOWED_FIELDS,
+    );
+
+    if (candidate.visible) {
+      const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
+      const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
+      if (!latDescriptor || !latDescriptor.enumerable || !("value" in latDescriptor)) {
+        throw new Error(
+          "Planner 73 original candidate " + index + " visible version requires own lat.",
+        );
+      }
+      if (!lngDescriptor || !lngDescriptor.enumerable || !("value" in lngDescriptor)) {
+        throw new Error(
+          "Planner 73 original candidate " + index + " visible version requires own lng.",
+        );
+      }
+    }
+
+    originalCandidateValues.push(candidate);
   }
 
   let candidateSnapshot: unknown;
@@ -338,6 +364,22 @@ export function selectLatestVisibleEndpointVersion(
     }
 
     const candidate = validateAndCloneCandidate(descriptor.value, index);
+    const originalCandidate = originalCandidateValues[index] as Record<string, unknown>;
+
+    if (
+      candidate.sourceObjectId !== originalCandidate.sourceObjectId ||
+      candidate.sourceVersion !== originalCandidate.sourceVersion ||
+      candidate.sourceTimestamp !== originalCandidate.sourceTimestamp ||
+      candidate.sourceChangeset !== originalCandidate.sourceChangeset ||
+      candidate.sourceVersionUrl !== originalCandidate.sourceVersionUrl ||
+      candidate.visible !== originalCandidate.visible ||
+      candidate.lat !== originalCandidate.lat ||
+      candidate.lng !== originalCandidate.lng
+    ) {
+      throw new Error(
+        "Planner 73 candidate changed evidence during container snapshot.",
+      );
+    }
 
     if (seenVersions.has(candidate.sourceVersion)) {
       throw new Error(
