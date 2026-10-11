@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR,
   assertSelectedEndpointCoordinatePromotable,
+  assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity,
   selectLatestVisibleEndpointVersion,
   type SelectedFootwayEndpointHistoricalNodeVersion,
 } from "../src/data/zooInteriorSelectedFootwayEndpointCoordinateSelector.ts";
@@ -255,6 +256,6 @@ test("Planner 73 rejects branded authority inputs", () => {
       assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
         exotic as unknown as typeof authority,
       ),
-    /must clone as a plain object|cannot be Proxy-backed or otherwise uncloneable/,
+    /cannot be a branded AbortController|must clone as a plain object|cannot be Proxy-backed or otherwise uncloneable/,
   );
 });
