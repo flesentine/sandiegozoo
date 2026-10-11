@@ -182,7 +182,7 @@ test("Planner 73 rejects accessor-backed candidate array entries", () => {
   );
 });
 
-test("Planner 73 rejects built-ins that normalize during cloning", () => {
+test("Planner 73 safely sanitizes built-ins that normalize during cloning", () => {
   const template = nodeVersion(1, "2026-02-21T20:00:00Z", true);
   const exotic = new AbortController() as unknown as Record<string, unknown>;
   Object.setPrototypeOf(exotic, Object.prototype);
@@ -192,13 +192,21 @@ test("Planner 73 rejects built-ins that normalize during cloning", () => {
     if (descriptor) Object.defineProperty(exotic, key, descriptor);
   }
 
-  assert.throws(
-    () =>
-      selectLatestVisibleEndpointVersion([
-        exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
-      ]),
-    /cannot normalize or lose evidence during cloning|must clone as a plain object/,
-  );
+  const selected = selectLatestVisibleEndpointVersion([
+    exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+  ]);
+
+  assert.ok(selected);
+  assert.notEqual(selected, exotic);
+  assert.equal(Object.getPrototypeOf(selected), Object.prototype);
+  assert.equal(selected.sourceObjectId, template.sourceObjectId);
+  assert.equal(selected.sourceVersion, template.sourceVersion);
+  assert.equal(selected.sourceTimestamp, template.sourceTimestamp);
+  assert.equal(selected.sourceChangeset, template.sourceChangeset);
+  assert.equal(selected.sourceVersionUrl, template.sourceVersionUrl);
+  assert.equal(selected.visible, template.visible);
+  assert.equal(selected.lat, template.lat);
+  assert.equal(selected.lng, template.lng);
 });
 
 test("Planner 73 rejects impossible UTC calendar dates", () => {
