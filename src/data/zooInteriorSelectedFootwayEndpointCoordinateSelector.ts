@@ -253,9 +253,27 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates must be an ordinary array.");
   }
 
-  const arrayKeys = OWN_KEYS(candidates);
+  let candidateSnapshot: unknown;
+  try {
+    candidateSnapshot = STRUCTURED_CLONE(candidates);
+  } catch {
+    throw new Error(
+      "Planner 73 candidates cannot be Proxy-backed or otherwise uncloneable.",
+    );
+  }
+
+  if (
+    !IS_ARRAY(candidateSnapshot) ||
+    GET_PROTOTYPE_OF(candidateSnapshot) !== Array.prototype
+  ) {
+    throw new Error("Planner 73 candidates must clone as an ordinary array.");
+  }
+
+  const snapshot =
+    candidateSnapshot as SelectedFootwayEndpointHistoricalNodeVersion[];
+  const arrayKeys = OWN_KEYS(snapshot);
   const allowedArrayKeys = new Set([
-    ...Array.from({ length: candidates.length }, (_, index) => String(index)),
+    ...Array.from({ length: snapshot.length }, (_, index) => String(index)),
     "length",
   ]);
   for (let index = 0; index < arrayKeys.length; index += 1) {
@@ -270,8 +288,8 @@ export function selectLatestVisibleEndpointVersion(
   let selectedMillis = Number.NEGATIVE_INFINITY;
   const seenVersions = new Set<number>();
 
-  for (let index = 0; index < candidates.length; index += 1) {
-    const descriptor = GET_DESCRIPTOR(candidates, String(index));
+  for (let index = 0; index < snapshot.length; index += 1) {
+    const descriptor = GET_DESCRIPTOR(snapshot, String(index));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(
         "Planner 73 candidate array requires enumerable own data element " + index + ".",
@@ -343,28 +361,60 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
   authority: InteriorSelectedFootwayEndpointCoordinateSelectorAuthority,
 ): void {
   assertPlainObject(authority, TOP_LEVEL_FIELDS, "Planner 73 authority");
+
+  let authorityClone: unknown;
+  try {
+    authorityClone = STRUCTURED_CLONE(authority);
+  } catch {
+    throw new Error(
+      "Planner 73 authority cannot be Proxy-backed or otherwise uncloneable.",
+    );
+  }
+
+  const authorityClonePrototype =
+    authorityClone && typeof authorityClone === "object"
+      ? GET_PROTOTYPE_OF(authorityClone)
+      : undefined;
+  if (
+    !authorityClone ||
+    typeof authorityClone !== "object" ||
+    IS_ARRAY(authorityClone) ||
+    (authorityClonePrototype !== Object.prototype &&
+      authorityClonePrototype !== null)
+  ) {
+    throw new Error("Planner 73 authority must clone as a plain object.");
+  }
+
+  assertPlainObject(
+    authorityClone,
+    TOP_LEVEL_FIELDS,
+    "Planner 73 authority clone",
+  );
+
+  const safeAuthority =
+    authorityClone as InteriorSelectedFootwayEndpointCoordinateSelectorAuthority;
   const prior = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_SOURCE_RESOLUTION[0];
 
   if (
-    authority.id !== AUTHORITY_ID ||
-    authority.objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID ||
-    authority.targetTimestamp !== TARGET_TIMESTAMP ||
-    authority.endpointNodeId !== ENDPOINT_NODE_ID ||
-    authority.endpointHistoryUrl !== HISTORY_URL ||
-    authority.selectionRule !==
+    safeAuthority.id !== AUTHORITY_ID ||
+    safeAuthority.objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID ||
+    safeAuthority.targetTimestamp !== TARGET_TIMESTAMP ||
+    safeAuthority.endpointNodeId !== ENDPOINT_NODE_ID ||
+    safeAuthority.endpointHistoryUrl !== HISTORY_URL ||
+    safeAuthority.selectionRule !==
       "latest-visible-version-at-or-before-target-timestamp" ||
-    authority.coordinatePromotionRule !==
+    safeAuthority.coordinatePromotionRule !==
       "selected-version-must-contain-finite-lat-and-lng" ||
-    authority.capturedHistoryStatus !== "not-captured" ||
-    authority.plannerMaterialization !== "historical-coordinate-selector-only"
+    safeAuthority.capturedHistoryStatus !== "not-captured" ||
+    safeAuthority.plannerMaterialization !== "historical-coordinate-selector-only"
   ) {
     throw new Error("Planner 73 coordinate selector authority drifted.");
   }
 
   if (
-    prior.endpointNodeId !== authority.endpointNodeId ||
-    prior.targetTimestamp !== authority.targetTimestamp ||
-    prior.sourceCandidates[0].url !== authority.endpointHistoryUrl ||
+    prior.endpointNodeId !== safeAuthority.endpointNodeId ||
+    prior.targetTimestamp !== safeAuthority.targetTimestamp ||
+    prior.sourceCandidates[0].url !== safeAuthority.endpointHistoryUrl ||
     prior.acceptedEvidenceRule !==
       "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history"
   ) {
