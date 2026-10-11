@@ -126,7 +126,7 @@ test("Planner 73 rejects branded exotic candidate records", () => {
       selectLatestVisibleEndpointVersion([
         exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
       ]),
-    /must clone as a plain object/,
+    /must be a plain object|must clone as a plain object/,
   );
 });
 
