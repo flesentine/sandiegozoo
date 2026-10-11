@@ -257,6 +257,39 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates must be an ordinary array.");
   }
 
+  const originalKeys = OWN_KEYS(candidates);
+  const lengthDescriptor = GET_DESCRIPTOR(candidates, "length");
+  if (
+    !lengthDescriptor ||
+    !("value" in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== "number" ||
+    !Number.isInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0
+  ) {
+    throw new Error("Planner 73 candidates require an own data length.");
+  }
+  const originalLength = lengthDescriptor.value;
+
+  const allowedOriginalKeys = new Set([
+    ...Array.from({ length: originalLength }, (_, index) => String(index)),
+    "length",
+  ]);
+  for (let index = 0; index < originalKeys.length; index += 1) {
+    const key = originalKeys[index];
+    if (typeof key !== "string" || !allowedOriginalKeys.has(key)) {
+      throw new Error("Planner 73 candidates cannot contain extra own properties.");
+    }
+  }
+
+  for (let index = 0; index < originalLength; index += 1) {
+    const descriptor = GET_DESCRIPTOR(candidates, String(index));
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
+      throw new Error(
+        "Planner 73 candidate array requires enumerable own data element " + index + ".",
+      );
+    }
+  }
+
   let candidateSnapshot: unknown;
   try {
     candidateSnapshot = STRUCTURED_CLONE(candidates);
@@ -275,6 +308,10 @@ export function selectLatestVisibleEndpointVersion(
 
   const snapshot =
     candidateSnapshot as SelectedFootwayEndpointHistoricalNodeVersion[];
+  if (snapshot.length !== originalLength) {
+    throw new Error("Planner 73 candidate array changed length during snapshot.");
+  }
+
   const arrayKeys = OWN_KEYS(snapshot);
   const allowedArrayKeys = new Set([
     ...Array.from({ length: snapshot.length }, (_, index) => String(index)),
