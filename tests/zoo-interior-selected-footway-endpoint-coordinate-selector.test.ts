@@ -280,3 +280,25 @@ test("Planner 73 rejects accessor-backed candidate evidence fields before array 
   );
   assert.equal(reads, 0);
 });
+
+
+test("Planner 73 rejects deleted coordinate accessors before cloning", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", false) as
+    SelectedFootwayEndpointHistoricalNodeVersion & { lat?: number };
+  let reads = 0;
+
+  Object.defineProperty(candidate, "lat", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      return 32.7;
+    },
+  });
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([candidate]),
+    /original candidate 0 lat must be an enumerable own data field/,
+  );
+  assert.equal(reads, 0);
+});
