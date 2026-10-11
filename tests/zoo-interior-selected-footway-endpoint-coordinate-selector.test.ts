@@ -259,3 +259,24 @@ test("Planner 73 rejects branded authority inputs", () => {
     /cannot be a branded AbortController|must clone as a plain object|cannot be Proxy-backed or otherwise uncloneable/,
   );
 });
+
+
+test("Planner 73 rejects accessor-backed candidate evidence fields before array cloning", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  let reads = 0;
+
+  Object.defineProperty(candidate, "sourceVersion", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      return 1;
+    },
+  });
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([candidate]),
+    /original candidate 0 requires enumerable own data field sourceVersion/,
+  );
+  assert.equal(reads, 0);
+});
