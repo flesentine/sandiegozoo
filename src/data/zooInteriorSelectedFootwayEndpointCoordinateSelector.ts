@@ -15,6 +15,10 @@ const GET_PROTOTYPE_OF = Object.getPrototypeOf.bind(Object);
 const IS_ARRAY = Array.isArray.bind(Array);
 const OWN_KEYS = Reflect.ownKeys.bind(Reflect);
 const GET_DESCRIPTOR = Object.getOwnPropertyDescriptor.bind(Object);
+const ABORT_SIGNAL_GETTER = Object.getOwnPropertyDescriptor(
+  AbortController.prototype,
+  "signal",
+)?.get;
 
 export type SelectedFootwayEndpointHistoricalNodeVersion = {
   sourceObjectId: typeof ENDPOINT_NODE_ID;
@@ -361,6 +365,20 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
   authority: InteriorSelectedFootwayEndpointCoordinateSelectorAuthority,
 ): void {
   assertPlainObject(authority, TOP_LEVEL_FIELDS, "Planner 73 authority");
+
+  if (ABORT_SIGNAL_GETTER) {
+    try {
+      ABORT_SIGNAL_GETTER.call(authority);
+      throw new Error("Planner 73 authority cannot be a branded AbortController.");
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Planner 73 authority cannot be a branded AbortController."
+      ) {
+        throw error;
+      }
+    }
+  }
 
   let authorityClone: unknown;
   try {
