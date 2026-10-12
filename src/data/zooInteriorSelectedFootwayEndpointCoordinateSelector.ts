@@ -253,7 +253,6 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates must be an ordinary array.");
   }
 
-  const originalKeys = OWN_KEYS(candidates);
   const lengthDescriptor = GET_DESCRIPTOR(candidates, "length");
   if (
     !lengthDescriptor ||
@@ -265,13 +264,21 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates require an own data length.");
   }
   const originalLength = lengthDescriptor.value;
+
+  if (originalLength > 10000) {
+    throw new Error(
+      "Planner 73 candidates must be dense and reasonably bounded.",
+    );
+  }
+
+  const originalKeys = OWN_KEYS(candidates);
   const dataIndexKeyCount = originalKeys.reduce((count, key) => {
     if (typeof key !== "string" || key === "length") return count;
     if (!/^(?:0|[1-9]\d*)$/.test(key)) return count;
     return count + 1;
   }, 0);
 
-  if (dataIndexKeyCount !== originalLength || originalLength > 10000) {
+  if (dataIndexKeyCount !== originalLength) {
     throw new Error(
       "Planner 73 candidates must be dense and reasonably bounded.",
     );
