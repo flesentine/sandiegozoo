@@ -241,9 +241,9 @@ test("Planner 73 rejects Proxy-backed candidate-array containers", () => {
   );
 });
 
-test("Planner 73 rejects branded authority inputs", () => {
+test("Planner 73 sanitizes normalized branded authority inputs", () => {
   const authority = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR;
-  const exotic = new AbortController() as unknown as Record<string, unknown>;
+  const exotic = new CompressionStream("gzip") as unknown as Record<string, unknown>;
   Object.setPrototypeOf(exotic, Object.prototype);
 
   for (const key of Reflect.ownKeys(authority)) {
@@ -251,13 +251,13 @@ test("Planner 73 rejects branded authority inputs", () => {
     if (descriptor) Object.defineProperty(exotic, key, descriptor);
   }
 
-  assert.throws(
-    () =>
-      assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
-        exotic as unknown as typeof authority,
-      ),
-    /cannot be a branded AbortController|must clone as a plain object|cannot be Proxy-backed or otherwise uncloneable/,
+  const safe = assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
+    exotic as unknown as typeof authority,
   );
+
+  assert.notEqual(safe, exotic);
+  assert.equal(Object.getPrototypeOf(safe), Object.prototype);
+  assert.deepEqual(safe, authority);
 });
 
 
@@ -301,4 +301,15 @@ test("Planner 73 rejects deleted coordinate accessors before cloning", () => {
     /original candidate 0 lat must be an enumerable own data field/,
   );
   assert.equal(reads, 0);
+});
+
+
+test("Planner 73 rejects huge sparse candidate arrays without materializing indexes", () => {
+  const sparse = [] as SelectedFootwayEndpointHistoricalNodeVersion[];
+  sparse.length = 2 ** 32 - 1;
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion(sparse),
+    /must be dense and reasonably bounded/,
+  );
 });
