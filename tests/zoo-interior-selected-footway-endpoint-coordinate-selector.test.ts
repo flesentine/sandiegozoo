@@ -325,3 +325,39 @@ test("Planner 73 rejects oversized dense arrays before key enumeration matters",
     /must be dense and reasonably bounded/,
   );
 });
+
+
+test("Planner 73 rejects oversized object payloads before container cloning", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true) as
+    unknown as Record<string, unknown>;
+  candidate.sourceTimestamp = new ArrayBuffer(1024 * 1024);
+
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion([
+        candidate as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+      ]),
+    /requires a UTC ISO timestamp/,
+  );
+});
+
+test("Planner 73 requires safe integer version and changeset IDs", () => {
+  const unsafeVersion = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  unsafeVersion.sourceVersion = Number.MAX_SAFE_INTEGER + 1;
+  unsafeVersion.sourceVersionUrl =
+    "https://api.openstreetmap.org/api/0.6/node/48920902/" +
+    unsafeVersion.sourceVersion;
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([unsafeVersion]),
+    /positive safe integer sourceVersion/,
+  );
+
+  const unsafeChangeset = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  unsafeChangeset.sourceChangeset = Number.MAX_SAFE_INTEGER + 1;
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion([unsafeChangeset]),
+    /positive safe integer sourceChangeset/,
+  );
+});
