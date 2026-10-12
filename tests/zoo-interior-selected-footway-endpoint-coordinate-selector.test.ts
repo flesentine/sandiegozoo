@@ -313,3 +313,15 @@ test("Planner 73 rejects huge sparse candidate arrays without materializing inde
     /must be dense and reasonably bounded/,
   );
 });
+
+
+test("Planner 73 rejects oversized dense arrays before key enumeration matters", () => {
+  const oversized = new Array(10001).fill(null).map((_, index) =>
+    nodeVersion(index + 1, "2026-02-21T20:00:00Z", true),
+  );
+
+  assert.throws(
+    () => selectLatestVisibleEndpointVersion(oversized),
+    /must be dense and reasonably bounded/,
+  );
+});
