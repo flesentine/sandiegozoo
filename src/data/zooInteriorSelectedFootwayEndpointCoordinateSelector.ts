@@ -161,7 +161,7 @@ function validateAndCloneCandidate(
   }
   if (
     typeof record.sourceVersion !== "number" ||
-    !Number.isInteger(record.sourceVersion) ||
+    !Number.isSafeInteger(record.sourceVersion) ||
     record.sourceVersion < 1
   ) {
     throw new Error(label + " requires a positive integer sourceVersion.");
@@ -169,7 +169,7 @@ function validateAndCloneCandidate(
   assertCanonicalUtcTimestamp(record.sourceTimestamp, label);
   if (
     typeof record.sourceChangeset !== "number" ||
-    !Number.isInteger(record.sourceChangeset) ||
+    !Number.isSafeInteger(record.sourceChangeset) ||
     record.sourceChangeset < 1
   ) {
     throw new Error(label + " requires a positive integer sourceChangeset.");
@@ -311,6 +311,65 @@ export function selectLatestVisibleEndpointVersion(
       "Planner 73 original candidate " + index,
       CANDIDATE_ALLOWED_FIELDS,
     );
+
+    const originalLabel = "Planner 73 original candidate " + index;
+    const objectIdDescriptor = GET_DESCRIPTOR(candidate, "sourceObjectId");
+    const versionDescriptor = GET_DESCRIPTOR(candidate, "sourceVersion");
+    const timestampDescriptor = GET_DESCRIPTOR(candidate, "sourceTimestamp");
+    const changesetDescriptor = GET_DESCRIPTOR(candidate, "sourceChangeset");
+    const versionUrlDescriptor = GET_DESCRIPTOR(candidate, "sourceVersionUrl");
+    const visibleDescriptor = GET_DESCRIPTOR(candidate, "visible");
+
+    if (
+      !objectIdDescriptor ||
+      !("value" in objectIdDescriptor) ||
+      objectIdDescriptor.value !== ENDPOINT_NODE_ID
+    ) {
+      throw new Error(originalLabel + " must target node " + ENDPOINT_NODE_ID + ".");
+    }
+    if (
+      !versionDescriptor ||
+      !("value" in versionDescriptor) ||
+      typeof versionDescriptor.value !== "number" ||
+      !Number.isSafeInteger(versionDescriptor.value) ||
+      versionDescriptor.value < 1
+    ) {
+      throw new Error(originalLabel + " requires a positive safe integer sourceVersion.");
+    }
+    if (
+      !timestampDescriptor ||
+      !("value" in timestampDescriptor)
+    ) {
+      throw new Error(originalLabel + " requires a sourceTimestamp data value.");
+    }
+    assertCanonicalUtcTimestamp(timestampDescriptor.value, originalLabel);
+    if (
+      !changesetDescriptor ||
+      !("value" in changesetDescriptor) ||
+      typeof changesetDescriptor.value !== "number" ||
+      !Number.isSafeInteger(changesetDescriptor.value) ||
+      changesetDescriptor.value < 1
+    ) {
+      throw new Error(originalLabel + " requires a positive safe integer sourceChangeset.");
+    }
+    if (
+      !versionUrlDescriptor ||
+      !("value" in versionUrlDescriptor) ||
+      versionUrlDescriptor.value !==
+        "https://api.openstreetmap.org/api/0.6/node/" +
+          ENDPOINT_NODE_ID +
+          "/" +
+          versionDescriptor.value
+    ) {
+      throw new Error(originalLabel + " sourceVersionUrl does not match its version.");
+    }
+    if (
+      !visibleDescriptor ||
+      !("value" in visibleDescriptor) ||
+      typeof visibleDescriptor.value !== "boolean"
+    ) {
+      throw new Error(originalLabel + " requires boolean visible.");
+    }
 
     const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
     const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
