@@ -247,7 +247,15 @@ test("Planner 73 sanitizes normalized branded authority inputs", () => {
 
   assert.notEqual(safe, exotic);
   assert.equal(Object.getPrototypeOf(safe), null);
-  assert.deepEqual(safe, authority);
+  for (const key of Reflect.ownKeys(authority)) {
+    const expected = Object.getOwnPropertyDescriptor(authority, key);
+    const actual = Object.getOwnPropertyDescriptor(safe, key);
+    assert.ok(expected);
+    assert.ok(actual);
+    assert.equal(actual.enumerable, true);
+    assert.equal("value" in actual, true);
+    assert.equal(actual.value, expected.value);
+  }
 });
 
 
@@ -427,5 +435,13 @@ test("Planner 73 sanitizes prototype-masked authority backing stores without clo
 
   assert.notEqual(safe, exotic);
   assert.equal(Object.getPrototypeOf(safe), null);
-  assert.deepEqual(safe, source);
+  for (const key of Reflect.ownKeys(source)) {
+    const expected = Object.getOwnPropertyDescriptor(source, key);
+    const actual = Object.getOwnPropertyDescriptor(safe, key);
+    assert.ok(expected);
+    assert.ok(actual);
+    assert.equal(actual.enumerable, true);
+    assert.equal("value" in actual, true);
+    assert.equal(actual.value, expected.value);
+  }
 });
