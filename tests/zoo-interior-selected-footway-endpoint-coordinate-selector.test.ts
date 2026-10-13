@@ -183,9 +183,9 @@ test("Planner 73 rejects accessor-backed candidate array entries", () => {
   );
 });
 
-test("Planner 73 safely sanitizes built-ins that normalize during cloning", () => {
+test("Planner 73 sanitizes prototype-masked candidate backing stores without cloning them", () => {
   const template = nodeVersion(1, "2026-02-21T20:00:00Z", true);
-  const exotic = new AbortController() as unknown as Record<string, unknown>;
+  const exotic = new ArrayBuffer(1024 * 1024) as unknown as Record<string, unknown>;
   Object.setPrototypeOf(exotic, Object.prototype);
 
   for (const key of Reflect.ownKeys(template)) {
@@ -200,14 +200,7 @@ test("Planner 73 safely sanitizes built-ins that normalize during cloning", () =
   assert.ok(selected);
   assert.notEqual(selected, exotic);
   assert.equal(Object.getPrototypeOf(selected), Object.prototype);
-  assert.equal(selected.sourceObjectId, template.sourceObjectId);
-  assert.equal(selected.sourceVersion, template.sourceVersion);
-  assert.equal(selected.sourceTimestamp, template.sourceTimestamp);
-  assert.equal(selected.sourceChangeset, template.sourceChangeset);
-  assert.equal(selected.sourceVersionUrl, template.sourceVersionUrl);
-  assert.equal(selected.visible, template.visible);
-  assert.equal(selected.lat, template.lat);
-  assert.equal(selected.lng, template.lng);
+  assert.deepEqual(selected, template);
 });
 
 test("Planner 73 rejects impossible UTC calendar dates", () => {
@@ -400,4 +393,42 @@ test("Planner 73 preflights authority values before cloning", () => {
       assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(authority),
     /authority drifted at id/,
   );
+});
+
+
+test("Planner 73 never reads visible through a candidate get trap", () => {
+  const target = nodeVersion(1, "2026-02-21T20:00:00Z", true);
+  let reads = 0;
+  const proxied = new Proxy(target, {
+    get(object, property, receiver) {
+      if (property === "visible") reads += 1;
+      return Reflect.get(object, property, receiver);
+    },
+  });
+
+  assert.doesNotThrow(() =>
+    selectLatestVisibleEndpointVersion([
+      proxied as SelectedFootwayEndpointHistoricalNodeVersion,
+    ]),
+  );
+  assert.equal(reads, 0);
+});
+
+test("Planner 73 sanitizes prototype-masked authority backing stores without cloning them", () => {
+  const source = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR;
+  const exotic = new ArrayBuffer(1024 * 1024) as unknown as Record<string, unknown>;
+  Object.setPrototypeOf(exotic, Object.prototype);
+
+  for (const key of Reflect.ownKeys(source)) {
+    const descriptor = Object.getOwnPropertyDescriptor(source, key);
+    if (descriptor) Object.defineProperty(exotic, key, descriptor);
+  }
+
+  const safe = assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
+    exotic as unknown as typeof source,
+  );
+
+  assert.notEqual(safe, exotic);
+  assert.equal(Object.getPrototypeOf(safe), Object.prototype);
+  assert.deepEqual(safe, source);
 });
