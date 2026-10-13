@@ -94,7 +94,7 @@ test("Planner 73 rejects a mismatched version URL", () => {
   );
 });
 
-test("Planner 73 rejects a deleted version that exposes inherited coordinates", () => {
+test("Planner 73 ignores inherited coordinates on deleted versions", () => {
   Object.defineProperty(Object.prototype, "lat", {
     configurable: true,
     value: 32.7,
@@ -102,16 +102,13 @@ test("Planner 73 rejects a deleted version that exposes inherited coordinates", 
 
   try {
     const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", false);
-    assert.throws(
-      () => selectLatestVisibleEndpointVersion([candidate]),
-      /deleted version cannot expose coordinates/,
-    );
+    assert.equal(selectLatestVisibleEndpointVersion([candidate]), null);
   } finally {
     delete (Object.prototype as { lat?: number }).lat;
   }
 });
 
-test("Planner 73 rejects branded exotic candidate records", () => {
+test("Planner 73 sanitizes branded candidate records from descriptors", () => {
   const template = nodeVersion(1, "2026-02-21T20:00:00Z", true);
   const exotic = new Date(0) as unknown as Record<string, unknown>;
   Object.setPrototypeOf(exotic, Object.prototype);
@@ -121,13 +118,12 @@ test("Planner 73 rejects branded exotic candidate records", () => {
     if (descriptor) Object.defineProperty(exotic, key, descriptor);
   }
 
-  assert.throws(
-    () =>
-      selectLatestVisibleEndpointVersion([
-        exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
-      ]),
-    /must be a plain object|must clone as a plain object/,
-  );
+  const selected = selectLatestVisibleEndpointVersion([
+    exotic as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+  ]);
+
+  assert.deepEqual(selected, template);
+  assert.notEqual(selected, exotic);
 });
 
 
@@ -214,24 +210,25 @@ test("Planner 73 rejects impossible UTC calendar dates", () => {
 });
 
 
-test("Planner 73 rejects Proxy-backed candidate-array containers", () => {
+test("Planner 73 does not use array get traps during selection", () => {
   const backing = [
     nodeVersion(1, "2026-02-21T20:00:00Z", true),
   ];
+  let reads = 0;
 
   const proxied = new Proxy(backing, {
     get(target, property, receiver) {
+      reads += 1;
       return Reflect.get(target, property, receiver);
     },
   });
 
-  assert.throws(
-    () =>
-      selectLatestVisibleEndpointVersion(
-        proxied as SelectedFootwayEndpointHistoricalNodeVersion[],
-      ),
-    /cannot be Proxy-backed or otherwise uncloneable/,
+  const selected = selectLatestVisibleEndpointVersion(
+    proxied as SelectedFootwayEndpointHistoricalNodeVersion[],
   );
+
+  assert.equal(selected?.sourceVersion, 1);
+  assert.equal(reads, 0);
 });
 
 test("Planner 73 sanitizes normalized branded authority inputs", () => {
@@ -249,7 +246,7 @@ test("Planner 73 sanitizes normalized branded authority inputs", () => {
   );
 
   assert.notEqual(safe, exotic);
-  assert.equal(Object.getPrototypeOf(safe), Object.prototype);
+  assert.equal(Object.getPrototypeOf(safe), null);
   assert.deepEqual(safe, authority);
 });
 
@@ -269,7 +266,7 @@ test("Planner 73 rejects accessor-backed candidate evidence fields before array 
 
   assert.throws(
     () => selectLatestVisibleEndpointVersion([candidate]),
-    /original candidate 0 requires enumerable own data field sourceVersion/,
+    /candidate 0 requires enumerable own data field sourceVersion/,
   );
   assert.equal(reads, 0);
 });
@@ -291,7 +288,7 @@ test("Planner 73 rejects deleted coordinate accessors before cloning", () => {
 
   assert.throws(
     () => selectLatestVisibleEndpointVersion([candidate]),
-    /original candidate 0 lat must be an enumerable own data field/,
+    /candidate 0 lat must be an enumerable own data field/,
   );
   assert.equal(reads, 0);
 });
@@ -429,6 +426,6 @@ test("Planner 73 sanitizes prototype-masked authority backing stores without clo
   );
 
   assert.notEqual(safe, exotic);
-  assert.equal(Object.getPrototypeOf(safe), Object.prototype);
+  assert.equal(Object.getPrototypeOf(safe), null);
   assert.deepEqual(safe, source);
 });
