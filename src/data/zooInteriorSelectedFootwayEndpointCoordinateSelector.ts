@@ -376,7 +376,7 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
     plannerMaterialization: "historical-coordinate-selector-only",
   };
 
-  const safeAuthority = {} as Record<string, unknown>;
+  const safeAuthority = Object.create(null) as Record<string, unknown>;
   for (let index = 0; index < TOP_LEVEL_FIELDS.length; index += 1) {
     const field = TOP_LEVEL_FIELDS[index];
     const descriptor = GET_DESCRIPTOR(authority, field);
@@ -388,7 +388,12 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
     ) {
       throw new Error("Planner 73 authority drifted at " + field + ".");
     }
-    safeAuthority[field] = descriptor.value;
+    Object.defineProperty(safeAuthority, field, {
+      configurable: false,
+      enumerable: true,
+      writable: false,
+      value: descriptor.value,
+    });
   }
 
   const prior = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_SOURCE_RESOLUTION[0];
