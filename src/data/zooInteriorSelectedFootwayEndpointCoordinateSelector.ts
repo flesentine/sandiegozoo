@@ -10,7 +10,6 @@ const ENDPOINT_NODE_ID = "48920902" as const;
 const HISTORY_URL =
   "https://api.openstreetmap.org/api/0.6/node/48920902/history" as const;
 
-const STRUCTURED_CLONE = globalThis.structuredClone.bind(globalThis);
 const GET_PROTOTYPE_OF = Object.getPrototypeOf.bind(Object);
 const IS_ARRAY = Array.isArray.bind(Array);
 const OWN_KEYS = Reflect.ownKeys.bind(Reflect);
@@ -143,7 +142,7 @@ function assertCanonicalUtcTimestamp(value: unknown, label: string): asserts val
   }
 }
 
-function validateAndCloneCandidate(
+function sanitizeCandidateFromRecord(
   candidate: unknown,
   index: number,
 ): SelectedFootwayEndpointHistoricalNodeVersion {
@@ -155,95 +154,92 @@ function validateAndCloneCandidate(
     CANDIDATE_ALLOWED_FIELDS,
   );
 
-  const record = candidate as Record<string, unknown>;
-  if (record.sourceObjectId !== ENDPOINT_NODE_ID) {
+  const descriptors = {
+    sourceObjectId: GET_DESCRIPTOR(candidate, "sourceObjectId"),
+    sourceVersion: GET_DESCRIPTOR(candidate, "sourceVersion"),
+    sourceTimestamp: GET_DESCRIPTOR(candidate, "sourceTimestamp"),
+    sourceChangeset: GET_DESCRIPTOR(candidate, "sourceChangeset"),
+    sourceVersionUrl: GET_DESCRIPTOR(candidate, "sourceVersionUrl"),
+    visible: GET_DESCRIPTOR(candidate, "visible"),
+    lat: GET_DESCRIPTOR(candidate, "lat"),
+    lng: GET_DESCRIPTOR(candidate, "lng"),
+  };
+
+  const sourceObjectId = descriptors.sourceObjectId?.value;
+  const sourceVersion = descriptors.sourceVersion?.value;
+  const sourceTimestamp = descriptors.sourceTimestamp?.value;
+  const sourceChangeset = descriptors.sourceChangeset?.value;
+  const sourceVersionUrl = descriptors.sourceVersionUrl?.value;
+  const visible = descriptors.visible?.value;
+
+  if (sourceObjectId !== ENDPOINT_NODE_ID) {
     throw new Error(label + " must target node " + ENDPOINT_NODE_ID + ".");
   }
   if (
-    typeof record.sourceVersion !== "number" ||
-    !Number.isSafeInteger(record.sourceVersion) ||
-    record.sourceVersion < 1
+    typeof sourceVersion !== "number" ||
+    !Number.isSafeInteger(sourceVersion) ||
+    sourceVersion < 1
   ) {
-    throw new Error(label + " requires a positive integer sourceVersion.");
+    throw new Error(label + " requires a positive safe integer sourceVersion.");
   }
-  assertCanonicalUtcTimestamp(record.sourceTimestamp, label);
+  assertCanonicalUtcTimestamp(sourceTimestamp, label);
   if (
-    typeof record.sourceChangeset !== "number" ||
-    !Number.isSafeInteger(record.sourceChangeset) ||
-    record.sourceChangeset < 1
+    typeof sourceChangeset !== "number" ||
+    !Number.isSafeInteger(sourceChangeset) ||
+    sourceChangeset < 1
   ) {
-    throw new Error(label + " requires a positive integer sourceChangeset.");
+    throw new Error(label + " requires a positive safe integer sourceChangeset.");
   }
   if (
-    record.sourceVersionUrl !==
+    sourceVersionUrl !==
     "https://api.openstreetmap.org/api/0.6/node/" +
       ENDPOINT_NODE_ID +
       "/" +
-      record.sourceVersion
+      sourceVersion
   ) {
     throw new Error(label + " sourceVersionUrl does not match its version.");
   }
-  if (typeof record.visible !== "boolean") {
+  if (typeof visible !== "boolean") {
     throw new Error(label + " requires boolean visible.");
   }
 
-  if (record.visible) {
-    const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
-    const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
-    if (!latDescriptor || !latDescriptor.enumerable || !("value" in latDescriptor)) {
-      throw new Error(label + " visible version requires own lat.");
+  if (descriptors.lat && (!descriptors.lat.enumerable || !("value" in descriptors.lat))) {
+    throw new Error(label + " lat must be an enumerable own data field.");
+  }
+  if (descriptors.lng && (!descriptors.lng.enumerable || !("value" in descriptors.lng))) {
+    throw new Error(label + " lng must be an enumerable own data field.");
+  }
+
+  if (visible) {
+    if (!descriptors.lat || !descriptors.lng) {
+      throw new Error(label + " visible version requires own coordinates.");
     }
-    if (!lngDescriptor || !lngDescriptor.enumerable || !("value" in lngDescriptor)) {
-      throw new Error(label + " visible version requires own lng.");
-    }
-    assertFiniteCoordinate(latDescriptor.value, -90, 90, label + " lat");
-    assertFiniteCoordinate(lngDescriptor.value, -180, 180, label + " lng");
-  } else {
-    if ("lat" in record || "lng" in record) {
-      throw new Error(label + " deleted version cannot expose coordinates.");
-    }
+    assertFiniteCoordinate(descriptors.lat.value, -90, 90, label + " lat");
+    assertFiniteCoordinate(descriptors.lng.value, -180, 180, label + " lng");
+    return {
+      sourceObjectId: ENDPOINT_NODE_ID,
+      sourceVersion,
+      sourceTimestamp,
+      sourceChangeset,
+      sourceVersionUrl,
+      visible: true,
+      lat: descriptors.lat.value,
+      lng: descriptors.lng.value,
+    };
   }
 
-  let clone: unknown;
-  try {
-    clone = STRUCTURED_CLONE(candidate);
-  } catch {
-    throw new Error(label + " cannot be Proxy-backed or otherwise uncloneable.");
+  if (descriptors.lat || descriptors.lng) {
+    throw new Error(label + " deleted version cannot expose coordinates.");
   }
 
-  const clonePrototype =
-    clone && typeof clone === "object" ? GET_PROTOTYPE_OF(clone) : undefined;
-  if (
-    !clone ||
-    typeof clone !== "object" ||
-    IS_ARRAY(clone) ||
-    (clonePrototype !== Object.prototype && clonePrototype !== null)
-  ) {
-    throw new Error(label + " must clone as a plain object.");
-  }
-
-  assertPlainObject(
-    clone,
-    CANDIDATE_REQUIRED_FIELDS,
-    label + " clone",
-    CANDIDATE_ALLOWED_FIELDS,
-  );
-
-  const clonedRecord = clone as Record<string, unknown>;
-  if (
-    clonedRecord.sourceObjectId !== record.sourceObjectId ||
-    clonedRecord.sourceVersion !== record.sourceVersion ||
-    clonedRecord.sourceTimestamp !== record.sourceTimestamp ||
-    clonedRecord.sourceChangeset !== record.sourceChangeset ||
-    clonedRecord.sourceVersionUrl !== record.sourceVersionUrl ||
-    clonedRecord.visible !== record.visible ||
-    clonedRecord.lat !== record.lat ||
-    clonedRecord.lng !== record.lng
-  ) {
-    throw new Error(label + " cannot lose evidence during cloning.");
-  }
-
-  return clone as SelectedFootwayEndpointHistoricalNodeVersion;
+  return {
+    sourceObjectId: ENDPOINT_NODE_ID,
+    sourceVersion,
+    sourceTimestamp,
+    sourceChangeset,
+    sourceVersionUrl,
+    visible: false,
+  };
 }
 
 export function selectLatestVisibleEndpointVersion(
@@ -264,11 +260,8 @@ export function selectLatestVisibleEndpointVersion(
     throw new Error("Planner 73 candidates require an own data length.");
   }
   const originalLength = lengthDescriptor.value;
-
   if (originalLength > 10000) {
-    throw new Error(
-      "Planner 73 candidates must be dense and reasonably bounded.",
-    );
+    throw new Error("Planner 73 candidates must be dense and reasonably bounded.");
   }
 
   const originalKeys = OWN_KEYS(candidates);
@@ -277,182 +270,17 @@ export function selectLatestVisibleEndpointVersion(
     if (!/^(?:0|[1-9]\d*)$/.test(key)) return count;
     return count + 1;
   }, 0);
-
   if (dataIndexKeyCount !== originalLength) {
-    throw new Error(
-      "Planner 73 candidates must be dense and reasonably bounded.",
-    );
+    throw new Error("Planner 73 candidates must be dense and reasonably bounded.");
   }
 
-  const allowedOriginalKeys = new Set([
+  const allowedKeys = new Set([
     ...Array.from({ length: originalLength }, (_, index) => String(index)),
     "length",
   ]);
   for (let index = 0; index < originalKeys.length; index += 1) {
     const key = originalKeys[index];
-    if (typeof key !== "string" || !allowedOriginalKeys.has(key)) {
-      throw new Error("Planner 73 candidates cannot contain extra own properties.");
-    }
-  }
-
-  const originalCandidateValues: unknown[] = [];
-  for (let index = 0; index < originalLength; index += 1) {
-    const descriptor = GET_DESCRIPTOR(candidates, String(index));
-    if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
-      throw new Error(
-        "Planner 73 candidate array requires enumerable own data element " + index + ".",
-      );
-    }
-
-    const candidate = descriptor.value;
-    assertPlainObject(
-      candidate,
-      CANDIDATE_REQUIRED_FIELDS,
-      "Planner 73 original candidate " + index,
-      CANDIDATE_ALLOWED_FIELDS,
-    );
-
-    const originalLabel = "Planner 73 original candidate " + index;
-    const objectIdDescriptor = GET_DESCRIPTOR(candidate, "sourceObjectId");
-    const versionDescriptor = GET_DESCRIPTOR(candidate, "sourceVersion");
-    const timestampDescriptor = GET_DESCRIPTOR(candidate, "sourceTimestamp");
-    const changesetDescriptor = GET_DESCRIPTOR(candidate, "sourceChangeset");
-    const versionUrlDescriptor = GET_DESCRIPTOR(candidate, "sourceVersionUrl");
-    const visibleDescriptor = GET_DESCRIPTOR(candidate, "visible");
-
-    if (
-      !objectIdDescriptor ||
-      !("value" in objectIdDescriptor) ||
-      objectIdDescriptor.value !== ENDPOINT_NODE_ID
-    ) {
-      throw new Error(originalLabel + " must target node " + ENDPOINT_NODE_ID + ".");
-    }
-    if (
-      !versionDescriptor ||
-      !("value" in versionDescriptor) ||
-      typeof versionDescriptor.value !== "number" ||
-      !Number.isSafeInteger(versionDescriptor.value) ||
-      versionDescriptor.value < 1
-    ) {
-      throw new Error(originalLabel + " requires a positive safe integer sourceVersion.");
-    }
-    if (
-      !timestampDescriptor ||
-      !("value" in timestampDescriptor)
-    ) {
-      throw new Error(originalLabel + " requires a sourceTimestamp data value.");
-    }
-    assertCanonicalUtcTimestamp(timestampDescriptor.value, originalLabel);
-    if (
-      !changesetDescriptor ||
-      !("value" in changesetDescriptor) ||
-      typeof changesetDescriptor.value !== "number" ||
-      !Number.isSafeInteger(changesetDescriptor.value) ||
-      changesetDescriptor.value < 1
-    ) {
-      throw new Error(originalLabel + " requires a positive safe integer sourceChangeset.");
-    }
-    if (
-      !versionUrlDescriptor ||
-      !("value" in versionUrlDescriptor) ||
-      versionUrlDescriptor.value !==
-        "https://api.openstreetmap.org/api/0.6/node/" +
-          ENDPOINT_NODE_ID +
-          "/" +
-          versionDescriptor.value
-    ) {
-      throw new Error(originalLabel + " sourceVersionUrl does not match its version.");
-    }
-    if (
-      !visibleDescriptor ||
-      !("value" in visibleDescriptor) ||
-      typeof visibleDescriptor.value !== "boolean"
-    ) {
-      throw new Error(originalLabel + " requires boolean visible.");
-    }
-
-    const latDescriptor = GET_DESCRIPTOR(candidate, "lat");
-    const lngDescriptor = GET_DESCRIPTOR(candidate, "lng");
-
-    if (
-      latDescriptor &&
-      (!latDescriptor.enumerable || !("value" in latDescriptor))
-    ) {
-      throw new Error(
-        "Planner 73 original candidate " + index + " lat must be an enumerable own data field.",
-      );
-    }
-    if (
-      lngDescriptor &&
-      (!lngDescriptor.enumerable || !("value" in lngDescriptor))
-    ) {
-      throw new Error(
-        "Planner 73 original candidate " + index + " lng must be an enumerable own data field.",
-      );
-    }
-
-    if (candidate.visible) {
-      if (!latDescriptor) {
-        throw new Error(
-          "Planner 73 original candidate " + index + " visible version requires own lat.",
-        );
-      }
-      if (!lngDescriptor) {
-        throw new Error(
-          "Planner 73 original candidate " + index + " visible version requires own lng.",
-        );
-      }
-      assertFiniteCoordinate(
-        latDescriptor.value,
-        -90,
-        90,
-        "Planner 73 original candidate " + index + " lat",
-      );
-      assertFiniteCoordinate(
-        lngDescriptor.value,
-        -180,
-        180,
-        "Planner 73 original candidate " + index + " lng",
-      );
-    } else if (latDescriptor || lngDescriptor) {
-      throw new Error(
-        "Planner 73 original candidate " + index + " deleted version cannot expose coordinates.",
-      );
-    }
-
-    originalCandidateValues.push(candidate);
-  }
-
-  let candidateSnapshot: unknown;
-  try {
-    candidateSnapshot = STRUCTURED_CLONE(candidates);
-  } catch {
-    throw new Error(
-      "Planner 73 candidates cannot be Proxy-backed or otherwise uncloneable.",
-    );
-  }
-
-  if (
-    !IS_ARRAY(candidateSnapshot) ||
-    GET_PROTOTYPE_OF(candidateSnapshot) !== Array.prototype
-  ) {
-    throw new Error("Planner 73 candidates must clone as an ordinary array.");
-  }
-
-  const snapshot =
-    candidateSnapshot as SelectedFootwayEndpointHistoricalNodeVersion[];
-  if (snapshot.length !== originalLength) {
-    throw new Error("Planner 73 candidate array changed length during snapshot.");
-  }
-
-  const arrayKeys = OWN_KEYS(snapshot);
-  const allowedArrayKeys = new Set([
-    ...Array.from({ length: snapshot.length }, (_, index) => String(index)),
-    "length",
-  ]);
-  for (let index = 0; index < arrayKeys.length; index += 1) {
-    const key = arrayKeys[index];
-    if (typeof key !== "string" || !allowedArrayKeys.has(key)) {
+    if (typeof key !== "string" || !allowedKeys.has(key)) {
       throw new Error("Planner 73 candidates cannot contain extra own properties.");
     }
   }
@@ -462,31 +290,15 @@ export function selectLatestVisibleEndpointVersion(
   let selectedMillis = Number.NEGATIVE_INFINITY;
   const seenVersions = new Set<number>();
 
-  for (let index = 0; index < snapshot.length; index += 1) {
-    const descriptor = GET_DESCRIPTOR(snapshot, String(index));
+  for (let index = 0; index < originalLength; index += 1) {
+    const descriptor = GET_DESCRIPTOR(candidates, String(index));
     if (!descriptor || !descriptor.enumerable || !("value" in descriptor)) {
       throw new Error(
         "Planner 73 candidate array requires enumerable own data element " + index + ".",
       );
     }
 
-    const candidate = validateAndCloneCandidate(descriptor.value, index);
-    const originalCandidate = originalCandidateValues[index] as Record<string, unknown>;
-
-    if (
-      candidate.sourceObjectId !== originalCandidate.sourceObjectId ||
-      candidate.sourceVersion !== originalCandidate.sourceVersion ||
-      candidate.sourceTimestamp !== originalCandidate.sourceTimestamp ||
-      candidate.sourceChangeset !== originalCandidate.sourceChangeset ||
-      candidate.sourceVersionUrl !== originalCandidate.sourceVersionUrl ||
-      candidate.visible !== originalCandidate.visible ||
-      candidate.lat !== originalCandidate.lat ||
-      candidate.lng !== originalCandidate.lng
-    ) {
-      throw new Error(
-        "Planner 73 candidate changed evidence during container snapshot.",
-      );
-    }
+    const candidate = sanitizeCandidateFromRecord(descriptor.value, index);
 
     if (seenVersions.has(candidate.sourceVersion)) {
       throw new Error(
@@ -552,7 +364,7 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
 ): InteriorSelectedFootwayEndpointCoordinateSelectorAuthority {
   assertPlainObject(authority, TOP_LEVEL_FIELDS, "Planner 73 authority");
 
-  const authorityExpectedValues: Record<string, unknown> = {
+  const expected: InteriorSelectedFootwayEndpointCoordinateSelectorAuthority = {
     id: AUTHORITY_ID,
     objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
     targetTimestamp: TARGET_TIMESTAMP,
@@ -564,6 +376,7 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
     plannerMaterialization: "historical-coordinate-selector-only",
   };
 
+  const safeAuthority = {} as Record<string, unknown>;
   for (let index = 0; index < TOP_LEVEL_FIELDS.length; index += 1) {
     const field = TOP_LEVEL_FIELDS[index];
     const descriptor = GET_DESCRIPTOR(authority, field);
@@ -571,72 +384,28 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
       !descriptor ||
       !descriptor.enumerable ||
       !("value" in descriptor) ||
-      descriptor.value !== authorityExpectedValues[field]
+      descriptor.value !== expected[field]
     ) {
       throw new Error("Planner 73 authority drifted at " + field + ".");
     }
+    safeAuthority[field] = descriptor.value;
   }
 
-  let authorityClone: unknown;
-  try {
-    authorityClone = STRUCTURED_CLONE(authority);
-  } catch {
-    throw new Error(
-      "Planner 73 authority cannot be Proxy-backed or otherwise uncloneable.",
-    );
-  }
-
-  const authorityClonePrototype =
-    authorityClone && typeof authorityClone === "object"
-      ? GET_PROTOTYPE_OF(authorityClone)
-      : undefined;
-  if (
-    !authorityClone ||
-    typeof authorityClone !== "object" ||
-    IS_ARRAY(authorityClone) ||
-    (authorityClonePrototype !== Object.prototype &&
-      authorityClonePrototype !== null)
-  ) {
-    throw new Error("Planner 73 authority must clone as a plain object.");
-  }
-
-  assertPlainObject(
-    authorityClone,
-    TOP_LEVEL_FIELDS,
-    "Planner 73 authority clone",
-  );
-
-  const safeAuthority =
-    authorityClone as InteriorSelectedFootwayEndpointCoordinateSelectorAuthority;
   const prior = INTERIOR_SELECTED_FOOTWAY_ENDPOINT_SOURCE_RESOLUTION[0];
+  const typedSafe =
+    safeAuthority as InteriorSelectedFootwayEndpointCoordinateSelectorAuthority;
 
   if (
-    safeAuthority.id !== AUTHORITY_ID ||
-    safeAuthority.objectiveSourceRecordId !== OBJECTIVE_SOURCE_RECORD_ID ||
-    safeAuthority.targetTimestamp !== TARGET_TIMESTAMP ||
-    safeAuthority.endpointNodeId !== ENDPOINT_NODE_ID ||
-    safeAuthority.endpointHistoryUrl !== HISTORY_URL ||
-    safeAuthority.selectionRule !==
-      "latest-visible-version-at-or-before-target-timestamp" ||
-    safeAuthority.coordinatePromotionRule !==
-      "selected-version-must-contain-finite-lat-and-lng" ||
-    safeAuthority.capturedHistoryStatus !== "not-captured" ||
-    safeAuthority.plannerMaterialization !== "historical-coordinate-selector-only"
-  ) {
-    throw new Error("Planner 73 coordinate selector authority drifted.");
-  }
-
-  if (
-    prior.endpointNodeId !== safeAuthority.endpointNodeId ||
-    prior.targetTimestamp !== safeAuthority.targetTimestamp ||
-    prior.sourceCandidates[0].url !== safeAuthority.endpointHistoryUrl ||
+    prior.endpointNodeId !== typedSafe.endpointNodeId ||
+    prior.targetTimestamp !== typedSafe.targetTimestamp ||
+    prior.sourceCandidates[0].url !== typedSafe.endpointHistoryUrl ||
     prior.acceptedEvidenceRule !==
       "latest-visible-node-version-at-or-before-target-timestamp-from-authoritative-osm-history"
   ) {
     throw new Error("Planner 73 detached from Planner 72 source resolution.");
   }
 
-  return safeAuthority;
+  return typedSafe;
 }
 
 assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(
