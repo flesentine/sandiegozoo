@@ -361,3 +361,43 @@ test("Planner 73 requires safe integer version and changeset IDs", () => {
     /positive safe integer sourceChangeset/,
   );
 });
+
+
+test("Planner 73 rejects coordinate payload objects before cloning", () => {
+  const candidate = nodeVersion(1, "2026-02-21T20:00:00Z", true) as
+    unknown as Record<string, unknown>;
+  candidate.lat = new ArrayBuffer(1024 * 1024);
+
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion([
+        candidate as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+      ]),
+    /lat must be a finite coordinate in range/,
+  );
+
+  const deleted = nodeVersion(1, "2026-02-21T20:00:00Z", false) as
+    unknown as Record<string, unknown>;
+  deleted.lng = new ArrayBuffer(1024 * 1024);
+
+  assert.throws(
+    () =>
+      selectLatestVisibleEndpointVersion([
+        deleted as unknown as SelectedFootwayEndpointHistoricalNodeVersion,
+      ]),
+    /deleted version cannot expose coordinates/,
+  );
+});
+
+test("Planner 73 preflights authority values before cloning", () => {
+  const authority = {
+    ...INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR,
+    id: new ArrayBuffer(1024 * 1024),
+  } as unknown as typeof INTERIOR_SELECTED_FOOTWAY_ENDPOINT_COORDINATE_SELECTOR;
+
+  assert.throws(
+    () =>
+      assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity(authority),
+    /authority drifted at id/,
+  );
+});
