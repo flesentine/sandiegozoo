@@ -402,6 +402,22 @@ export function selectLatestVisibleEndpointVersion(
           "Planner 73 original candidate " + index + " visible version requires own lng.",
         );
       }
+      assertFiniteCoordinate(
+        latDescriptor.value,
+        -90,
+        90,
+        "Planner 73 original candidate " + index + " lat",
+      );
+      assertFiniteCoordinate(
+        lngDescriptor.value,
+        -180,
+        180,
+        "Planner 73 original candidate " + index + " lng",
+      );
+    } else if (latDescriptor || lngDescriptor) {
+      throw new Error(
+        "Planner 73 original candidate " + index + " deleted version cannot expose coordinates.",
+      );
     }
 
     originalCandidateValues.push(candidate);
@@ -535,6 +551,31 @@ export function assertInteriorSelectedFootwayEndpointCoordinateSelectorIntegrity
   authority: InteriorSelectedFootwayEndpointCoordinateSelectorAuthority,
 ): InteriorSelectedFootwayEndpointCoordinateSelectorAuthority {
   assertPlainObject(authority, TOP_LEVEL_FIELDS, "Planner 73 authority");
+
+  const authorityExpectedValues: Record<string, unknown> = {
+    id: AUTHORITY_ID,
+    objectiveSourceRecordId: OBJECTIVE_SOURCE_RECORD_ID,
+    targetTimestamp: TARGET_TIMESTAMP,
+    endpointNodeId: ENDPOINT_NODE_ID,
+    endpointHistoryUrl: HISTORY_URL,
+    selectionRule: "latest-visible-version-at-or-before-target-timestamp",
+    coordinatePromotionRule: "selected-version-must-contain-finite-lat-and-lng",
+    capturedHistoryStatus: "not-captured",
+    plannerMaterialization: "historical-coordinate-selector-only",
+  };
+
+  for (let index = 0; index < TOP_LEVEL_FIELDS.length; index += 1) {
+    const field = TOP_LEVEL_FIELDS[index];
+    const descriptor = GET_DESCRIPTOR(authority, field);
+    if (
+      !descriptor ||
+      !descriptor.enumerable ||
+      !("value" in descriptor) ||
+      descriptor.value !== authorityExpectedValues[field]
+    ) {
+      throw new Error("Planner 73 authority drifted at " + field + ".");
+    }
+  }
 
   let authorityClone: unknown;
   try {
