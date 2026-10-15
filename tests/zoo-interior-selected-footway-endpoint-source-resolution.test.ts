@@ -250,3 +250,50 @@ test("Planner 72 screens nested source candidates for inherited promoted evidenc
     delete (Object.prototype as { lat?: number }).lat;
   }
 });
+
+
+test("Planner 72 revalidates originals after nested clone callbacks", () => {
+  const forged = cloneAuthority() as unknown as {
+    sourceCandidates: Array<Record<string, unknown>>;
+  };
+  const source = forged.sourceCandidates[0];
+
+  const trigger = {};
+  Object.defineProperty(trigger, "mutate", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      Object.defineProperty(source, "url", {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: "https://api.openstreetmap.org/api/0.6/node/48920902/history",
+      });
+      Object.defineProperty(Object.prototype, "lat", {
+        configurable: true,
+        enumerable: false,
+        value: 32.7,
+      });
+      return "triggered";
+    },
+  });
+
+  Object.defineProperty(source, "url", {
+    configurable: true,
+    enumerable: true,
+    writable: true,
+    value: trigger,
+  });
+
+  try {
+    assert.throws(
+      () =>
+        assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
+          forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
+        ]),
+      /source candidate 0 cannot prematurely materialize field lat/,
+    );
+  } finally {
+    delete (Object.prototype as { lat?: number }).lat;
+  }
+});
