@@ -338,6 +338,27 @@ export function assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity(
     throw new Error(collectionLabel + " cannot be Proxy-backed or otherwise uncloneable.");
   }
 
+  // Cloning can execute nested getters on cloneable data-valued fields. Revalidate
+  // every original record after all clone callbacks complete so mutation or newly
+  // inherited promoted evidence cannot survive the screening pass.
+  assertArray(authorities, 1, collectionLabel);
+  assertPlain(candidate, TOP_LEVEL_FIELDS, authorityLabel);
+  assertNoPrematurePromotion(candidate, authorityLabel);
+  assertArray(sources, 3, sourcesLabel);
+  assertArray(rejected, 3, rejectedLabel);
+  assertArray(required, 6, requiredLabel);
+  for (let index = 0; index < sourceObjects.length; index += 1) {
+    assertPlain(
+      sourceObjects[index],
+      SOURCE_FIELDS,
+      "Planner 72 source candidate " + index,
+    );
+    assertNoPrematurePromotion(
+      sourceObjects[index] as Record<string, unknown>,
+      "Planner 72 source candidate " + index,
+    );
+  }
+
   const clonedPrototype =
     clonedCandidate && typeof clonedCandidate === "object"
       ? GET_PROTOTYPE_OF(clonedCandidate)
