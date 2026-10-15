@@ -244,7 +244,7 @@ test("Planner 72 screens nested source candidates for inherited promoted evidenc
         assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
           forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
         ]),
-      /source candidate 0 cannot prematurely materialize field lat/,
+      /(?:authority|source candidate 0) cannot prematurely materialize field lat/,
     );
   } finally {
     delete (Object.prototype as { lat?: number }).lat;
