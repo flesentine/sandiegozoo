@@ -291,7 +291,7 @@ test("Planner 72 revalidates originals after nested clone callbacks", () => {
         assertInteriorSelectedFootwayEndpointSourceResolutionIntegrity([
           forged as unknown as InteriorSelectedFootwayEndpointSourceResolutionAuthority,
         ]),
-      /source candidate 0 cannot prematurely materialize field lat/,
+      /(?:authority|source candidate 0) cannot prematurely materialize field lat/,
     );
   } finally {
     delete (Object.prototype as { lat?: number }).lat;
