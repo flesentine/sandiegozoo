@@ -119,6 +119,7 @@ type XmlStartToken = {
   name: string;
   attributes: Record<string, string>;
   selfClosing: boolean;
+  depth: number;
 };
 
 function tokenizeWellFormedXml(
@@ -200,7 +201,7 @@ function tokenizeWellFormedXml(
       throw new Error("Planner 74 XML contains malformed attributes.");
     }
 
-    onStart({ name, attributes, selfClosing });
+    onStart({ name, attributes, selfClosing, depth: stack.length });
     if (!selfClosing) stack.push(name);
     else if (stack.length === 0 && name === "osm") rootClosed = true;
     index = gt + 1;
@@ -225,14 +226,11 @@ export function parseSelectedFootwayEndpointHistoryXml(
   const seenVersions = new Set<number>();
   let previousVersion = 0;
   let previousTimestampMillis = Number.NEGATIVE_INFINITY;
-  let depth = 0;
-
-  tokenizeWellFormedXml(xml, ({ name, attributes, selfClosing }) => {
+  tokenizeWellFormedXml(xml, ({ name, attributes, selfClosing, depth }) => {
     if (name === "osm") {
       if (depth !== 0 || selfClosing) {
         throw new Error("Planner 74 requires a non-empty osm root.");
       }
-      depth = 1;
       return;
     }
 
