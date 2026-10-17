@@ -133,3 +133,70 @@ test("Planner 74 decodes XML entities but still validates exact endpoint identit
     /must target node 48920902/,
   );
 });
+
+
+test("Planner 74 returns null when a deletion is active at the target time", () => {
+  const xml = `<osm version="0.6">
+    <node id="48920902" lat="32.7" lon="-117.1" version="1" changeset="100" timestamp="2026-02-21T20:00:00Z"/>
+    <node id="48920902" version="2" changeset="101" timestamp="2026-02-21T20:05:00Z" visible="false"/>
+    <node id="48920902" lat="32.8" lon="-117.2" version="3" changeset="102" timestamp="2026-02-21T20:09:00Z"/>
+  </osm>`;
+  const result = ingestSelectedFootwayEndpointHistoryXml(xml);
+  assert.equal(result.selected, null);
+});
+
+test("Planner 74 ignores node-looking text inside XML comments", () => {
+  assert.throws(
+    () =>
+      parseSelectedFootwayEndpointHistoryXml(
+        `<osm><!-- <node id="48920902" lat="1" lon="1" version="1" changeset="1" timestamp="2026-01-01T00:00:00Z"/> --></osm>`,
+      ),
+    /contains no endpoint node versions/,
+  );
+});
+
+test("Planner 74 rejects truncated XML even after a valid node", () => {
+  assert.throws(
+    () =>
+      parseSelectedFootwayEndpointHistoryXml(
+        `<osm><node id="48920902" lat="1" lon="1" version="1" changeset="1" timestamp="2026-01-01T00:00:00Z"/>`,
+      ),
+    /not a complete well-formed document/,
+  );
+});
+
+test("Planner 74 requires a contiguous version chain starting at version 1", () => {
+  assert.throws(
+    () =>
+      parseSelectedFootwayEndpointHistoryXml(
+        `<osm>
+          <node id="48920902" lat="1" lon="1" version="1" changeset="1" timestamp="2026-01-01T00:00:00Z"/>
+          <node id="48920902" lat="2" lon="2" version="3" changeset="3" timestamp="2026-01-03T00:00:00Z"/>
+        </osm>`,
+      ),
+    /contiguous version chain starting at 1/,
+  );
+});
+
+test("Planner 74 requires timestamps to increase with OSM versions", () => {
+  assert.throws(
+    () =>
+      parseSelectedFootwayEndpointHistoryXml(
+        `<osm>
+          <node id="48920902" lat="1" lon="1" version="1" changeset="1" timestamp="2026-01-02T00:00:00Z"/>
+          <node id="48920902" lat="2" lon="2" version="2" changeset="2" timestamp="2026-01-01T00:00:00Z"/>
+        </osm>`,
+      ),
+    /timestamps must increase with versions/,
+  );
+});
+
+test("Planner 74 rejects nested node records instead of treating them as history entries", () => {
+  assert.throws(
+    () =>
+      parseSelectedFootwayEndpointHistoryXml(
+        `<osm><way id="1"><node id="48920902" lat="1" lon="1" version="1" changeset="1" timestamp="2026-01-01T00:00:00Z"/></way></osm>`,
+      ),
+    /node records must be direct children of osm/,
+  );
+});
